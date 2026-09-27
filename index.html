@@ -58,15 +58,17 @@
   <div class="box">
     <div class="t">Загрузка модели…</div>
     <div id="track"><div id="fill"></div></div>
-    <div id="msg">car.glb</div>
+    <div id="msg">auto/car.glb</div>
   </div>
 </div>
 
 <script src="https://cdn.babylonjs.com/babylon.js"></script>
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 <script>
-// Модель можно переключить адресом: index.html?model=car_lights.glb
-const MODEL = new URLSearchParams(location.search).get("model") || "car.glb";
+// Модель можно переключить адресом: index.html?model=car.glb
+// По умолчанию — auto/car.glb. Сервер должен быть запущен из корня проекта,
+// тогда относительный путь от web/index.html до auto/car.glb такой.
+const MODEL = new URLSearchParams(location.search).get("model") || "../auto/car.glb";
 const ENV_URL = "https://assets.babylonjs.com/environments/environmentSpecular.env";
 
 const canvas = document.getElementById("view");
@@ -247,7 +249,8 @@ function loadFile(file) {
   loadModel(file, file.name);
 }
 
-loadModel(MODEL, MODEL);
+// В заголовке показываем путь без служебного префикса «../».
+loadModel(MODEL, MODEL.replace(/^(\.\.\/)+/, ""));
 
 const bSpin = document.getElementById("bSpin");
 bSpin.onclick = () => { cam.useAutoRotationBehavior = !cam.useAutoRotationBehavior; bSpin.classList.toggle("on", cam.useAutoRotationBehavior); };
