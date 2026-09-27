@@ -121,6 +121,12 @@ shadow.useBlurExponentialShadowMap = true;
 shadow.blurKernel = 32;
 shadow.darkness = 0.42;
 
+// мягкий свет внутри салона — включается только в режиме «салон» (см. applyCamMode)
+const cabin = new BABYLON.PointLight("cabin", new BABYLON.Vector3(0, 0, 0), scene);
+cabin.diffuse = new BABYLON.Color3(1, 0.96, 0.9);
+cabin.range = 5;
+cabin.intensity = 0;
+
 // environment for PBR reflections (car paint is metallic)
 try {
   scene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(ENV_URL, scene);
@@ -192,9 +198,14 @@ const CAR = {
   wheelbase: 2.75,
   wheelR: 0.32,
   camYaw: 0, camPitch: 1.13, camDist: 7.4,
-  chase: true,
+  mode: 0,           // 0 следом · 1 салон · 2 свободная
+  eye: null,         // точка обзора в локальной системе кузова (заполняется по модели)
+  lookYaw: 0, lookPitch: 0,  // смещение взгляда в салоне мышью
   idle: performance.now(),
 };
+
+const CAM_MODES = ["следом", "салон", "свободная"];
+const COCKPIT_PITCH = 0.16;   // базовый наклон взгляда вниз, рад
 
 const keys = Object.create(null);
 
@@ -219,39 +230,78 @@ for (const b of document.querySelectorAll("#pad button")) {
   b.addEventListener("pointerleave", off);
 }
 
-function toggleCam() {
-  CAR.chase = !CAR.chase;
-  camNameEl.textContent = CAR.chase ? "следом" : "свободная";
-  // attachedToElement надёжнее detachControl: он гасит и inputs камеры
-  if (CAR.chase) { cam.detachControl(true); cam.inputs.attachedToElement = false; }
-  else { cam.attachControl(canvas, true); cam.inputs.attachedToElement = true; }
+// Режимы камеры: следом → салон → свободная. attachedToElement надёжнее detachControl:
+// он гасит и inputs камеры.
+// Модель внешняя: внутренних поверхностей у неё нет, и из салона виден только
+// односторонний кузов — с выключенным отсечением задних граней он читается как интерьер.
+let twoSidedSaved = null;
+function setTwoSided(on) {
+  if (on && !twoSidedSaved) {
+    twoSidedSaved = new Map();
+    for (const m of meshes) {
+      for (const mt of (Array.isArray(m.material) ? m.material : [m.material])) {
+        if (!mt || twoSidedSaved.has(mt)) continue;
+        twoSidedSaved.set(mt, [mt.backFaceCulling, mt.twoSidedLighting]);
+        mt.backFaceCulling = false;
+        mt.twoSidedLighting = true;
+      }
+    }
+  } else if (!on && twoSidedSaved) {
+    for (const [mt, v] of twoSidedSaved) { mt.backFaceCulling = v[0]; mt.twoSidedLighting = v[1]; }
+    twoSidedSaved = null;
+  }
+}
+
+function applyCamMode() {
+  const m = CAR.mode;
+  camNameEl.textContent = CAM_MODES[m];
+  // салон — отдельная камера, привязанная к кузову; орбитальная нужна в двух
+  // остальных режимах и мышь получает только в свободном
+  scene.activeCamera = m === 1 ? cockpit : cam;
+  if (m === 2) { cam.attachControl(canvas, true); cam.inputs.attachedToElement = true; }
+  else { cam.detachControl(true); cam.inputs.attachedToElement = false; }
+  // салон освещён только изнутри: снаружи свет не нужен и портил бы вид
+  cabin.intensity = m === 1 ? 0.85 : 0;
+  setTwoSided(m === 1);
   CAR.idle = -1e9;
+}
+
+function toggleCam() {
+  CAR.mode = (CAR.mode + 1) % CAM_MODES.length;
+  applyCamMode();
 }
 
 function resetCar() {
   if (!CAR.root) return;
   CAR.v = 0; CAR.yaw = 0; CAR.steer = 0;
+  CAR.lookYaw = 0; CAR.lookPitch = 0;
   CAR.root.position.set(0, CAR.lift, 0);
   CAR.root.rotation.y = 0;
   for (const w of CAR.wheels) { w.angle = 0; w.spin.rotation.x = 0; w.steer.rotation.y = 0; }
 }
 
-// ручной облёт камеры мышью (в режиме «следом»)
+// ручной облёт камеры мышью (в режимах «следом» и «салон»)
 let drag = false, lastX = 0, lastY = 0;
 canvas.addEventListener("pointerdown", (e) => {
-  if (!CAR.chase) return;
+  if (CAR.mode === 2) return;
   drag = true; lastX = e.clientX; lastY = e.clientY; CAR.idle = performance.now();
 });
 addEventListener("pointermove", (e) => {
   if (!drag) return;
-  CAR.camYaw -= (e.clientX - lastX) * 0.006;
-  CAR.camPitch = clamp(CAR.camPitch + (e.clientY - lastY) * 0.005, 0.32, 1.45);
+  if (CAR.mode === 1) {
+    // в салоне тянем обзор: вправо — смотрим вправо, вниз — вниз
+    CAR.lookYaw = clamp(CAR.lookYaw - (e.clientX - lastX) * 0.005, -1.3, 1.3);
+    CAR.lookPitch = clamp(CAR.lookPitch + (e.clientY - lastY) * 0.004, -0.45, 0.55);
+  } else {
+    CAR.camYaw -= (e.clientX - lastX) * 0.006;
+    CAR.camPitch = clamp(CAR.camPitch + (e.clientY - lastY) * 0.005, 0.32, 1.45);
+  }
   lastX = e.clientX; lastY = e.clientY;
   CAR.idle = performance.now();
 });
 addEventListener("pointerup", () => { if (drag) CAR.idle = performance.now(); drag = false; });
 canvas.addEventListener("wheel", (e) => {
-  if (!CAR.chase) return;
+  if (CAR.mode !== 0) return;
   e.preventDefault();
   CAR.camDist = clamp(CAR.camDist * (1 + Math.sign(e.deltaY) * 0.08), 3.2, 26);
 }, { passive:false });
@@ -265,6 +315,7 @@ function wrapAngle(a) {
 }
 
 const camTarget = new BABYLON.Vector3(0, 0, 0);
+let cockpit = null;   // камера салона, едет вместе с кузовом
 
 function drive(dt) {
   const gas = keys.KeyW || keys.ArrowUp ? 1 : 0;
@@ -334,15 +385,23 @@ function drive(dt) {
 
   // камера. target пишем напрямую: setTarget() пересчитывает alpha/beta/radius
   // по текущей позиции и каждый кадр уводил бы камеру в сторону.
-  BABYLON.Vector3.LerpToRef(camTarget, new BABYLON.Vector3(p.x, p.y + 0.75, p.z), 1 - Math.exp(-dt * 9), camTarget);
-  cam.target.copyFrom(camTarget);
-  if (CAR.chase) {
+  if (CAR.mode === 0) {
+    BABYLON.Vector3.LerpToRef(camTarget, new BABYLON.Vector3(p.x, p.y + 0.75, p.z), 1 - Math.exp(-dt * 9), camTarget);
+    cam.target.copyFrom(camTarget);
     // возврат камеры за спину по реальному времени, а не по числу кадров
     if (!drag && performance.now() - CAR.idle > 1600) CAR.camYaw *= Math.max(0, 1 - dt * 1.2);
     const k = 1 - Math.exp(-dt * 5);
     cam.alpha = wrapAngle(cam.alpha + wrapAngle((CAR.yaw + Math.PI / 2 + CAR.camYaw) - cam.alpha) * k);
     cam.beta += (CAR.camPitch - cam.beta) * (1 - Math.exp(-dt * 7));
     cam.radius += (CAR.camDist - cam.radius) * (1 - Math.exp(-dt * 7));
+  } else if (CAR.mode === 1) {
+    // салон: камера уже сидит в кузове, остаётся только повернуть взгляд
+    if (!drag && performance.now() - CAR.idle > 1600) {
+      const back = Math.max(0, 1 - dt * 1.6);
+      CAR.lookYaw *= back; CAR.lookPitch *= back;
+    }
+    // локальные оси кузова: -Z вперёд, поэтому разворот на π, а лево — это -Yaw
+    cockpit.rotation.set(COCKPIT_PITCH + CAR.lookPitch, Math.PI - CAR.lookYaw, 0);
   }
 }
 
@@ -456,6 +515,51 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   CAR.lift = minWheelY < 1e9 ? -minWheelY : -mn.y;
   root.position.set(0, CAR.lift, 0);
 
+  // --- точка обзора для вида из салона. Ориентиры берём из самой модели:
+  // руль задаёт поперечную координату водителя, верх крыши — высоту глаз.
+  {
+    const box = (list) => {
+      const b = { x:[1e9,-1e9], y:[1e9,-1e9], z:[1e9,-1e9] };
+      for (const m of list) {
+        m.computeWorldMatrix(true);
+        const wm = m.getWorldMatrix(), bb = m.getBoundingInfo().boundingBox;
+        for (let i = 0; i < 8; i++) {
+          BABYLON.Vector3.TransformCoordinatesToRef(bb.vectors[i], wm, tmp);
+          b.x[0] = Math.min(b.x[0], tmp.x); b.x[1] = Math.max(b.x[1], tmp.x);
+          b.y[0] = Math.min(b.y[0], tmp.y); b.y[1] = Math.max(b.y[1], tmp.y);
+          b.z[0] = Math.min(b.z[0], tmp.z); b.z[1] = Math.max(b.z[1], tmp.z);
+        }
+      }
+      return b;
+    };
+    const isWheel = (m) => CAR.wheels.some(w => w.spin.getChildren(n => true).includes(m));
+    const body = box(meshes.filter(m => !isWheel(m)));
+    const sw = box(meshes.filter(m => /steering/i.test(m.name)));
+    const glass = box(meshes.filter(m => /windscreen|window/i.test(m.name)));
+    const hasSw = isFinite(sw.x[0]);
+    // по рулю: поперечная координата водителя и глубина, по остеклению — высота.
+    // ориентир сверху — верх руля, а не крыша: глаза водителя много ниже крыши
+    const ex = hasSw ? (sw.x[0] + sw.x[1]) / 2 : body.x[0] + (body.x[1] - body.x[0]) * 0.3;
+    let ey = hasSw ? sw.y[1] + 0.19 : body.y[1] - 0.5;
+    if (isFinite(glass.y[0])) ey = Math.min(ey, glass.y[1] - 0.1);
+    const ez = hasSw ? (sw.z[0] + sw.z[1]) / 2 + 0.5 : body.z[0] + (body.z[1] - body.z[0]) * 0.55;
+    // мировые координаты при старте = локальные + подъём, его и вычитаем
+    CAR.eye = new BABYLON.Vector3(ex, ey - CAR.lift, ez);
+    // свет салона едет вместе с машиной
+    cabin.parent = root;
+    cabin.position.copyFrom(CAR.eye);
+
+    // камера салона: обычная UniversalCamera, привязанная к кузову, поэтому едет
+    // с машиной сама, а поворот задаётся локально (rotation.y = PI — это вперёд)
+    cockpit = new BABYLON.UniversalCamera("cockpit", BABYLON.Vector3.Zero(), scene);
+    cockpit.parent = root;
+    cockpit.position.copyFrom(CAR.eye);
+    cockpit.rotation.set(COCKPIT_PITCH, Math.PI, 0);
+    cockpit.fov = 1.1;      // из салона нужно шире, чем снаружи
+    cockpit.minZ = 0.04;     // руль и панель приборов в упор
+    cockpit.inputs.clear();  // обзором рулит общий обработчик мыши
+  }
+
   cam.lowerRadiusLimit = 3.2;
   cam.upperRadiusLimit = 26;
   cam.alpha = CAR.yaw + Math.PI / 2;
@@ -463,8 +567,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   cam.radius = CAR.camDist;
   camTarget.set(0, CAR.lift + 0.75, 0);
   cam.target.copyFrom(camTarget);
-  CAR.idle = performance.now();
-  if (CAR.chase) { cam.detachControl(true); cam.inputs.attachedToElement = false; }
+  applyCamMode();
 
   ready = true;
   scene.skipPointerMovePicking = true;
