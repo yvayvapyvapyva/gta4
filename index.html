@@ -252,6 +252,19 @@ function setTwoSided(on) {
   }
 }
 
+// На виде из салона стёкла только мешают: гасим сами панели (прозрачность 100%),
+// рамы остаются — они часть кузова. Возвращаем при выходе из режима.
+let glassOff = null;
+function setGlassOff(on) {
+  if (on && !glassOff) {
+    glassOff = meshes.filter(m => /windscreen|window|glass/i.test(m.name));
+    for (const m of glassOff) m.isVisible = false;
+  } else if (!on && glassOff) {
+    for (const m of glassOff) m.isVisible = true;
+    glassOff = null;
+  }
+}
+
 function applyCamMode() {
   const m = CAR.mode;
   camNameEl.textContent = CAM_MODES[m];
@@ -263,6 +276,7 @@ function applyCamMode() {
   // салон освещён только изнутри: снаружи свет не нужен и портил бы вид
   cabin.intensity = m === 1 ? 0.85 : 0;
   setTwoSided(m === 1);
+  setGlassOff(m === 1);
   CAR.idle = -1e9;
 }
 
@@ -289,8 +303,9 @@ canvas.addEventListener("pointerdown", (e) => {
 addEventListener("pointermove", (e) => {
   if (!drag) return;
   if (CAR.mode === 1) {
-    // в салоне тянем обзор: вправо — смотрим вправо, вниз — вниз
-    CAR.lookYaw = clamp(CAR.lookYaw - (e.clientX - lastX) * 0.005, -1.3, 1.3);
+    // в салоне тянем обзор: вправо — смотрим вправо, вниз — вниз.
+    // по горизонтали без ограничений, по вертикали держим рамки от залипания на полу
+    CAR.lookYaw = wrapAngle(CAR.lookYaw - (e.clientX - lastX) * 0.005);
     CAR.lookPitch = clamp(CAR.lookPitch + (e.clientY - lastY) * 0.004, -0.45, 0.55);
   } else {
     CAR.camYaw -= (e.clientX - lastX) * 0.006;
