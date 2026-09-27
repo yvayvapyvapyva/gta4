@@ -14,8 +14,9 @@
 
   #hud { position:fixed; left:14px; top:14px; background:var(--panel); border:1px solid var(--line);
     border-radius:10px; padding:12px 14px; backdrop-filter:blur(10px); min-width:190px; }
-  #hud h1 { margin:0 0 8px; font-size:14px; font-weight:600; letter-spacing:.2px; }
-  #hud h1 span { color:var(--acc); }
+  #hud h1 { margin:0 0 8px; font-size:14px; font-weight:600; letter-spacing:.2px;
+    color:var(--acc); max-width:min(46vw,420px); overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
   #stats { color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums; }
   #stats b { color:var(--fg); font-weight:600; }
 
@@ -39,16 +40,19 @@
 <canvas id="view"></canvas>
 
 <div id="hud">
-  <h1>Renault <span>Symbol</span></h1>
+  <h1 id="title">—</h1>
   <div id="stats">загрузка…</div>
 </div>
 
 <div id="bar">
+  <button id="bOpen">Открыть файл…</button>
   <button id="bSpin" class="on">Авто-облёт</button>
   <button id="bWire">Wireframe</button>
   <button id="bGrid">Сетка</button>
   <button id="bReset">Сброс кадра</button>
 </div>
+
+<input type="file" id="fileIn" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden>
 
 <div id="loader">
   <div class="box">
@@ -61,7 +65,8 @@
 <script src="https://cdn.babylonjs.com/babylon.js"></script>
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 <script>
-const MODEL = "car.glb";
+// Модель можно переключить адресом: index.html?model=car_lights.glb
+const MODEL = new URLSearchParams(location.search).get("model") || "car.glb";
 const ENV_URL = "https://assets.babylonjs.com/environments/environmentSpecular.env";
 
 const canvas = document.getElementById("view");
@@ -130,6 +135,7 @@ const stat = document.getElementById("stats");
 const fill = document.getElementById("fill");
 const msg = document.getElementById("msg");
 const loader = document.getElementById("loader");
+const title = document.getElementById("title");
 
 let meshes = [], triCount = 0, loaded = false;
 let viewTarget = new BABYLON.Vector3(0, 0.7, 0), viewRadius = 9;
@@ -153,61 +159,95 @@ function refreshStats() {
     "fps <b>" + engine.getFps().toFixed(0) + "</b>";
 }
 
-const before = new Set(scene.meshes);
+// Выгружает ранее загруженную модель, чтобы следующая не накладывалась на неё.
+// ground/grid и их материалы не трогаем.
+function unloadModel() {
+  for (const m of meshes) m.dispose(false, true);
+  meshes = [];
+  triCount = 0;
+  loaded = false;
+  window.__ready = false;
+}
 
-BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
-  (ev) => {
-    if (ev.lengthComputable) fill.style.width = ((ev.loaded / ev.total) * 100).toFixed(1) + "%";
-    else fill.style.width = "100%";
-    msg.textContent = human(ev.loaded / 1048576) + " / " + human(ev.total / 1048576) + " MB";
-  }
-).then(() => {
-  meshes = scene.meshes.filter(m => !before.has(m) && m.getTotalVertices() > 0);
-  if (!meshes.length) throw new Error("в модели нет геометрии");
-  triCount = meshes.reduce((n, m) => n + m.getTotalIndices() / 3, 0);
+// src — либо URL (car.glb, ?model=...), либо объект File с диска.
+function loadModel(src, label) {
+  unloadModel();
+  const before = new Set(scene.meshes);
+  title.textContent = label;
+  loader.classList.remove("hide");
+  fill.style.width = "0%";
+  fill.style.background = "";
+  stat.textContent = "загрузка…";
 
-  // The glTF loader keeps every node transform on its own TransformNode and hangs the
-  // primitive meshes underneath it. Re-parenting those meshes to a new root would throw
-  // the node transform away (that is where the four wheels are positioned), so the scene
-  // graph is left untouched and the ground plane is moved to the model instead.
-  let mn = new BABYLON.Vector3(1e9, 1e9, 1e9), mx = new BABYLON.Vector3(-1e9, -1e9, -1e9);
-  const tmp = new BABYLON.Vector3();
-  for (const m of meshes) {
-    m.computeWorldMatrix(true);
-    const wm = m.getWorldMatrix();
-    const bb = m.getBoundingInfo().boundingBox;
-    for (let i = 0; i < 8; i++) {
-      BABYLON.Vector3.TransformCoordinatesToRef(bb.vectors[i], wm, tmp);
-      mn = BABYLON.Vector3.Minimize(mn, tmp);
-      mx = BABYLON.Vector3.Maximize(mx, tmp);
+  return BABYLON.SceneLoader.AppendAsync("", src, scene,
+    (ev) => {
+      if (ev.lengthComputable) fill.style.width = ((ev.loaded / ev.total) * 100).toFixed(1) + "%";
+      else fill.style.width = "100%";
+      msg.textContent = human(ev.loaded / 1048576) + " / " + human(ev.total / 1048576) + " MB";
     }
-    m.receiveShadows = true;
-    shadow.addShadowCaster(m);
-  }
+  ).then(() => {
+    meshes = scene.meshes.filter(m => !before.has(m) && m.getTotalVertices() > 0);
+    if (!meshes.length) throw new Error("в модели нет геометрии");
+    triCount = meshes.reduce((n, m) => n + m.getTotalIndices() / 3, 0);
 
-  const center = BABYLON.Vector3.Center(mn, mx);
-  const size = mx.subtract(mn);
-  ground.position.y = mn.y;
-  grid.position.y = mn.y + 0.002;
+    // The glTF loader keeps every node transform on its own TransformNode and hangs the
+    // primitive meshes underneath it. Re-parenting those meshes to a new root would throw
+    // the node transform away (that is where the four wheels are positioned), so the scene
+    // graph is left untouched and the ground plane is moved to the model instead.
+    let mn = new BABYLON.Vector3(1e9, 1e9, 1e9), mx = new BABYLON.Vector3(-1e9, -1e9, -1e9);
+    const tmp = new BABYLON.Vector3();
+    for (const m of meshes) {
+      m.computeWorldMatrix(true);
+      const wm = m.getWorldMatrix();
+      const bb = m.getBoundingInfo().boundingBox;
+      for (let i = 0; i < 8; i++) {
+        BABYLON.Vector3.TransformCoordinatesToRef(bb.vectors[i], wm, tmp);
+        mn = BABYLON.Vector3.Minimize(mn, tmp);
+        mx = BABYLON.Vector3.Maximize(mx, tmp);
+      }
+      m.receiveShadows = true;
+      shadow.addShadowCaster(m);
+    }
 
-  viewTarget = new BABYLON.Vector3(center.x, mn.y + size.y * 0.45, center.z);
-  viewRadius = Math.max(size.x, size.z) * 2.0;
-  cam.lowerRadiusLimit = Math.max(1.2, Math.max(size.x, size.z) * 0.45);
-  cam.upperRadiusLimit = Math.max(size.x, size.z) * 8;
-  resetView();
+    const center = BABYLON.Vector3.Center(mn, mx);
+    const size = mx.subtract(mn);
+    ground.position.y = mn.y;
+    grid.position.y = mn.y + 0.002;
 
-  // clear interior parts that are invisible anyway
-  scene.skipPointerMovePicking = true;
-  loaded = true;
-  fill.style.width = "100%";
-  msg.textContent = "готово";
-  setTimeout(() => loader.classList.add("hide"), 250);
-  refreshStats();
-}).catch((e) => {
-  console.error(e);
-  msg.innerHTML = '<span id="err">ошибка загрузки: ' + (e && e.message ? e.message : e) + "</span>";
-  fill.style.background = "#ff6b6b";
-});
+    viewTarget = new BABYLON.Vector3(center.x, mn.y + size.y * 0.45, center.z);
+    viewRadius = Math.max(size.x, size.z) * 2.0;
+    cam.lowerRadiusLimit = Math.max(1.2, Math.max(size.x, size.z) * 0.45);
+    cam.upperRadiusLimit = Math.max(size.x, size.z) * 8;
+    resetView();
+
+    // clear interior parts that are invisible anyway
+    scene.skipPointerMovePicking = true;
+    loaded = true;
+    fill.style.width = "100%";
+    msg.textContent = "готово";
+    setTimeout(() => loader.classList.add("hide"), 250);
+    refreshStats();
+
+    // Флаг для автоматических проверок: сцена готова и первый кадр отрисован.
+    scene.executeWhenReady(() => {
+      scene.onAfterRenderObservable.addOnce(() => { window.__ready = true; });
+    });
+  }).catch((e) => {
+    console.error(e);
+    msg.innerHTML = '<span id="err">ошибка загрузки: ' + (e && e.message ? e.message : e) + "</span>";
+    fill.style.background = "#ff6b6b";
+  });
+}
+
+function loadFile(file) {
+  if (!file) return;
+  // Отдаём сам File, а не blob-URL: у blob-URL нет расширения, и Babylon
+  // выбирает загрузчик по расширению имени — не находит glTF-плагин и падает
+  // на .babylon по умолчанию. У File есть .name, поэтому всё работает.
+  loadModel(file, file.name);
+}
+
+loadModel(MODEL, MODEL);
 
 const bSpin = document.getElementById("bSpin");
 bSpin.onclick = () => { cam.useAutoRotationBehavior = !cam.useAutoRotationBehavior; bSpin.classList.toggle("on", cam.useAutoRotationBehavior); };
@@ -230,6 +270,20 @@ bGrid.classList.add("on");
 bGrid.onclick = () => { grid.setEnabled(!grid.isEnabled()); bGrid.classList.toggle("on", grid.isEnabled()); };
 
 document.getElementById("bReset").onclick = () => { if (loaded) resetView(); };
+
+// --- выбор файла с диска -------------------------------------------------
+const fileIn = document.getElementById("fileIn");
+document.getElementById("bOpen").onclick = () => fileIn.click();
+fileIn.onchange = () => { loadFile(fileIn.files[0]); fileIn.value = ""; };
+
+// Тот же файл можно перетащить в окно.
+for (const ev of ["dragover", "drop"]) {
+  window.addEventListener(ev, (e) => e.preventDefault());
+}
+window.addEventListener("drop", (e) => {
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
 
 setInterval(refreshStats, 400);
 window.addEventListener("resize", () => engine.resize());
