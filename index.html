@@ -314,7 +314,9 @@ function drive(dt) {
   for (const w of CAR.wheels) {
     w.angle -= CAR.v / CAR.wheelR * dt;
     w.spin.rotation.x = w.angle;
-    if (w.front) w.steer.rotation.y = -CAR.steer;
+    // руль поворота — в локальной системе модели, где +X это правая сторона,
+    // поэтому поворот налево (CAR.steer > 0) это +rotation.y
+    if (w.front) w.steer.rotation.y = CAR.steer;
   }
 
   // земля едет за машиной, сетка остаётся в мировых координатах
