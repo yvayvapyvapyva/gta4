@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Renault Symbol — 3D Viewer</title>
+<title>Renault Symbol — Drive</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2312141a'/%3E%3Cpath d='M5 20h22v3a2 2 0 0 1-2 2h-1l-2-3H10l-2 3H7a2 2 0 0 1-2-2z' fill='%23ff8a3d'/%3E%3Cpath d='M7 20l2-6a3 3 0 0 1 2-2h10a3 3 0 0 1 2 2l2 6z' fill='%23e8ebf2'/%3E%3C/svg%3E">
 <style>
   :root { --bg:#12141a; --fg:#e8ebf2; --dim:#98a0b3; --acc:#ff8a3d; }
@@ -20,10 +20,55 @@
   #fill { height:100%; width:0%; background:var(--acc); transition:width .2s; }
   #msg { margin-top:10px; color:var(--dim); font-size:12px; }
   #err { color:#ff6b6b; }
+
+  #hud { position:fixed; left:14px; bottom:14px; z-index:5; pointer-events:none;
+    display:flex; align-items:flex-end; gap:14px; }
+  #spd { font-size:44px; font-weight:600; line-height:1; letter-spacing:-2px;
+    font-variant-numeric:tabular-nums; text-shadow:0 2px 10px rgba(0,0,0,.6); }
+  #spd small { font-size:14px; font-weight:400; color:var(--dim); margin-left:5px; letter-spacing:0; }
+  #gear { min-width:34px; height:44px; display:grid; place-items:center; font-size:22px; font-weight:600;
+    color:var(--acc); background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+    border-radius:8px; }
+  #keys { position:fixed; right:14px; bottom:14px; z-index:5; pointer-events:none;
+    color:var(--dim); font-size:11.5px; text-align:right; text-shadow:0 1px 6px rgba(0,0,0,.7); }
+  #keys b { color:var(--fg); font-weight:600; }
+  #cam { position:fixed; left:14px; top:14px; z-index:5; pointer-events:none;
+    font-size:11.5px; color:var(--dim); text-shadow:0 1px 6px rgba(0,0,0,.7); }
+
+  #pad { position:fixed; inset:auto 0 0 0; z-index:6; display:none; padding:0 14px 18px;
+    justify-content:space-between; pointer-events:none; }
+  #pad .col { display:flex; gap:12px; }
+  #pad button { pointer-events:auto; width:66px; height:66px; border-radius:50%; font-size:22px;
+    color:var(--fg); background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16);
+    backdrop-filter:blur(6px); -webkit-user-select:none; user-select:none; touch-action:none; }
+  #pad button.on { background:rgba(255,138,61,.35); border-color:var(--acc); }
+  @media (pointer:coarse) { #pad { display:flex; } #keys { display:none; } }
 </style>
 </head>
 <body>
 <canvas id="view"></canvas>
+
+<div id="cam">камера: <b id="camname">следом</b> — C переключить</div>
+
+<div id="hud">
+  <div id="gear">N</div>
+  <div id="spd">0<small>км/ч</small></div>
+</div>
+<div id="keys">
+  <b>W/↑</b> газ · <b>S/↓</b> тормоз/назад · <b>A/D</b> поворот<br>
+  <b>Space</b> ручник · <b>C</b> камера · <b>R</b> сброс
+</div>
+
+<div id="pad">
+  <div class="col">
+    <button data-k="ArrowLeft">◀</button>
+    <button data-k="ArrowRight">▶</button>
+  </div>
+  <div class="col">
+    <button data-k="ArrowDown">▼</button>
+    <button data-k="ArrowUp">▲</button>
+  </div>
+</div>
 
 <div id="loader">
   <div class="box">
@@ -82,21 +127,221 @@ try {
   scene.environmentIntensity = 0.85;
 } catch (e) {}
 
-const ground = BABYLON.MeshBuilder.CreateGround("ground", { width:60, height:60 }, scene);
+const GROUND_SIZE = 320;
+const TILE = 8;
+
+const ground = BABYLON.MeshBuilder.CreateGround("ground", { width:GROUND_SIZE, height:GROUND_SIZE, subdivisions:1 }, scene);
 const gm = new BABYLON.StandardMaterial("gm", scene);
-gm.diffuseColor = new BABYLON.Color3(0.13, 0.14, 0.16);
 gm.specularColor = new BABYLON.Color3(0.06, 0.06, 0.07);
 ground.material = gm;
 ground.receiveShadows = true;
 
+// сетка на земле — без неё движение не читается
+const gridTex = new BABYLON.DynamicTexture("grid", { width:512, height:512 }, scene, true);
+gridTex.hasAlpha = false;
+{
+  const g = gridTex.getContext();
+  g.fillStyle = "#1b1d23";
+  g.fillRect(0, 0, 512, 512);
+  g.strokeStyle = "#2b303a";
+  g.lineWidth = 3;
+  g.strokeRect(0, 0, 512, 512);
+  g.strokeStyle = "#23272f";
+  g.lineWidth = 1.5;
+  for (let i = 1; i < 4; i++) {
+    g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, 512); g.stroke();
+    g.beginPath(); g.moveTo(0, i * 128); g.lineTo(512, i * 128); g.stroke();
+  }
+  gridTex.update();
+  gridTex.uScale = gridTex.vScale = GROUND_SIZE / TILE;
+}
+gm.diffuseTexture = gridTex;
+gm.diffuseColor = new BABYLON.Color3(0.55, 0.55, 0.6);
+
 const fill = document.getElementById("fill");
 const msg = document.getElementById("msg");
 const loader = document.getElementById("loader");
+const spdEl = document.getElementById("spd");
+const gearEl = document.getElementById("gear");
+const camNameEl = document.getElementById("camname");
 
 let meshes = [];
+let ready = false;
 
 function human(n) {
   return n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
+}
+
+// ===================== вождение =====================
+// Модель: вперёд −Z, вверх +Y, +X — левая сторона, ось колёс X.
+const CAR = {
+  root: null,
+  wheels: [],
+  v: 0,            // м/с, + = вперёд
+  yaw: 0,          // рад, + = налево
+  steer: 0,        // текущий угол поворота колёс, + = налево
+  lift: 0,         // высота подъёма кузова над землёй
+  maxSpeed: 40,    // ≈144 км/ч
+  maxReverse: 11,
+  accel: 9.5,
+  reverseAccel: 6,
+  brake: 18,
+  drag: 0.0055,
+  roll: 0.35,
+  grip: 11,
+  wheelbase: 2.75,
+  wheelR: 0.32,
+  camYaw: 0, camPitch: 1.13, camDist: 7.4,
+  chase: true,
+  idle: performance.now(),
+};
+
+const keys = Object.create(null);
+
+const CONTROL_KEYS = new Set(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space","KeyC","KeyR"]);
+addEventListener("keydown", (e) => {
+  if (CONTROL_KEYS.has(e.code)) e.preventDefault();
+  keys[e.code] = true;
+  if (e.code === "KeyC") toggleCam();
+  if (e.code === "KeyR") resetCar();
+});
+addEventListener("keyup", (e) => { keys[e.code] = false; });
+addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
+
+// тач-кнопки
+for (const b of document.querySelectorAll("#pad button")) {
+  const code = b.dataset.k;
+  const on = (e) => { e.preventDefault(); keys[code] = true; b.classList.add("on"); };
+  const off = (e) => { e.preventDefault(); keys[code] = false; b.classList.remove("on"); };
+  b.addEventListener("pointerdown", on);
+  b.addEventListener("pointerup", off);
+  b.addEventListener("pointercancel", off);
+  b.addEventListener("pointerleave", off);
+}
+
+function toggleCam() {
+  CAR.chase = !CAR.chase;
+  camNameEl.textContent = CAR.chase ? "следом" : "свободная";
+  // attachedToElement надёжнее detachControl: он гасит и inputs камеры
+  if (CAR.chase) { cam.detachControl(true); cam.inputs.attachedToElement = false; }
+  else { cam.attachControl(canvas, true); cam.inputs.attachedToElement = true; }
+  CAR.idle = -1e9;
+}
+
+function resetCar() {
+  if (!CAR.root) return;
+  CAR.v = 0; CAR.yaw = 0; CAR.steer = 0;
+  CAR.root.position.set(0, CAR.lift, 0);
+  CAR.root.rotation.y = 0;
+  for (const w of CAR.wheels) { w.angle = 0; w.spin.rotation.x = 0; w.steer.rotation.y = 0; }
+}
+
+// ручной облёт камеры мышью (в режиме «следом»)
+let drag = false, lastX = 0, lastY = 0;
+canvas.addEventListener("pointerdown", (e) => {
+  if (!CAR.chase) return;
+  drag = true; lastX = e.clientX; lastY = e.clientY; CAR.idle = performance.now();
+});
+addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  CAR.camYaw -= (e.clientX - lastX) * 0.006;
+  CAR.camPitch = clamp(CAR.camPitch + (e.clientY - lastY) * 0.005, 0.32, 1.45);
+  lastX = e.clientX; lastY = e.clientY;
+  CAR.idle = performance.now();
+});
+addEventListener("pointerup", () => { if (drag) CAR.idle = performance.now(); drag = false; });
+canvas.addEventListener("wheel", (e) => {
+  if (!CAR.chase) return;
+  e.preventDefault();
+  CAR.camDist = clamp(CAR.camDist * (1 + Math.sign(e.deltaY) * 0.08), 3.2, 26);
+}, { passive:false });
+
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+function wrapAngle(a) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+const camTarget = new BABYLON.Vector3(0, 0, 0);
+
+function drive(dt) {
+  const gas = keys.KeyW || keys.ArrowUp ? 1 : 0;
+  const back = keys.KeyS || keys.ArrowDown ? 1 : 0;
+  const left = keys.KeyA || keys.ArrowLeft ? 1 : 0;
+  const right = keys.KeyD || keys.ArrowRight ? 1 : 0;
+  const hand = keys.Space ? 1 : 0;
+
+  const throttle = gas - back;
+  const steerIn = left - right;
+
+  // руль: на высокой скорости вращение ограничено, иначе машину крутит как игрушку
+  const sp = Math.min(Math.abs(CAR.v) / CAR.maxSpeed, 1);
+  const maxSteer = 0.58 - 0.44 * sp;
+  const want = steerIn * maxSteer;
+  const rate = (want === 0 ? 6 : 3.4) * dt;
+  CAR.steer += clamp(want - CAR.steer, -rate, rate);
+
+  // продольная динамика
+  let a = 0;
+  if (throttle > 0) {
+    a = CAR.accel * throttle * clamp(1 - CAR.v / CAR.maxSpeed, 0.12, 1);
+  } else if (throttle < 0) {
+    if (CAR.v > 0.4) a = -CAR.brake * back;            // тормоз
+    else a = -CAR.reverseAccel * back * clamp(1 + CAR.v / CAR.maxReverse, 0.1, 1);
+  }
+  if (hand) a -= Math.sign(CAR.v) * CAR.brake * hand * (Math.abs(CAR.v) > 0.05 ? 1 : 0);
+  a -= Math.sign(CAR.v) * CAR.roll;
+  a -= CAR.drag * CAR.v * Math.abs(CAR.v);
+
+  CAR.v = clamp(CAR.v + a * dt, -CAR.maxReverse, CAR.maxSpeed);
+  if (Math.abs(CAR.v) < 0.05 && !throttle) CAR.v = 0;
+
+  // траектория: модель велосипеда, ограниченная сцеплением (иначе на скорости
+  // машину закручивает сильнее, чем шины держат — получается занос)
+  let yawRate = (CAR.v / CAR.wheelbase) * Math.tan(CAR.steer);
+  const cap = (hand ? CAR.grip * 0.5 : CAR.grip) / Math.max(Math.abs(CAR.v), 2);
+  yawRate = clamp(yawRate, -cap, cap);
+  CAR.yaw += yawRate * dt;
+
+  // трансформ кузова
+  CAR.root.rotation.y = -CAR.yaw;
+  const fwd = new BABYLON.Vector3(Math.sin(CAR.yaw), 0, -Math.cos(CAR.yaw));
+  CAR.root.position.addInPlace(fwd.scale(CAR.v * dt));
+
+  // колёса
+  for (const w of CAR.wheels) {
+    w.angle -= CAR.v / CAR.wheelR * dt;
+    w.spin.rotation.x = w.angle;
+    if (w.front) w.steer.rotation.y = -CAR.steer;
+  }
+
+  // земля едет за машиной, сетка остаётся в мировых координатах
+  const p = CAR.root.position;
+  ground.position.x = p.x;
+  ground.position.z = p.z;
+  gridTex.uOffset = p.x / TILE;
+  gridTex.vOffset = p.z / TILE;
+
+  // спидометр
+  const kmh = Math.abs(CAR.v) * 3.6;
+  spdEl.firstChild.nodeValue = String(Math.round(kmh));
+  const a2 = Math.abs(CAR.v);
+  gearEl.textContent = CAR.v < -0.3 ? "R" : a2 < 0.3 ? "N" : String(clamp(Math.floor(a2 / 9) + 1, 1, 5));
+
+  // камера. target пишем напрямую: setTarget() пересчитывает alpha/beta/radius
+  // по текущей позиции и каждый кадр уводил бы камеру в сторону.
+  BABYLON.Vector3.LerpToRef(camTarget, new BABYLON.Vector3(p.x, p.y + 0.75, p.z), 1 - Math.exp(-dt * 9), camTarget);
+  cam.target.copyFrom(camTarget);
+  if (CAR.chase) {
+    // возврат камеры за спину по реальному времени, а не по числу кадров
+    if (!drag && performance.now() - CAR.idle > 1600) CAR.camYaw *= Math.max(0, 1 - dt * 1.2);
+    const k = 1 - Math.exp(-dt * 5);
+    cam.alpha = wrapAngle(cam.alpha + wrapAngle((CAR.yaw + Math.PI / 2 + CAR.camYaw) - cam.alpha) * k);
+    cam.beta += (CAR.camPitch - cam.beta) * (1 - Math.exp(-dt * 7));
+    cam.radius += (CAR.camDist - cam.radius) * (1 - Math.exp(-dt * 7));
+  }
 }
 
 loader.classList.remove("hide");
@@ -113,10 +358,6 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   meshes = scene.meshes.filter(m => m.getTotalVertices() > 0 && m !== ground);
   if (!meshes.length) throw new Error("в модели нет геометрии");
 
-  // The glTF loader keeps every node transform on its own TransformNode and hangs the
-  // primitive meshes underneath it. Re-parenting those meshes to a new root would throw
-  // the node transform away (that is where the four wheels are positioned), so the scene
-  // graph is left untouched and the ground plane is moved to the model instead.
   let mn = new BABYLON.Vector3(1e9, 1e9, 1e9), mx = new BABYLON.Vector3(-1e9, -1e9, -1e9);
   const tmp = new BABYLON.Vector3();
   for (const m of meshes) {
@@ -134,13 +375,96 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
 
   const center = BABYLON.Vector3.Center(mn, mx);
   const size = mx.subtract(mn);
-  ground.position.y = mn.y;
 
-  cam.setTarget(new BABYLON.Vector3(center.x, mn.y + size.y * 0.45, center.z));
-  cam.radius = Math.max(size.x, size.z) * 2.0;
-  cam.lowerRadiusLimit = Math.max(1.2, Math.max(size.x, size.z) * 0.45);
-  cam.upperRadiusLimit = Math.max(size.x, size.z) * 8;
+  // --- корневой узел машины.
+  // Лоадер строит сцену с зеркальным корнем __root__ (scale 1,1,-1) — это перевод
+  // правостороннего glTF в левосторонний Babylon. Пересчитывать матрицы при переезде
+  // нельзя: decompose зеркало теряет и колёса выворачивает диском внутрь. Поэтому
+  // цепляем car к родному корню, не трогая его локальный трансформ.
+  const root = new BABYLON.TransformNode("car", scene);
+  CAR.root = root;
+  const tops = new Set();
+  for (const m of meshes) { let c = m; while (c.parent) c = c.parent; tops.add(c); }
+  for (const n of tops) n.parent = root;
 
+  // --- колёса. У каждого колеса в сцене есть свой узел (TransformNode wheel_lf и т.п.)
+  // с началом в центре колеса — он и есть ось вращения. Ставим под него руль и качение,
+  // меши (лоадер режет их на примитивы) оставляем с их локальным трансформом.
+  const groups = new Map();
+  for (const m of meshes) {
+    const n = m.parent;
+    // /^wheel/ — а не /wheel/: иначе под колесо попадает узел steeringwheel
+    if (!n || n === ground || !/^wheel/i.test(n.name)) continue;
+    if (!groups.has(n)) groups.set(n, []);
+    groups.get(n).push(m);
+  }
+  if (!groups.size) {
+    const tmp2 = new BABYLON.Vector3();
+    for (const m of meshes) {
+      const bb = m.getBoundingInfo().boundingBox;
+      const s = [bb.extendSize.x, bb.extendSize.y, bb.extendSize.z].sort((a, b) => a - b);
+      if (!(s[0] < 0.14 && s[1] > 0.2 && Math.abs(s[1] - s[2]) < 0.1)) continue;
+      BABYLON.Vector3.TransformCoordinatesToRef(bb.center, m.getWorldMatrix(), tmp2);
+      if (Math.abs(tmp2.x) < 0.4 || Math.abs(tmp2.z) < 0.9) continue;
+      if (!m._wn) { m._wn = new BABYLON.TransformNode("wheel_" + m.name, scene); m._wn.parent = root; }
+      m._wn.position.copyFrom(tmp2);
+      m.parent = m._wn;
+      if (!groups.has(m._wn)) groups.set(m._wn, []);
+      groups.get(m._wn).push(m);
+    }
+  }
+
+  let minWheelY = 1e9, rSum = 0;
+  const zs = [];
+  for (const [node, g] of groups) {
+    const wp = node.getAbsolutePosition();
+    let r = 0;
+    for (const m of g) {
+      const bb = m.getBoundingInfo().boundingBox;
+      r = Math.max(r, bb.extendSize.y, bb.extendSize.z);
+    }
+    // узел считается колесом, если его геометрия — диск: два равных размера и третий малый
+    if (r < 0.2) { groups.delete(node); continue; }
+    zs.push(wp.z);
+    rSum += r;
+
+    for (const m of g) {
+      const bb = m.getBoundingInfo().boundingBox;
+      for (let i = 0; i < 8; i++) {
+        BABYLON.Vector3.TransformCoordinatesToRef(bb.vectors[i], m.getWorldMatrix(), tmp);
+        minWheelY = Math.min(minWheelY, tmp.y);
+      }
+    }
+
+    const steer = new BABYLON.TransformNode("steer_" + node.name, scene);
+    steer.parent = node;
+    const spin = new BABYLON.TransformNode("spin_" + node.name, scene);
+    spin.parent = steer;
+    for (const m of g) m.parent = spin;
+
+    CAR.wheels.push({ steer, spin, node, front: wp.z < 0, angle: 0 });
+  }
+
+  const zMin = Math.min(...zs), zMax = Math.max(...zs);
+  if (groups.size > 1 && zMax - zMin > 0.5) CAR.wheelbase = zMax - zMin;
+  if (rSum > 0) CAR.wheelR = rSum / groups.size;
+  for (const w of CAR.wheels) w.front = w.node.getAbsolutePosition().z < (zMin + zMax) / 2;
+
+  // кузов поднимаем так, чтобы колёса встали на землю
+  CAR.lift = minWheelY < 1e9 ? -minWheelY : -mn.y;
+  root.position.set(0, CAR.lift, 0);
+
+  cam.lowerRadiusLimit = 3.2;
+  cam.upperRadiusLimit = 26;
+  cam.alpha = CAR.yaw + Math.PI / 2;
+  cam.beta = CAR.camPitch;
+  cam.radius = CAR.camDist;
+  camTarget.set(0, CAR.lift + 0.75, 0);
+  cam.target.copyFrom(camTarget);
+  CAR.idle = performance.now();
+  if (CAR.chase) { cam.detachControl(true); cam.inputs.attachedToElement = false; }
+
+  ready = true;
   scene.skipPointerMovePicking = true;
   fill.style.width = "100%";
   msg.textContent = "готово";
@@ -152,7 +476,15 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
 });
 
 window.addEventListener("resize", () => engine.resize());
-engine.runRenderLoop(() => scene.render());
+
+let last = performance.now();
+engine.runRenderLoop(() => {
+  const now = performance.now();
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  if (ready) drive(dt);
+  scene.render();
+});
 </script>
 </body>
 </html>
