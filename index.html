@@ -198,6 +198,7 @@ const CAR = {
   wheelbase: 2.75,
   wheelR: 0.32,
   camYaw: 0, camPitch: 1.13, camDist: 7.4,
+  camFov: 1.45,    // угол обзора салона, рад (~83° по вертикали)
   mode: 0,           // 0 следом · 1 салон · 2 свободная
   eye: null,         // точка обзора в локальной системе кузова (заполняется по модели)
   lookYaw: 0, lookPitch: 0,  // смещение взгляда в салоне мышью
@@ -294,13 +295,34 @@ function resetCar() {
   for (const w of CAR.wheels) { w.angle = 0; w.spin.rotation.x = 0; w.steer.rotation.y = 0; }
 }
 
+// угол обзора салона: мышь — колесо, телефон — щипок
+function setCamFov(f) {
+  CAR.camFov = clamp(f, 0.7, 1.9);
+  if (cockpit) cockpit.fov = CAR.camFov;
+}
+
 // ручной облёт камеры мышью (в режимах «следом» и «салон»)
 let drag = false, lastX = 0, lastY = 0;
+const ptrs = new Map();   // активные указатели — по ним ловим щипок
+let pinch = 0;
 canvas.addEventListener("pointerdown", (e) => {
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (CAR.mode === 2) return;
-  drag = true; lastX = e.clientX; lastY = e.clientY; CAR.idle = performance.now();
+  // двумя пальцами обзор не крутим — это щипок
+  drag = ptrs.size === 1;
+  lastX = e.clientX; lastY = e.clientY; CAR.idle = performance.now();
 });
 addEventListener("pointermove", (e) => {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (CAR.mode === 1 && ptrs.size >= 2) {
+    const [a, b] = [...ptrs.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    // раздвинули пальцы — приблизили
+    if (pinch > 0 && d > 0) setCamFov(CAR.camFov * (pinch / d));
+    pinch = d;
+    return;
+  }
   if (!drag) return;
   if (CAR.mode === 1) {
     // в салоне тянем обзор: вправо — смотрим вправо, вниз — вниз.
@@ -314,10 +336,19 @@ addEventListener("pointermove", (e) => {
   lastX = e.clientX; lastY = e.clientY;
   CAR.idle = performance.now();
 });
-addEventListener("pointerup", () => { if (drag) CAR.idle = performance.now(); drag = false; });
+const dropPointer = (e) => {
+  ptrs.delete(e.pointerId);
+  if (ptrs.size < 2) pinch = 0;
+  if (drag) CAR.idle = performance.now();
+  drag = false;
+};
+addEventListener("pointerup", dropPointer);
+addEventListener("pointercancel", dropPointer);
+addEventListener("blur", () => { ptrs.clear(); pinch = 0; drag = false; });
 canvas.addEventListener("wheel", (e) => {
-  if (CAR.mode !== 0) return;
   e.preventDefault();
+  if (CAR.mode === 1) { setCamFov(CAR.camFov * (1 + Math.sign(e.deltaY) * 0.07)); return; }
+  if (CAR.mode !== 0) return;
   CAR.camDist = clamp(CAR.camDist * (1 + Math.sign(e.deltaY) * 0.08), 3.2, 26);
 }, { passive:false });
 
@@ -570,7 +601,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
     cockpit.parent = root;
     cockpit.position.copyFrom(CAR.eye);
     cockpit.rotation.set(COCKPIT_PITCH, Math.PI, 0);
-    cockpit.fov = 1.1;      // из салона нужно шире, чем снаружи
+    cockpit.fov = CAR.camFov;   // угол обзора настраивается колесом и щипком
     cockpit.minZ = 0.04;     // руль и панель приборов в упор
     cockpit.inputs.clear();  // обзором рулит общий обработчик мыши
   }
