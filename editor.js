@@ -684,6 +684,17 @@ for (const b of document.querySelectorAll("#editModes button")) {
 }
 est("mapClearAll").addEventListener("click", () => { clearCones(); clearDraw(); });
 
+// ── окно «Карта»: счётчики, файл карты, очистка ─────────────────────
+const mapWin = est("mapWin"), mapBackdrop = est("mapBackdrop");
+function openMapWin(o) {
+  mapWin.classList.toggle("open", o);
+  mapBackdrop.classList.toggle("open", o);
+  if (o) { openTypeWin(false); updateCount(); updateCounts(); }
+}
+est("mapCfgBtn").addEventListener("click", () => { if (editOn) openMapWin(true); });
+est("mapCfgClose").addEventListener("click", () => openMapWin(false));
+mapBackdrop.addEventListener("click", () => openMapWin(false));
+
 // ── работа с указателем ──────────────────────────────────────────────
 scene.onPointerObservable.add((pi) => {
   const t = pi.type;
@@ -817,7 +828,9 @@ function openEdit(o) {
   editOn = o;
   editingMap = o;
   document.body.classList.toggle("edit-mode", o);
+  est("mapEdit").classList.toggle("open", o);
   est("mapBtn").classList.toggle("on", o);
+  if (!o) { openMapWin(false); openTypeWin(false); }
   if (o) {
     finishLine();
     const p = CAR.root.position;
@@ -884,6 +897,9 @@ addEventListener("keydown", (e) => {
   } else if (e.code === "KeyC" && !e.repeat) {
     e.preventDefault();
     clearCones();
+  } else if (e.code === "Escape") {
+    openMapWin(false);
+    openTypeWin(false);
   }
 });
 

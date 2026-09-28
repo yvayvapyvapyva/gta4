@@ -51,38 +51,61 @@
   #mapBtn:hover { background:rgba(255,255,255,.14); }
   #mapBtn.on { background:rgba(255,138,61,.32); border-color:var(--acc); }
 
-  #mapEdit { position:fixed; inset:0; z-index:8; display:none; pointer-events:none; }
-  body.edit-mode #mapEdit { display:block; }
-  #mapEdit .bar { position:absolute; top:12px; left:12px; right:12px; display:flex; flex-wrap:wrap;
-    gap:8px; align-items:center; pointer-events:auto; }
+  /* панель редактора: карточка снизу слева, джойстик + выбор типа + режимы */
+  #mapEdit { position:fixed; left:max(14px,env(safe-area-inset-left,0px)); bottom:14px; z-index:8;
+    display:none; align-items:center; gap:14px; max-width:calc(100vw - 28px);
+    background:rgba(18,20,26,.92); border:1px solid rgba(255,255,255,.14); border-radius:14px;
+    box-shadow:0 8px 24px rgba(0,0,0,.45); padding:10px 12px; color:var(--fg); backdrop-filter:blur(6px); }
+  #mapEdit.open { display:flex; }
+  .me-joy { flex:0 0 auto; display:flex; align-items:center; justify-content:center; }
+  #joyBase { position:relative; width:104px; height:104px; border-radius:50%; box-sizing:border-box;
+    background:radial-gradient(circle at 35% 30%,#2a3038,#14171d 72%);
+    border:1px solid rgba(255,255,255,.16); box-shadow:0 4px 14px rgba(0,0,0,.45),inset 0 0 0 5px rgba(18,20,26,.55);
+    touch-action:none; cursor:grab; }
+  #joyBase.on { border-color:var(--acc); }
+  #joyKnob { position:absolute; left:50%; top:50%; width:44px; height:44px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#4a4f58,#2b3038 70%);
+    border:2px solid var(--acc); box-shadow:0 3px 8px rgba(0,0,0,.5);
+    transform:translate(-50%,-50%); pointer-events:none; }
+  .me-main { flex:1 1 auto; min-width:0; font-size:13px; line-height:1.5; }
+  .me-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+  .me-title { font-weight:600; font-size:13px; color:var(--acc); letter-spacing:.4px; }
+  .me-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; justify-content:flex-end; }
+  .me-body { display:flex; gap:10px; align-items:flex-start; }
+  .me-type { display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .me-type-name { font-size:11px; line-height:1; color:var(--dim); white-space:nowrap; }
+  .t-caret { font-size:11px; color:var(--dim); line-height:1; }
+  #editTypeBtn { display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 8px; }
+  #editTypeBtn .tv-wrap { position:relative; width:78px; height:78px; display:flex;
+    align-items:center; justify-content:center; }
+  #editTypeBtn .ico { width:100%; height:100%; display:grid; place-items:center; }
+  #editTypeBtn .ico svg, #editTypeBtn .ico img { width:72px; height:72px; display:block; border-radius:8px; }
+  .me-modes { display:flex; flex-direction:column; align-items:stretch; gap:6px; width:104px; }
+  .me-modes button { min-height:36px; }
+  .me-hint { font-size:12px; color:var(--dim); margin-top:8px; max-width:280px; }
   #mapEdit button { font:inherit; font-size:12.5px; color:var(--fg); padding:7px 12px; border-radius:8px;
-    background:rgba(22,24,30,.86); border:1px solid rgba(255,255,255,.14); cursor:pointer;
-    backdrop-filter:blur(6px); }
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); cursor:pointer; }
   #mapEdit button:hover { border-color:rgba(255,255,255,.3); }
   #mapEdit button.active { background:rgba(255,138,61,.3); border-color:var(--acc); }
-  #mapEdit .sp { flex:1; }
-  #editTypeBtn { display:flex; align-items:center; gap:8px; }
-  #editTypeBtn .ico { width:22px; height:22px; display:grid; place-items:center; }
-  #editTypeBtn .ico svg, #editTypeBtn .ico img { width:22px; height:22px; display:block; }
-  #editModes { display:flex; gap:4px; }
-  #editModes b { color:var(--acc); font-weight:600; margin-left:5px; }
   #finishLineBtn { border-color:var(--acc) !important; color:var(--acc) !important; }
-  .counts { display:flex; gap:10px; font-size:11.5px; color:var(--dim);
-    background:rgba(22,24,30,.8); padding:7px 11px; border-radius:8px; border:1px solid rgba(255,255,255,.1); }
-  .counts b { color:var(--fg); font-variant-numeric:tabular-nums; }
-  #hintline { position:absolute; top:60px; left:50%; transform:translateX(-50%); max-width:min(560px,86vw);
-    font-size:12.5px; color:var(--dim); text-align:center; padding:7px 14px; border-radius:8px;
-    background:rgba(22,24,30,.8); border:1px solid rgba(255,255,255,.1); }
-  #joyBase { position:absolute; left:24px; bottom:24px; width:84px; height:84px; border-radius:50%;
-    background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.16); pointer-events:auto;
-    touch-action:none; }
-  #joyBase.on { border-color:var(--acc); }
-  #joyKnob { position:absolute; left:50%; top:50%; width:38px; height:38px; margin:-19px 0 0 -19px;
-    border-radius:50%; background:rgba(255,138,61,.55); border:1px solid var(--acc); }
-  #mapDone { background:var(--acc) !important; color:#1a1200 !important; font-weight:600; }
-  #mapFileStatus { position:absolute; left:24px; bottom:120px; font-size:12px; color:#7fbf8a;
-    background:rgba(22,24,30,.8); padding:6px 10px; border-radius:7px; display:none; }
+  #mapDone { width:34px; height:34px; padding:0; border-radius:9px; font-size:15px; line-height:1;
+    flex:0 0 auto; background:var(--acc) !important; color:#1a1200 !important; font-weight:600; }
+  #mapFileStatus { font-size:12px; color:#7fbf8a; margin-top:6px; display:none; }
   #mapFileStatus.show { display:block; }
+  .map-actions { display:flex; gap:8px; margin-top:10px; }
+  .map-actions button { flex:1; }
+  #mapClearAll { width:100%; margin-top:10px; border-color:rgba(224,138,106,.5); color:#e08a6a; }
+  #mapClearAll:hover { background:rgba(224,138,106,.16); border-color:#e08a6a; }
+  .me-top-hint { position:fixed; top:max(10px,env(safe-area-inset-top,0px)); left:50%;
+    transform:translateX(-50%); z-index:9; display:none; max-width:calc(100vw - 24px); text-align:center;
+    background:rgba(18,20,26,.9); border:1px solid rgba(255,255,255,.14); border-radius:10px;
+    padding:6px 12px; font-size:12px; line-height:1.4; color:var(--fg); }
+  body.edit-mode .me-top-hint { display:block; }
+  @media (pointer:coarse) {
+    #joyBase { width:112px; height:112px; }
+    #joyKnob { width:48px; height:48px; }
+    .me-modes button { min-height:44px; }
+  }
 
   .win-backdrop { position:fixed; inset:0; z-index:9; background:rgba(8,9,12,.6); display:none; }
   .win-backdrop.open { display:block; }
@@ -94,6 +117,11 @@
     display:flex; justify-content:space-between; align-items:center; }
   .win h3 button { font:inherit; font-size:16px; line-height:1; padding:2px 9px; border-radius:7px;
     color:var(--fg); background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); cursor:pointer; }
+  .win button { font:inherit; font-size:12.5px; color:var(--fg); padding:8px 12px; border-radius:8px;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); cursor:pointer; }
+  .win button:hover { border-color:rgba(255,255,255,.3); }
+  .counts { font-size:12px; color:var(--dim); line-height:1.6; }
+  .counts b { color:var(--fg); font-variant-numeric:tabular-nums; }
   .tg { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
   .tg-card { width:104px; padding:8px 6px 9px; border-radius:10px; text-align:center; cursor:pointer;
     background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); }
@@ -139,32 +167,52 @@
 <button id="mapBtn">Площадка</button>
 
 <div id="mapEdit">
-  <div class="bar">
-    <button id="editTypeBtn"><span class="ico" id="typeIco"></span><span id="typeName">Конус</span></button>
-    <div id="editModes">
-      <button data-mode="place" class="active">Поставить<b>1</b></button>
-      <button data-mode="move">Двигать<b>2</b></button>
-      <button data-mode="delete">Удалить<b>3</b></button>
-    </div>
-    <button id="finishLineBtn" style="display:none">Завершить линию</button>
-    <div class="sp"></div>
-    <div class="counts">
-      <span>конусов <b id="count">0</b></span>
-      <span>линий <b id="countLines">0</b></span>
-      <span>бордюр <b id="countCurb">0</b></span>
-      <span>забор <b id="countFence">0</b></span>
-      <span>эстакада <b id="countEstacada">0</b></span>
-    </div>
-    <button id="mapSaveBtn">Сохранить</button>
-    <button id="mapLoadBtn">Загрузить</button>
-    <button id="mapClearAll">Очистить</button>
-    <button id="mapDone">Готово</button>
+  <div class="me-joy">
+    <div id="joyBase" aria-label="Перемещение по карте"><div id="joyKnob"></div></div>
   </div>
-  <div id="hintline">Режим редактирования площадки выключен</div>
-  <div id="joyBase"><div id="joyKnob"></div></div>
-  <div id="mapFileStatus"></div>
+  <div class="me-main">
+    <div class="me-head">
+      <button id="mapCfgBtn">Карта</button>
+      <button id="mapDone" aria-label="Выйти из режима редактирования">✕</button>
+    </div>
+    <div class="me-row">
+      <button id="finishLineBtn" style="display:none">Завершить линию</button>
+    </div>
+    <div class="me-body">
+      <div class="me-type">
+        <button id="editTypeBtn" aria-label="Выбрать объект">
+          <span class="tv-wrap"><span class="ico" id="typeIco"></span></span>
+          <span class="t-caret">▾</span>
+        </button>
+        <div class="me-type-name" id="typeName">Конус</div>
+      </div>
+      <div class="me-modes" id="editModes">
+        <button data-mode="place" class="active">Поставить</button>
+        <button data-mode="move">Переместить</button>
+        <button data-mode="delete">Удалить</button>
+      </div>
+    </div>
+  </div>
 </div>
+
+<div class="me-top-hint" id="hintline">Режим редактирования площадки выключен</div>
+
 <input type="file" id="mapFileInput" accept="application/json,.json" hidden>
+
+<div id="mapBackdrop" class="win-backdrop"></div>
+<div id="mapWin" class="win">
+  <h3>Настройки карты<button id="mapCfgClose" aria-label="Закрыть">✕</button></h3>
+  <div class="counts">
+    Конусов: <b id="count">0</b> · Линий: <b id="countLines">0</b> · Бордюров: <b id="countCurb">0</b><br>
+    Заборов: <b id="countFence">0</b> · Эстакад: <b id="countEstacada">0</b>
+  </div>
+  <div class="map-actions">
+    <button id="mapSaveBtn">Сохранить карту</button>
+    <button id="mapLoadBtn">Загрузить карту</button>
+  </div>
+  <div id="mapFileStatus"></div>
+  <button id="mapClearAll">Очистить карту</button>
+</div>
 
 <div id="typeBackdrop" class="win-backdrop"></div>
 <div id="typeWin" class="win">
