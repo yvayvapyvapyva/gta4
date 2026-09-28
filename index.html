@@ -133,36 +133,83 @@ try {
   scene.environmentIntensity = 0.85;
 } catch (e) {}
 
+// небо: градиентный купол, иначе горизонт не читается
+const skyTex = new BABYLON.DynamicTexture("sky", { width:32, height:512 }, scene, true);
+skyTex.hasAlpha = false;
+{
+  const g = skyTex.getContext();
+  // в CreateSphere v=0 внизу сферы, поэтому зенит — низ канваса
+  const grd = g.createLinearGradient(0, 0, 0, 512);
+  grd.addColorStop(0.00, "#4e565f");   // под горизонтом
+  grd.addColorStop(0.46, "#8fa3b3");
+  grd.addColorStop(0.50, "#cfe4f7");   // горизонт
+  grd.addColorStop(0.56, "#7ba8e4");
+  grd.addColorStop(1.00, "#2f6fca");   // зенит
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 32, 512);
+  skyTex.update();
+}
+const skyMat = new BABYLON.StandardMaterial("skyMat", scene);
+skyMat.backFaceCulling = false;
+skyMat.disableLighting = true;
+skyMat.diffuseColor = new BABYLON.Color3(0, 0, 0);
+skyMat.specularColor = new BABYLON.Color3(0, 0, 0);
+skyMat.emissiveTexture = skyTex;
+const sky = BABYLON.MeshBuilder.CreateSphere("sky", { diameter:4000, segments:24, sideOrientation:BABYLON.Mesh.BACKSIDE }, scene);
+sky.material = skyMat;
+sky.infiniteDistance = true;
+sky.isPickable = false;
+
 const GROUND_SIZE = 320;
 const TILE = 8;
 
 const ground = BABYLON.MeshBuilder.CreateGround("ground", { width:GROUND_SIZE, height:GROUND_SIZE, subdivisions:1 }, scene);
 const gm = new BABYLON.StandardMaterial("gm", scene);
-gm.specularColor = new BABYLON.Color3(0.06, 0.06, 0.07);
+gm.specularColor = new BABYLON.Color3(0.04, 0.04, 0.05);
+gm.diffuseColor = new BABYLON.Color3(0.85, 0.85, 0.88);
 ground.material = gm;
 ground.receiveShadows = true;
 
-// сетка на земле — без неё движение не читается
+// асфальт + разметка: без сетки движение не читается
 const gridTex = new BABYLON.DynamicTexture("grid", { width:512, height:512 }, scene, true);
 gridTex.hasAlpha = false;
+// DynamicTexture по умолчанию ставит CLAMP — с uScale=40 текстура зажимается в кашу,
+// поэтому тайлинг включаем явно
+gridTex.wrapU = gridTex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
+gridTex.uScale = gridTex.vScale = GROUND_SIZE / TILE;
+// плоскость смотрится под скользящим углом — без анизотропии мылится вдаль
+gridTex.anisotropicFilteringLevel = engine.getCaps().maxAnisotropy;
 {
   const g = gridTex.getContext();
-  g.fillStyle = "#1b1d23";
+  g.fillStyle = "#41454c";            // асфальт
   g.fillRect(0, 0, 512, 512);
-  g.strokeStyle = "#2b303a";
-  g.lineWidth = 3;
-  g.strokeRect(0, 0, 512, 512);
-  g.strokeStyle = "#23272f";
-  g.lineWidth = 1.5;
+  // крупные пятна — потёртости и заплаты
+  for (let i = 0; i < 60; i++) {
+    const l = 52 + Math.random() * 26;
+    g.fillStyle = "rgba(" + (l | 0) + "," + ((l * 1.02) | 0) + "," + ((l * 1.07) | 0) + ",0.5)";
+    g.beginPath();
+    g.arc(Math.random() * 512, Math.random() * 512, 14 + Math.random() * 46, 0, Math.PI * 2);
+    g.fill();
+  }
+  // зерно асфальта крупными блоками: 1px-шум полностью съедается мипмаппингом
+  for (let i = 0; i < 3000; i++) {
+    const l = 38 + Math.random() * 52;
+    g.fillStyle = "rgba(" + (l | 0) + "," + ((l * 1.02) | 0) + "," + ((l * 1.07) | 0) + ",0.5)";
+    g.fillRect(Math.random() * 512, Math.random() * 512, 2 + (Math.random() * 3 | 0), 2);
+  }
+  // тонкая сетка каждые 2 м, заметная линия каждые 8 м
+  g.strokeStyle = "rgba(150,160,175,0.10)";
+  g.lineWidth = 1;
   for (let i = 1; i < 4; i++) {
     g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, 512); g.stroke();
     g.beginPath(); g.moveTo(0, i * 128); g.lineTo(512, i * 128); g.stroke();
   }
+  g.strokeStyle = "rgba(185,195,210,0.30)";
+  g.lineWidth = 4;
+  g.strokeRect(0, 0, 512, 512);
   gridTex.update();
-  gridTex.uScale = gridTex.vScale = GROUND_SIZE / TILE;
 }
 gm.diffuseTexture = gridTex;
-gm.diffuseColor = new BABYLON.Color3(0.55, 0.55, 0.6);
 
 const fill = document.getElementById("fill");
 const msg = document.getElementById("msg");
@@ -462,7 +509,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
     msg.textContent = human(ev.loaded / 1048576) + " / " + human(ev.total / 1048576) + " MB";
   }
 ).then(() => {
-  meshes = scene.meshes.filter(m => m.getTotalVertices() > 0 && m !== ground);
+  meshes = scene.meshes.filter(m => m.getTotalVertices() > 0 && m !== ground && m !== sky);
   if (!meshes.length) throw new Error("в модели нет геометрии");
 
   let mn = new BABYLON.Vector3(1e9, 1e9, 1e9), mx = new BABYLON.Vector3(-1e9, -1e9, -1e9);
