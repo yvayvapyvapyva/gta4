@@ -483,6 +483,13 @@ const CAR = {
   grip: 11,
   wheelbase: 2.75,
   wheelR: 0.32,
+  // Геометрия разворота, как в первом приложении: угол выводится из диаметра
+  // разворота по формуле atan(колеиная база / радиус дуги) и не зависит от
+  // скорости — иначе на быстром ходу машину разворачивает заметно шире.
+  turnDiameter: 10.5,   // диаметр разворота по внешней кромке, м
+  width: 1.74,          // ширина кузова, м (замеряется по модели при загрузке)
+  turnRadius: 4.38,     // радиус дуги = (turnDiameter − width) / 2
+  maxSteer: 0.56,       // предельный угол колёс, рад (~32°)
   camYaw: 0, camPitch: 1.13, camDist: 7.4,
   camFov: 1.45,    // угол обзора салона, рад (~83° по вертикали)
   mode: 0,           // 0 следом · 1 салон · 2 свободная
@@ -755,11 +762,10 @@ function drive(dt) {
   const throttle = gas - back;
   const steerIn = left - right;
 
-  // руль: на высокой скорости вращение ограничено, иначе машину крутит как игрушку
-  const sp = Math.min(Math.abs(CAR.v) / CAR.maxSpeed, 1);
-  const maxSteer = 0.58 - 0.44 * sp;
-  // сенсорный руль задаёт угол сам; на скорости он тоже поджимается, как и клавиши
-  const want = touchSteerEnabled ? touchSteerAngle * (maxSteer / 0.58) : steerIn * maxSteer;
+  // руль: полный отворот задан геометрией (CAR.maxSteer) и не гасится скоростью,
+  // поэтому радиус разворота одинаков на любом ходу
+  const maxSteer = CAR.maxSteer;
+  const want = touchSteerEnabled ? touchSteerAngle : steerIn * maxSteer;
   const rate = (want === 0 ? 6 : 3.4) * dt;
   CAR.steer += clamp(want - CAR.steer, -rate, rate);
 
@@ -969,6 +975,29 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   if (groups.size > 1 && zMax - zMin > 0.5) CAR.wheelbase = zMax - zMin;
   if (rSum > 0) CAR.wheelR = rSum / groups.size;
   for (const w of CAR.wheels) w.front = w.node.getAbsolutePosition().z < (zMin + zMax) / 2;
+
+  // --- угол полного отворота: измеряем ширину кузова (без колёс и зеркал —
+  // они не входят в габарит разворота) и считаем угол по диаметру разворота.
+  // Ширину берём как наибольшую ширину отдельной детали, а не общий размах:
+  // модель немного несимметрична (двери слева выступают за бамперы), и общий
+  // размах завышал бы габарит почти на 0.22 м.
+  {
+    let w = 0;
+    for (const m of meshes) {
+      if (/wheel|mirror|slipstream|exhaust/i.test(m.name)) continue;
+      m.computeWorldMatrix(true);   // матрицы протухли после перевешивания на root
+      const bb = m.getBoundingInfo().boundingBox;
+      let lo = 1e9, hi = -1e9;
+      for (let i = 0; i < 8; i++) {
+        BABYLON.Vector3.TransformCoordinatesToRef(bb.vectors[i], m.getWorldMatrix(), tmp);
+        lo = Math.min(lo, tmp.x); hi = Math.max(hi, tmp.x);
+      }
+      w = Math.max(w, hi - lo);
+    }
+    if (w > 0.5) CAR.width = w;
+  }
+  CAR.turnRadius = (CAR.turnDiameter - CAR.width) / 2;
+  CAR.maxSteer = Math.atan(CAR.wheelbase / CAR.turnRadius);
 
   // кузов поднимаем так, чтобы колёса встали на землю
   CAR.lift = minWheelY < 1e9 ? -minWheelY : -mn.y;

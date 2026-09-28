@@ -12,7 +12,9 @@
  * поэтому угол руля здесь берётся со знаком минус — по часовой стрелке налево нет.
  */
 
-const DV_LOCK = 0.58;   // предельный угол колёс на полном отвороте, рад
+// Полный отворот берём у CAR: он считается по диаметру разворота при загрузке
+// модели, иначе панель разошлась бы с физикой на машинах с другой геометрией.
+const DV_LOCK = () => CAR.maxSteer;
 
 // ── Руль и кнопки «вперёд/назад» ────────────────────────────────
 (function(){
@@ -42,7 +44,7 @@ const DV_LOCK = 0.58;   // предельный угол колёс на пол�
   const setWheel=(ang)=>{
     wAng=Math.max(-WMAX,Math.min(WMAX,ang));
     rotEl.style.transform='rotate('+wAng+'deg)';
-    touchSteerEnabled=true;touchSteerAngle=-(wAng/WMAX)*DV_LOCK;
+    touchSteerEnabled=true;touchSteerAngle=-(wAng/WMAX)*DV_LOCK();
   };
   wheel.addEventListener('pointerdown',e=>{
     e.preventDefault();
@@ -73,7 +75,7 @@ const DV_LOCK = 0.58;   // предельный угол колёс на пол�
   window.syncDvWheel=()=>{
     let cur;
     if(rotDrag)cur=wAng/WMAX;
-    else{wAng=(CAR.steer/DV_LOCK)*WMAX;cur=CAR.steer/DV_LOCK;}
+    else{const lk=DV_LOCK();wAng=(CAR.steer/lk)*WMAX;cur=CAR.steer/lk;}
     rotEl.style.transform='rotate('+wAng+'deg)';
     const ind=document.getElementById('dvIndMarker');
     if(ind)ind.style.left=(50-cur*48)+'%';
