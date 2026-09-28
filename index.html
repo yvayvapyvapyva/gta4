@@ -511,17 +511,17 @@ gm.diffuseColor = new BABYLON.Color3(0.85, 0.85, 0.88);
 ground.material = gm;
 ground.receiveShadows = true;
 
-// асфальт + разметка: без сетки движение не читается
-const gridTex = new BABYLON.DynamicTexture("grid", { width:512, height:512 }, scene, true);
-gridTex.hasAlpha = false;
+// асфальт: пятна и зерно, без сетки — сетка живёт отдельным слоем (gridMesh)
+const groundTex = new BABYLON.DynamicTexture("ground", { width:512, height:512 }, scene, true);
+groundTex.hasAlpha = false;
 // DynamicTexture по умолчанию ставит CLAMP — с uScale=40 текстура зажимается в кашу,
 // поэтому тайлинг включаем явно
-gridTex.wrapU = gridTex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
-gridTex.uScale = gridTex.vScale = GROUND_SIZE / TILE;
+groundTex.wrapU = groundTex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
+groundTex.uScale = groundTex.vScale = GROUND_SIZE / TILE;
 // плоскость смотрится под скользящим углом — без анизотропии мылится вдаль
-gridTex.anisotropicFilteringLevel = engine.getCaps().maxAnisotropy;
+groundTex.anisotropicFilteringLevel = engine.getCaps().maxAnisotropy;
 {
-  const g = gridTex.getContext();
+  const g = groundTex.getContext();
   g.fillStyle = "#41454c";            // асфальт
   g.fillRect(0, 0, 512, 512);
   // крупные пятна — потёртости и заплаты
@@ -538,19 +538,14 @@ gridTex.anisotropicFilteringLevel = engine.getCaps().maxAnisotropy;
     g.fillStyle = "rgba(" + (l | 0) + "," + ((l * 1.02) | 0) + "," + ((l * 1.07) | 0) + ",0.5)";
     g.fillRect(Math.random() * 512, Math.random() * 512, 2 + (Math.random() * 3 | 0), 2);
   }
-  // тонкая сетка каждые 2 м, заметная линия каждые 8 м
-  g.strokeStyle = "rgba(150,160,175,0.10)";
-  g.lineWidth = 1;
-  for (let i = 1; i < 4; i++) {
-    g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, 512); g.stroke();
-    g.beginPath(); g.moveTo(0, i * 128); g.lineTo(512, i * 128); g.stroke();
-  }
-  g.strokeStyle = "rgba(185,195,210,0.30)";
-  g.lineWidth = 4;
-  g.strokeRect(0, 0, 512, 512);
-  gridTex.update();
+  groundTex.update();
 }
-gm.diffuseTexture = gridTex;
+gm.diffuseTexture = groundTex;
+
+// Сетка площадки в первом приложении — не текстура земли, а линии
+// CreateLineSystem с шагом 0.5 м плюс оси через центр. Здесь она тоже
+// строится в editor.js: она нужна только при правке и центрируется
+// там, где машина встала, а не по мировому нулю.
 
 const fill = document.getElementById("fill");
 const msg = document.getElementById("msg");
@@ -1055,11 +1050,11 @@ function drive(dt) {
     if (w.front) w.steer.rotation.y = CAR.steer;
   }
 
-  // земля едет за машиной, сетка остаётся в мировых координатах
+  // земля едет за машиной, текстура асфальта остаётся в мировых координатах
   ground.position.x = p.x;
   ground.position.z = p.z;
-  gridTex.uOffset = p.x / TILE;
-  gridTex.vOffset = p.z / TILE;
+  groundTex.uOffset = p.x / TILE;
+  groundTex.vOffset = p.z / TILE;
 
   // спидометр
   const kmh = Math.abs(CAR.v) * 3.6;

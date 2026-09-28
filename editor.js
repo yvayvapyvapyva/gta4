@@ -823,6 +823,44 @@ function panApply(dt) {
   cam.target.z = clamp(cam.target.z, parkZ - MAP_HALF, parkZ + MAP_HALF);
 }
 
+// ── сетка и оси внутри площадки (как в первом приложении) ───────────
+// Линии CreateLineSystem с шагом 0.5 м плюс оси через центр. Сетка
+// центрируется там, где машина встала (parkX/parkZ), а не по мировому
+// нулю: площадка привязана к месту стоянки. Живёт в мировых координатах
+// и не едет за машиной, поэтому пересобирается только при входе в правку.
+let gridMesh = null, gridAxes = null;
+function gridLines(step, half, cx, cz, y) {
+  const lines = [];
+  for (let i = -half; i <= half + 1e-6; i += step) {
+    lines.push([new BABYLON.Vector3(cx + i, y, cz - half), new BABYLON.Vector3(cx + i, y, cz + half)]);
+  }
+  for (let i = -half; i <= half + 1e-6; i += step) {
+    lines.push([new BABYLON.Vector3(cx - half, y, cz + i), new BABYLON.Vector3(cx + half, y, cz + i)]);
+  }
+  return lines;
+}
+function buildGridAxes() {
+  const vis = gridMesh ? gridMesh.isVisible : false;
+  if (gridMesh) { gridMesh.dispose(); gridMesh = null; }
+  if (gridAxes) { gridAxes.dispose(); gridAxes = null; }
+  const h = MAP_HALF;
+  gridMesh = BABYLON.MeshBuilder.CreateLineSystem("grid", { lines: gridLines(0.5, h, parkX, parkZ, 0.01) }, scene);
+  gridMesh.color = new BABYLON.Color3(0.30, 0.30, 0.30);
+  gridMesh.isPickable = false;
+  gridMesh.isVisible = vis;
+  gridAxes = BABYLON.MeshBuilder.CreateLineSystem("axes", { lines: [
+    [new BABYLON.Vector3(parkX, 0.02, parkZ - h), new BABYLON.Vector3(parkX, 0.02, parkZ + h)],
+    [new BABYLON.Vector3(parkX - h, 0.02, parkZ), new BABYLON.Vector3(parkX + h, 0.02, parkZ)],
+  ]}, scene);
+  gridAxes.color = new BABYLON.Color3(0.55, 0.55, 0.55);
+  gridAxes.isPickable = false;
+  gridAxes.isVisible = vis;
+}
+function setGridVisible(o) {
+  if (gridMesh) gridMesh.isVisible = !!o;
+  if (gridAxes) gridAxes.isVisible = !!o;
+}
+
 // ── вход и выход из режима правки ────────────────────────────────────
 function openEdit(o) {
   if (o === editOn) return;
@@ -841,8 +879,10 @@ function openEdit(o) {
     // площадка неподвижна: земля и сетка перестают ехать за машиной
     ground.position.x = p.x;
     ground.position.z = p.z;
-    gridTex.uOffset = p.x / TILE;
-    gridTex.vOffset = p.z / TILE;
+    groundTex.uOffset = p.x / TILE;
+    groundTex.vOffset = p.z / TILE;
+    buildGridAxes();                      // сетка центрируется по месту стоянки
+    setGridVisible(true);                 // сетка нужна только при правке
     prevCamMode = CAR.mode;
     CAR.mode = 2;                       // свободная камера: мышь орбитит и зумит
     applyCamMode();
@@ -855,6 +895,7 @@ function openEdit(o) {
     finishLine();
     hideLinePreview();
     preview.isVisible = false;
+    setGridVisible(false);                // вернулись в езду — сетка не нужна
     editorTick = null;
     scene.skipPointerMovePicking = true;
     canvas.style.cursor = "";
@@ -867,6 +908,7 @@ function openEdit(o) {
   }
 }
 est("mapBtn").addEventListener("click", () => openEdit(true));
+
 est("mapDone").addEventListener("click", () => openEdit(false));
 
 // пока идёт правка, машина стоит: едем только объекты и превью
