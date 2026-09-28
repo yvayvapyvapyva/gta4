@@ -480,6 +480,10 @@ const CAR = {
   brake: 18,
   drag: 0.0055,
   roll: 0.35,
+  // Торможение двигателем на сбросе газа: без него машина докатывалась почти
+  // до нуля за 13 с. Работает только на холостом ходу и сходит на нет у пола
+  // (иначе последние доли м/с тянуло бы вал), поэтому масштабируется скоростью.
+  engineBrake: 1.6,
   grip: 11,
   wheelbase: 2.75,
   wheelR: 0.32,
@@ -779,6 +783,10 @@ function drive(dt) {
     else a = -CAR.reverseAccel * back * clamp(1 + CAR.v / CAR.maxReverse, 0.1, 1);
   }
   if (hand) a -= Math.sign(CAR.v) * CAR.brake * hand * (Math.abs(CAR.v) > 0.05 ? 1 : 0);
+  // на сбросе газа мотор давит на вал: сила гаснет к остановке, как и должно
+  if (!throttle && !hand && Math.abs(CAR.v) > 0.05) {
+    a -= Math.sign(CAR.v) * CAR.engineBrake * Math.min(1, Math.abs(CAR.v) / 1.5);
+  }
   a -= Math.sign(CAR.v) * CAR.roll;
   a -= CAR.drag * CAR.v * Math.abs(CAR.v);
 
