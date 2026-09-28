@@ -15,9 +15,9 @@
 //   setMirrorsActive(on)          — вкл/выкл из applyCamMode
 //   mirrorTick()                  — каждый кадр перед scene.render()
 
-const MIRROR_RES = 512;        // сторона RTT на десктопе
-const MIRROR_RES_TOUCH = 256;   // на телефоне два зеркала — уже дорого
+const MIRROR_RES = 2048;       // сторона RTT: запас, чтобы зеркало не мылилось
 const MIRROR_LEVEL = 0.92;      // стекло чуть гасит отражение
+const MIRROR_ANISO = 16;        // фильтрация при взгляде на зеркало под углом
 const MIRROR_ADJ = 0.035;       // шаг регулировки зеркала, рад за нажатие
 
 let mirrorEntries = [];   // { mesh, tex, mat, srcMat, srcVC, point, normal, baseNormal, yaw, pitch }
@@ -41,8 +41,7 @@ const _pt = new BABYLON.Vector3();
 const _nm = new BABYLON.Vector3();
 
 function mirrorRes() {
-  const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;
-  return coarse || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? MIRROR_RES_TOUCH : MIRROR_RES;
+  return MIRROR_RES;
 }
 
 // матрица меша в системе кузова: инверсия корня умножена на мирную матрицу
@@ -316,6 +315,10 @@ function setupMirrors(opts) {
     // ровно тот texel, куда этот фрагмент попал в отражённую камеру.
     tex.coordinatesMode = BABYLON.Texture.PROJECTION_MODE;
     tex.level = MIRROR_LEVEL;
+    tex.anisotropicFilteringLevel = MIRROR_ANISO;
+    tex.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
+    tex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+    tex.samplingMode = BABYLON.Texture.TRILINEAR_SAMPLINGMODE;
     tex.clearColor = new BABYLON.Color4(0.02, 0.02, 0.03, 1);
     tex.renderList = MIRROR_NONE;
     // плоскость сразу с нормалью к водителю: так она и будет жить дальше
