@@ -34,6 +34,9 @@
   #keys b { color:var(--fg); font-weight:600; }
   #cam { position:fixed; left:14px; top:14px; z-index:5; pointer-events:none;
     font-size:11.5px; color:var(--dim); text-shadow:0 1px 6px rgba(0,0,0,.7); }
+  #mirrorhud { position:fixed; left:14px; top:34px; z-index:5; pointer-events:none;
+    font-size:11.5px; color:var(--fg); background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.12);
+    border-radius:7px; padding:4px 8px; text-shadow:0 1px 6px rgba(0,0,0,.7); }
 
   #pad { position:fixed; inset:auto 0 0 0; z-index:6; display:none; padding:0 14px 18px;
     justify-content:space-between; pointer-events:none; }
@@ -135,6 +138,7 @@
 <canvas id="view"></canvas>
 
 <div id="cam">камера: <b id="camname">следом</b> — C переключить</div>
+<div id="mirrorhud" hidden></div>
 
 <div id="hud">
   <div id="gear">N</div>
@@ -142,7 +146,7 @@
 </div>
 <div id="keys">
   <b>W/↑</b> газ · <b>S/↓</b> тормоз/назад · <b>A/D</b> поворот<br>
-  <b>Space</b> ручник · <b>C</b> камера · <b>R</b> сброс
+  <b>Space</b> ручник · <b>C</b> камера · <b>R</b> сброс · <b>M</b> зеркала
 </div>
 
 <div id="pad">
@@ -411,6 +415,17 @@ const keys = Object.create(null);
 const CONTROL_KEYS = new Set(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space","KeyC","KeyR"]);
 addEventListener("keydown", (e) => {
   if (CONTROL_KEYS.has(e.code)) e.preventDefault();
+  // режим регулировки зеркал перехватывает стрелки, чтобы они не управляли машиной
+  if (typeof mirrorAdjActive === "function" && mirrorAdjActive()) {
+    if (e.code === "KeyM") { mirrorAdjToggle(); return; }
+    if (e.code === "ArrowLeft") { mirrorAdjStep(-1, 0); return; }
+    if (e.code === "ArrowRight") { mirrorAdjStep(1, 0); return; }
+    if (e.code === "ArrowUp") { mirrorAdjStep(0, 1); return; }
+    if (e.code === "ArrowDown") { mirrorAdjStep(0, -1); return; }
+    if (e.code === "KeyL") { mirrorAdjPick("left"); return; }
+    if (e.code === "KeyR") { mirrorAdjPick("right"); return; }
+    if (e.code === "KeyK") { mirrorAdjReset(); return; }
+  } else if (e.code === "KeyM" && typeof mirrorAdjToggle === "function") mirrorAdjToggle();
   keys[e.code] = true;
   if (e.code === "KeyC" && !editingMap) toggleCam();
   if (e.code === "KeyR") resetCar();
@@ -476,6 +491,7 @@ function applyCamMode() {
   cabin.intensity = m === 1 ? 0.85 : 0;
   setTwoSided(m === 1);
   setGlassOff(m === 1);
+  if (typeof setMirrorsActive === "function") setMirrorsActive(m === 1);
   CAR.idle = -1e9;
 }
 
@@ -575,6 +591,7 @@ let surfaceProbe = null;
 let obstacleProbe = null;
 let editorTick = null;   // editor.js перехватывает кадр, пока включён режим правки
 let objectTick = null;   // editor.js обновляет конусы и при обычной езде
+let mirrorTick = null;   // mirror.js пересчитывает плоскости зеркал перед кадром
 let editGrab = false;    // editor.js держит конус: мышь не должна одновременно крутить камеру
 let editingMap = false;  // editor.js: открыт режим правки площадки
 
@@ -929,6 +946,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   cam.radius = CAR.camDist;
   camTarget.set(0, CAR.lift + 0.75, 0);
   cam.target.copyFrom(camTarget);
+  if (typeof setupMirrors === "function") setupMirrors({ root: CAR.root, meshes });
   applyCamMode();
 
   ready = true;
@@ -952,10 +970,12 @@ engine.runRenderLoop(() => {
   if (ready) {
     if (objectTick) objectTick(dt);
     if (editorTick) editorTick(dt); else drive(dt);
+    if (mirrorTick) mirrorTick();
   }
   scene.render();
 });
 </script>
 <script src="editor.js"></script>
+<script src="mirror.js"></script>
 </body>
 </html>
