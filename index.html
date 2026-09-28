@@ -483,6 +483,7 @@ const CAR = {
   grip: 11,
   wheelbase: 2.75,
   wheelR: 0.32,
+  rearZ: 1.37,      // расстояние от центра кузова до задней оси, м (замеряется по модели)
   // Геометрия разворота, как в первом приложении: угол выводится из диаметра
   // разворота по формуле atan(колеиная база / радиус дуги) и не зависит от
   // скорости — иначе на быстром ходу машину разворачивает заметно шире.
@@ -796,11 +797,20 @@ function drive(dt) {
   const p = CAR.root.position;
 
   // --- горизонтальный шаг с проверкой препятствий
+  // Ось поворота — задняя ось (как в первом приложении): задние колёса не
+  // рулят и не должны проскальзывать вбок, поэтому ведём по задней точке, а
+  // центр кузова получаем сносом на длину до задней оси. Раньше шаг шёл по
+  // центру, и задние колёса «протирались» в повороте на ~1.8 м/с.
   // Движение проверяем до применения: рельеф (эстакады) и бордюры с забором
   // должны останавливать машину, а не выталкивать её после проникновения.
   if (Math.abs(CAR.v) > 1e-4) {
-    const dx = fwd.x * CAR.v * dt, dz = fwd.z * CAR.v * dt;
-    const nx = p.x + dx, nz = p.z + dz;
+    const yaw0 = CAR.yaw - yawRate * dt;      // курс до поворота
+    const f0x = Math.sin(yaw0), f0z = -Math.cos(yaw0);
+    const dx = f0x * CAR.v * dt, dz = f0z * CAR.v * dt;
+    // задняя ось едет по своей траектории, центр кузова добавляет снос
+    const rx = p.x - CAR.rearZ * f0x, rz = p.z - CAR.rearZ * f0z;
+    const nx = rx + dx + CAR.rearZ * fwd.x;
+    const nz = rz + dz + CAR.rearZ * fwd.z;
     let blocked = false;
     if (sampleSupport(nx, nz, CAR.y).steep > MAX_SLOPE) {
       blocked = true;
@@ -974,6 +984,9 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   const zMin = Math.min(...zs), zMax = Math.max(...zs);
   if (groups.size > 1 && zMax - zMin > 0.5) CAR.wheelbase = zMax - zMin;
   if (rSum > 0) CAR.wheelR = rSum / groups.size;
+  // Ось вращения — задняя ось, а не центр кузова. Передние колёса здесь имеют
+  // z < 0, значит задняя ось на z > 0; её смещение от центра и есть rearZ.
+  if (zMax > 0) CAR.rearZ = zMax;
   for (const w of CAR.wheels) w.front = w.node.getAbsolutePosition().z < (zMin + zMax) / 2;
 
   // --- угол полного отворота: измеряем ширину кузова (без колёс и зеркал —

@@ -18,7 +18,8 @@
 const MIRROR_RES = 2048;       // сторона RTT: запас, чтобы зеркало не мылилось
 const MIRROR_LEVEL = 0.92;      // стекло чуть гасит отражение
 const MIRROR_ANISO = 16;        // фильтрация при взгляде на зеркало под углом
-const MIRROR_ADJ = 0.035;       // шаг регулировки зеркала, рад за нажатие
+const MIRROR_ADJ_DEG = 0.5;    // шаг регулировки зеркала, градусы за нажатие
+const MIRROR_ADJ = MIRROR_ADJ_DEG * Math.PI / 180;   // то же в радианах
 
 let mirrorEntries = [];   // { mesh, tex, mat, srcMat, srcVC, point, normal, baseNormal, yaw, pitch }
 let mirrorPlates = null;  // Set мешей-стёкол: их нельзя рисовать в самом RTT
@@ -284,8 +285,14 @@ function mirrorAdjPick(side) {
 function mirrorAdjStep(dx, dy) {
   const e = mirrorEntries[mirrorAdjSide] || mirrorEntries[0];
   if (!e) return;
-  e.yaw = Math.min(MIRROR_YAW_MAX, Math.max(MIRROR_YAW_MIN, e.yaw + dx * MIRROR_ADJ));
-  e.pitch = Math.min(MIRROR_PITCH_MAX, Math.max(MIRROR_PITCH_MIN, e.pitch + dy * MIRROR_ADJ));
+  // держим углы на сетке шага: накопление двоичной погрешности иначе
+  // даёт 0.4999° вместо ровных 0.5° и ломает совпадение с HUD
+  const snap = (v, lim) => {
+    const n = Math.round(v / MIRROR_ADJ) * MIRROR_ADJ;
+    return Math.min(lim[1], Math.max(lim[0], n));
+  };
+  e.yaw = snap(e.yaw + dx * MIRROR_ADJ, [MIRROR_YAW_MIN, MIRROR_YAW_MAX]);
+  e.pitch = snap(e.pitch + dy * MIRROR_ADJ, [MIRROR_PITCH_MIN, MIRROR_PITCH_MAX]);
   mirrorHudShow();
 }
 
