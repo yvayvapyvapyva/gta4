@@ -826,6 +826,7 @@ function panApply(dt) {
 // ── вход и выход из режима правки ────────────────────────────────────
 function openEdit(o) {
   if (o === editOn) return;
+  if (typeof openSettings === "function") openSettings(false);
   editOn = o;
   editingMap = o;
   document.body.classList.toggle("edit-mode", o);
