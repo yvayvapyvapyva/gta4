@@ -21,7 +21,9 @@
   #msg { margin-top:10px; color:var(--dim); font-size:12px; }
   #err { color:#ff6b6b; }
 
-  #hud { position:fixed; left:14px; bottom:14px; z-index:5; pointer-events:none;
+  /* Передача и скорость живут в левом верхнем углу; ниже по той же колонке
+     идут подпись камеры и строка регулировки зеркал. */
+  #hud { position:fixed; left:14px; top:14px; z-index:5; pointer-events:none;
     display:flex; align-items:flex-end; gap:14px; }
   #spd { font-size:44px; font-weight:600; line-height:1; letter-spacing:-2px;
     font-variant-numeric:tabular-nums; text-shadow:0 2px 10px rgba(0,0,0,.6); }
@@ -32,27 +34,24 @@
   #keys { position:fixed; right:14px; bottom:14px; z-index:5; pointer-events:none;
     color:var(--dim); font-size:11.5px; text-align:right; text-shadow:0 1px 6px rgba(0,0,0,.7); }
   #keys b { color:var(--fg); font-weight:600; }
-  #cam { position:fixed; left:14px; top:14px; z-index:5; pointer-events:none;
+  #cam { position:fixed; left:14px; top:66px; z-index:5; pointer-events:none;
     font-size:11.5px; color:var(--dim); text-shadow:0 1px 6px rgba(0,0,0,.7); }
-  #mirrorhud { position:fixed; left:14px; top:34px; z-index:5; pointer-events:none;
+  #mirrorhud { position:fixed; left:14px; top:86px; z-index:5; pointer-events:none;
     font-size:11.5px; color:var(--fg); background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.12);
     border-radius:7px; padding:4px 8px; text-shadow:0 1px 6px rgba(0,0,0,.7); }
 
-  /* Панель управления снизу занимает левый нижний угол, поэтому спидометр
-     поднимаем над ней, а на телефоне — уводим наверх, к панели. */
-  @media (pointer:fine) { #hud { bottom:172px; } }
-  @media (pointer:coarse) {
-    #hud { top:14px; bottom:auto; }
-    #cam { top:66px; }
-    #mirrorhud { top:86px; }
-  }
-
   /* ── кнопка настроек и окно (как в первом приложении) ──────────── */
-  #gearBtn { position:fixed; left:14px; top:14px; z-index:7; width:40px; height:40px; padding:0;
+  /* Шестерёнка стоит над панелью управления. Высота панели разная: на
+     десктопе она компактная (колесо 110px), на телефоне — во всю ширину и
+     заметно выше, поэтому считаем её низ от собственной высоты панели. */
+  #gearBtn { position:fixed; left:14px; bottom:172px; z-index:7; width:40px; height:40px; padding:0;
     display:flex; align-items:center; justify-content:center; border-radius:10px; cursor:pointer;
     color:var(--dim); background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16);
     backdrop-filter:blur(6px); -webkit-tap-highlight-color:transparent;
     user-select:none; -webkit-user-select:none; }
+  @media (pointer:coarse) {
+    #gearBtn { left:16px; bottom:calc(min(30vw,500px,50vh - 30px) + 46px + env(safe-area-inset-bottom,0px)); }
+  }
   #gearBtn svg { width:20px; height:20px; stroke:currentColor; stroke-width:1.7; fill:none;
     stroke-linecap:round; stroke-linejoin:round; }
   #gearBtn:hover, #gearBtn.on { color:var(--acc); border-color:var(--acc); background:rgba(255,138,61,.16); }
