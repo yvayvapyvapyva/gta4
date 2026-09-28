@@ -16,14 +16,21 @@
  *     работают как настоящий подъём, а не как стена.
  */
 
-const STEP = 0.25;                              // шаг привязки, м
+const GRID_STEP = 0.5;                         // шаг линий сетки, м (как в первом приложении)
+const STEP = 0.25;                             // шаг привязки объектов, м: вдвое мельче линий
 const MAP_HALF = GROUND_SIZE / 2 - 6;           // половина площадки: земля 320 м, отступ от края
 let parkX = 0, parkZ = 0;                       // центр ставки — там, где стоит машина
-const snapX = (v) => clampSnap(v, parkX - MAP_HALF, parkX + MAP_HALF);
-const snapZ = (v) => clampSnap(v, parkZ - MAP_HALF, parkZ + MAP_HALF);
+const snapX = (v) => clampSnap(v, parkX - MAP_HALF, parkX + MAP_HALF, parkX);
+const snapZ = (v) => clampSnap(v, parkZ - MAP_HALF, parkZ + MAP_HALF, parkZ);
 const cellKey = (x, z) => x.toFixed(2) + "," + z.toFixed(2);
 const est = (id) => document.getElementById(id);
-const clampSnap = (v, a, b) => Math.max(a, Math.min(b, Math.round(v / STEP) * STEP));
+// Привязка считается от центра площадки (parkX/parkZ), а не от мирового нуля:
+// площадка в gta4 привязана к месту стоянки машины, и от нуля сетка уехала бы.
+// Шг привязки 0.25 м — вдвое мельче линий сетки (0.5 м), поэтому объект встаёт
+// в любой из двух промежутков между линиями. Так же и в первом приложении:
+// там сетка через 0.5, а STEP = 0.25, и узлы сетки — не совпадают с шагом.
+const snapAxis = (v, c) => c + Math.round((v - c) / STEP) * STEP;
+const clampSnap = (v, a, b, c) => Math.max(a, Math.min(b, snapAxis(v, c)));
 
 const countEl = est("count");
 const hintline = est("hintline");
@@ -844,7 +851,7 @@ function buildGridAxes() {
   if (gridMesh) { gridMesh.dispose(); gridMesh = null; }
   if (gridAxes) { gridAxes.dispose(); gridAxes = null; }
   const h = MAP_HALF;
-  gridMesh = BABYLON.MeshBuilder.CreateLineSystem("grid", { lines: gridLines(0.5, h, parkX, parkZ, 0.01) }, scene);
+  gridMesh = BABYLON.MeshBuilder.CreateLineSystem("grid", { lines: gridLines(GRID_STEP, h, parkX, parkZ, 0.01) }, scene);
   gridMesh.color = new BABYLON.Color3(0.30, 0.30, 0.30);
   gridMesh.isPickable = false;
   gridMesh.isVisible = vis;
