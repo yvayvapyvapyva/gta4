@@ -43,6 +43,64 @@
     backdrop-filter:blur(6px); -webkit-user-select:none; user-select:none; touch-action:none; }
   #pad button.on { background:rgba(255,138,61,.35); border-color:var(--acc); }
   @media (pointer:coarse) { #pad { display:flex; } #keys { display:none; } }
+
+  /* ── редактор площадки ─────────────────────────────────────────── */
+  #mapBtn { position:fixed; right:14px; top:14px; z-index:7; padding:8px 14px; border-radius:9px;
+    font:inherit; font-size:12.5px; color:var(--fg); background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.16); backdrop-filter:blur(6px); cursor:pointer; }
+  #mapBtn:hover { background:rgba(255,255,255,.14); }
+  #mapBtn.on { background:rgba(255,138,61,.32); border-color:var(--acc); }
+
+  #mapEdit { position:fixed; inset:0; z-index:8; display:none; pointer-events:none; }
+  body.edit-mode #mapEdit { display:block; }
+  #mapEdit .bar { position:absolute; top:12px; left:12px; right:12px; display:flex; flex-wrap:wrap;
+    gap:8px; align-items:center; pointer-events:auto; }
+  #mapEdit button { font:inherit; font-size:12.5px; color:var(--fg); padding:7px 12px; border-radius:8px;
+    background:rgba(22,24,30,.86); border:1px solid rgba(255,255,255,.14); cursor:pointer;
+    backdrop-filter:blur(6px); }
+  #mapEdit button:hover { border-color:rgba(255,255,255,.3); }
+  #mapEdit button.active { background:rgba(255,138,61,.3); border-color:var(--acc); }
+  #mapEdit .sp { flex:1; }
+  #editTypeBtn { display:flex; align-items:center; gap:8px; }
+  #editTypeBtn .ico { width:22px; height:22px; display:grid; place-items:center; }
+  #editTypeBtn .ico svg, #editTypeBtn .ico img { width:22px; height:22px; display:block; }
+  #editModes { display:flex; gap:4px; }
+  #editModes b { color:var(--acc); font-weight:600; margin-left:5px; }
+  #finishLineBtn { border-color:var(--acc) !important; color:var(--acc) !important; }
+  .counts { display:flex; gap:10px; font-size:11.5px; color:var(--dim);
+    background:rgba(22,24,30,.8); padding:7px 11px; border-radius:8px; border:1px solid rgba(255,255,255,.1); }
+  .counts b { color:var(--fg); font-variant-numeric:tabular-nums; }
+  #hintline { position:absolute; top:60px; left:50%; transform:translateX(-50%); max-width:min(560px,86vw);
+    font-size:12.5px; color:var(--dim); text-align:center; padding:7px 14px; border-radius:8px;
+    background:rgba(22,24,30,.8); border:1px solid rgba(255,255,255,.1); }
+  #joyBase { position:absolute; left:24px; bottom:24px; width:84px; height:84px; border-radius:50%;
+    background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.16); pointer-events:auto;
+    touch-action:none; }
+  #joyBase.on { border-color:var(--acc); }
+  #joyKnob { position:absolute; left:50%; top:50%; width:38px; height:38px; margin:-19px 0 0 -19px;
+    border-radius:50%; background:rgba(255,138,61,.55); border:1px solid var(--acc); }
+  #mapDone { background:var(--acc) !important; color:#1a1200 !important; font-weight:600; }
+  #mapFileStatus { position:absolute; left:24px; bottom:120px; font-size:12px; color:#7fbf8a;
+    background:rgba(22,24,30,.8); padding:6px 10px; border-radius:7px; display:none; }
+  #mapFileStatus.show { display:block; }
+
+  .win-backdrop { position:fixed; inset:0; z-index:9; background:rgba(8,9,12,.6); display:none; }
+  .win-backdrop.open { display:block; }
+  .win { position:fixed; z-index:10; left:50%; top:50%; transform:translate(-50%,-50%) scale(.96);
+    background:#181b22; border:1px solid rgba(255,255,255,.14); border-radius:14px; padding:16px;
+    display:none; box-shadow:0 24px 70px rgba(0,0,0,.6); }
+  .win.open { display:block; transform:translate(-50%,-50%) scale(1); }
+  .win h3 { margin:0 0 12px; font-size:13px; font-weight:600; color:var(--dim);
+    display:flex; justify-content:space-between; align-items:center; }
+  .win h3 button { font:inherit; font-size:16px; line-height:1; padding:2px 9px; border-radius:7px;
+    color:var(--fg); background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); cursor:pointer; }
+  .tg { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  .tg-card { width:104px; padding:8px 6px 9px; border-radius:10px; text-align:center; cursor:pointer;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); }
+  .tg-card:hover, .tg-card.active { border-color:var(--acc); background:rgba(255,138,61,.14); }
+  .tg-fallback { width:60px; height:60px; margin:0 auto 6px; display:grid; place-items:center; }
+  .tg-fallback svg, .tg-fallback img { width:52px; height:52px; display:block; }
+  .tg-card span { font-size:11.5px; color:var(--fg); }
 </style>
 </head>
 <body>
@@ -75,6 +133,48 @@
     <div class="t">Загрузка модели…</div>
     <div id="track"><div id="fill"></div></div>
     <div id="msg">auto/car.glb</div>
+  </div>
+</div>
+
+<button id="mapBtn">Площадка</button>
+
+<div id="mapEdit">
+  <div class="bar">
+    <button id="editTypeBtn"><span class="ico" id="typeIco"></span><span id="typeName">Конус</span></button>
+    <div id="editModes">
+      <button data-mode="place" class="active">Поставить<b>1</b></button>
+      <button data-mode="move">Двигать<b>2</b></button>
+      <button data-mode="delete">Удалить<b>3</b></button>
+    </div>
+    <button id="finishLineBtn" style="display:none">Завершить линию</button>
+    <div class="sp"></div>
+    <div class="counts">
+      <span>конусов <b id="count">0</b></span>
+      <span>линий <b id="countLines">0</b></span>
+      <span>бордюр <b id="countCurb">0</b></span>
+      <span>забор <b id="countFence">0</b></span>
+      <span>эстакада <b id="countEstacada">0</b></span>
+    </div>
+    <button id="mapSaveBtn">Сохранить</button>
+    <button id="mapLoadBtn">Загрузить</button>
+    <button id="mapClearAll">Очистить</button>
+    <button id="mapDone">Готово</button>
+  </div>
+  <div id="hintline">Режим редактирования площадки выключен</div>
+  <div id="joyBase"><div id="joyKnob"></div></div>
+  <div id="mapFileStatus"></div>
+</div>
+<input type="file" id="mapFileInput" accept="application/json,.json" hidden>
+
+<div id="typeBackdrop" class="win-backdrop"></div>
+<div id="typeWin" class="win">
+  <h3>Объекты площадки<button id="typeClose">✕</button></h3>
+  <div class="tg">
+    <div class="tg-card" data-type="cones"><div class="tg-fallback"></div><span>Конус</span></div>
+    <div class="tg-card" data-type="lines"><div class="tg-fallback"></div><span>Разметка</span></div>
+    <div class="tg-card" data-type="curb"><div class="tg-fallback"></div><span>Бордюр</span></div>
+    <div class="tg-card" data-type="fence"><div class="tg-fallback"></div><span>Забор</span></div>
+    <div class="tg-card" data-type="estacada"><div class="tg-fallback"></div><span>Эстакада</span></div>
   </div>
 </div>
 
@@ -233,7 +333,10 @@ const CAR = {
   v: 0,            // м/с, + = вперёд
   yaw: 0,          // рад, + = налево
   steer: 0,        // текущий угол поворота колёс, + = налево
+  y: 0,            // высота опоры под кузовом, м (0 = ровная земля)
+  vy: 0,           // вертикальная скорость, для падений и спусков
   lift: 0,         // высота подъёма кузова над землёй
+  track: 1.42,     // ширина колеи, м (половина идёт в опорные точки)
   maxSpeed: 40,    // ≈144 км/ч
   maxReverse: 11,
   accel: 9.5,
@@ -261,7 +364,7 @@ const CONTROL_KEYS = new Set(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown",
 addEventListener("keydown", (e) => {
   if (CONTROL_KEYS.has(e.code)) e.preventDefault();
   keys[e.code] = true;
-  if (e.code === "KeyC") toggleCam();
+  if (e.code === "KeyC" && !editingMap) toggleCam();
   if (e.code === "KeyR") resetCar();
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
@@ -337,8 +440,13 @@ function resetCar() {
   if (!CAR.root) return;
   CAR.v = 0; CAR.yaw = 0; CAR.steer = 0;
   CAR.lookYaw = 0; CAR.lookPitch = 0;
+  CAR.y = 0; CAR.vy = 0;
+  upSmooth.set(0, 1, 0);
+  // ориентация живёт в кватернионе (наклон по опоре), Euler оставляем нулевым
+  CAR.root.rotation.set(0, 0, 0);
+  if (!CAR.root.rotationQuaternion) CAR.root.rotationQuaternion = new BABYLON.Quaternion();
+  CAR.root.rotationQuaternion.copyFrom(BABYLON.Quaternion.Identity());
   CAR.root.position.set(0, CAR.lift, 0);
-  CAR.root.rotation.y = 0;
   for (const w of CAR.wheels) { w.angle = 0; w.spin.rotation.x = 0; w.steer.rotation.y = 0; }
 }
 
@@ -370,7 +478,7 @@ addEventListener("pointermove", (e) => {
     pinch = d;
     return;
   }
-  if (!drag) return;
+  if (!drag || editGrab) return;
   if (CAR.mode === 1) {
     // в салоне тянем обзор: вправо — смотрим вправо, вниз — вниз.
     // по горизонтали без ограничений, по вертикали держим рамки от залипания на полу
@@ -409,6 +517,93 @@ function wrapAngle(a) {
 
 const camTarget = new BABYLON.Vector3(0, 0, 0);
 let cockpit = null;   // камера салона, едет вместе с кузовом
+
+// ── опора под колёсами ───────────────────────────────────────────────
+// Земля — плоскость y=0, поэтому без editor.js машина едет по ровному месту.
+// editor.js подключает surfaceProbe: тот сообщает высоту и нормаль поверхности
+// под точкой (эстакады), а obstacleProbe — где стоят бордюры и заборы.
+// surfaceProbe(x, z, fromY) → {y, nx, ny, nz} | null
+// obstacleProbe(x, z, y, dx, dz) → true, если машину туда не пускать
+let surfaceProbe = null;
+let obstacleProbe = null;
+let editorTick = null;   // editor.js перехватывает кадр, пока включён режим правки
+let objectTick = null;   // editor.js обновляет конусы и при обычной езде
+let editGrab = false;    // editor.js держит конус: мышь не должна одновременно крутить камеру
+let editingMap = false;  // editor.js: открыт режим правки площадки
+
+const MAX_SLOPE = 0.62;   // круче — считаем стеной, ~36°
+const STEP_UP = 0.5;      // более высокий уступ за кадр просто не берём
+const GRAVITY = 9.8;
+const WHEEL_OFF = [[1, -1], [1, 1], [-1, -1], [-1, 1]];   // [±колея, ±вперёд]
+const upSmooth = new BABYLON.Vector3(0, 1, 0);
+const upTarget = new BABYLON.Vector3(0, 1, 0);
+const carUp = new BABYLON.Vector3(0, 1, 0);
+const carRight = new BABYLON.Vector3(1, 0, 0);
+const carBack = new BABYLON.Vector3(0, 0, 1);
+const carQuat = new BABYLON.Quaternion();
+const supY = { y: 0, nx: 0, ny: 1, nz: 0, steep: 0, hit: true };
+
+// Высота и наклон под четырьмя колёсами. Рейкаст идёт из точки НАД опорой:
+// луч из самой точки колеса на подъёме уходит вниз мимо эстакады и машина проваливается.
+function sampleSupport(x, z, fromY) {
+  // без редактора мир плоский: ровная земля на нуле, машина не проваливается
+  if (!surfaceProbe) {
+    supY.hit = true; supY.y = 0; supY.steep = 0;
+    supY.nx = 0; supY.ny = 1; supY.nz = 0;
+    return supY;
+  }
+  const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);
+  const rx = c, rz = s, fx = s, fz = -c;   // правый и передний векторы в мире
+  const L = CAR.wheelbase / 2, T = CAR.track / 2;
+  const cap = fromY + STEP_UP;
+  let sumY = 0, n = 0, top = -1e9, nx = 0, ny = 0, nz = 0, steep = 0;
+  for (const o of WHEEL_OFF) {
+    const h = surfaceProbe ? surfaceProbe(x + rx * o[0] * T + fx * o[1] * L,
+                                          z + rz * o[0] * T + fz * o[1] * L, fromY) : null;
+    if (!h) continue;
+    if (h.y > top) top = h.y;
+    if (h.y > cap) continue;          // уступ выше допустимого — мимо
+    sumY += h.y; n++;
+    nx += h.nx; ny += h.ny; nz += h.nz;
+    const sl = Math.acos(clamp(h.ny, -1, 1));
+    if (sl > steep) steep = sl;
+  }
+  if (!n) {                              // под колёсами пусто — падать
+    supY.hit = false; supY.y = fromY; supY.steep = 0;
+    supY.nx = 0; supY.ny = 1; supY.nz = 0;
+    return supY;
+  }
+  supY.hit = true;
+  supY.y = sumY / n;
+  const len = Math.hypot(nx, ny, nz) || 1;
+  supY.nx = nx / len; supY.ny = ny / len; supY.nz = nz / len;
+  supY.steep = steep;
+  return supY;
+}
+
+// Кузов садится на опору и доворачивается по её нормали. На ровной земле базис
+// даёт ровно rotation.y = -yaw, поэтому ровный режим не меняется.
+function applySupport(dt) {
+  const p = CAR.root.position;
+  upTarget.set(supY.nx, supY.ny, supY.nz);
+  if (upTarget.y < 0.05) { upTarget.y = 0.05; upTarget.normalize(); }
+  // интерполируем именно вектор, а не углы: углы дают gimbal lock на уклонах
+  BABYLON.Vector3.LerpToRef(upSmooth, upTarget, 1 - Math.exp(-dt * 12), upSmooth);
+  upSmooth.normalize();
+  carUp.copyFrom(upSmooth);
+
+  // направление кузова, снятое с плоскости опоры
+  carBack.set(-Math.sin(CAR.yaw), 0, Math.cos(CAR.yaw));
+  carBack.subtractInPlace(carUp.scale(BABYLON.Vector3.Dot(carBack, carUp)));
+  if (carBack.lengthSquared() < 1e-6) carBack.set(0, 0, 1);
+  carBack.normalize();
+  BABYLON.Vector3.CrossToRef(carUp, carBack, carRight);
+  carRight.normalize();
+  BABYLON.Quaternion.RotationQuaternionFromAxisToRef(carRight, carUp, carBack, carQuat);
+  p.y = CAR.y + CAR.lift;
+  if (CAR.root.rotationQuaternion) CAR.root.rotationQuaternion.copyFrom(carQuat);
+  else CAR.root.rotationQuaternion = carQuat.clone();
+}
 
 function drive(dt) {
   const gas = keys.KeyW || keys.ArrowUp ? 1 : 0;
@@ -450,9 +645,41 @@ function drive(dt) {
   CAR.yaw += yawRate * dt;
 
   // трансформ кузова
-  CAR.root.rotation.y = -CAR.yaw;
   const fwd = new BABYLON.Vector3(Math.sin(CAR.yaw), 0, -Math.cos(CAR.yaw));
-  CAR.root.position.addInPlace(fwd.scale(CAR.v * dt));
+  const p = CAR.root.position;
+
+  // --- горизонтальный шаг с проверкой препятствий
+  // Движение проверяем до применения: рельеф (эстакады) и бордюры с забором
+  // должны останавливать машину, а не выталкивать её после проникновения.
+  if (Math.abs(CAR.v) > 1e-4) {
+    const dx = fwd.x * CAR.v * dt, dz = fwd.z * CAR.v * dt;
+    const nx = p.x + dx, nz = p.z + dz;
+    let blocked = false;
+    if (sampleSupport(nx, nz, CAR.y).steep > MAX_SLOPE) {
+      blocked = true;
+      CAR.v *= 0.25;                   // упёрлись в откос: газуем в пол почти без толку
+    } else if (obstacleProbe && obstacleProbe(nx, nz, CAR.y, dx, dz)) {
+      blocked = true;
+      CAR.v = 0;
+    }
+    if (!blocked) { p.x = nx; p.z = nz; }
+  }
+
+  // --- вертикаль: вверх прижимаемся к опоре, вниз падаем с ускорением,
+  // иначе съезд с вершины эстакады выглядит как прилипание к склону
+  const sup = sampleSupport(p.x, p.z, CAR.y);
+  if (sup.hit) {
+    if (sup.y >= CAR.y - 0.01) { CAR.y = sup.y; CAR.vy = 0; }
+    else {
+      CAR.vy -= GRAVITY * dt;
+      CAR.y = Math.max(sup.y, CAR.y + CAR.vy * dt);
+      if (CAR.y <= sup.y) { CAR.y = sup.y; CAR.vy = 0; }
+    }
+  } else {
+    CAR.vy -= GRAVITY * dt;
+    CAR.y += CAR.vy * dt;
+  }
+  applySupport(dt);
 
   // колёса
   for (const w of CAR.wheels) {
@@ -464,7 +691,6 @@ function drive(dt) {
   }
 
   // земля едет за машиной, сетка остаётся в мировых координатах
-  const p = CAR.root.position;
   ground.position.x = p.x;
   ground.position.z = p.z;
   gridTex.uOffset = p.x / TILE;
@@ -502,6 +728,10 @@ loader.classList.remove("hide");
 fill.style.width = "0%";
 fill.style.background = "";
 
+// Геометрию модели берём по снимку сцены ДО загрузки: так в список не попадают
+// ни земля, ни объекты редактора. Если бы мы обошли всю сцену, меши конусов
+// утащили бы свои узлы под корень машины — и конусы ездили бы вместе с ней.
+const preModelMeshes = new Set(scene.meshes);
 BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   (ev) => {
     if (ev.lengthComputable) fill.style.width = ((ev.loaded / ev.total) * 100).toFixed(1) + "%";
@@ -509,7 +739,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
     msg.textContent = human(ev.loaded / 1048576) + " / " + human(ev.total / 1048576) + " MB";
   }
 ).then(() => {
-  meshes = scene.meshes.filter(m => m.getTotalVertices() > 0 && m !== ground && m !== sky);
+  meshes = scene.meshes.filter(m => !preModelMeshes.has(m) && !editorMeshes.has(m) && m.getTotalVertices() > 0);
   if (!meshes.length) throw new Error("в модели нет геометрии");
 
   let mn = new BABYLON.Vector3(1e9, 1e9, 1e9), mx = new BABYLON.Vector3(-1e9, -1e9, -1e9);
@@ -538,7 +768,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   const root = new BABYLON.TransformNode("car", scene);
   CAR.root = root;
   const tops = new Set();
-  for (const m of meshes) { let c = m; while (c.parent) c = c.parent; tops.add(c); }
+  for (const m of meshes) { if (editorMeshes.has(m)) continue; let c = m; while (c.parent) c = c.parent; tops.add(c); }
   for (const n of tops) n.parent = root;
 
   // --- колёса. У каждого колеса в сцене есть свой узел (TransformNode wheel_lf и т.п.)
@@ -680,9 +910,13 @@ engine.runRenderLoop(() => {
   const now = performance.now();
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
-  if (ready) drive(dt);
+  if (ready) {
+    if (objectTick) objectTick(dt);
+    if (editorTick) editorTick(dt); else drive(dt);
+  }
   scene.render();
 });
 </script>
+<script src="editor.js"></script>
 </body>
 </html>
