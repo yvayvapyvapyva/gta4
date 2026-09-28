@@ -489,7 +489,6 @@ function resetCar() {
   CAR.v = 0; CAR.yaw = 0; CAR.steer = 0;
   CAR.lookYaw = 0; CAR.lookPitch = 0;
   CAR.y = 0; CAR.vy = 0;
-  upSmooth.set(0, 1, 0);
   // ориентация живёт в кватернионе (наклон по опоре), Euler оставляем нулевым
   CAR.root.rotation.set(0, 0, 0);
   if (!CAR.root.rotationQuaternion) CAR.root.rotationQuaternion = new BABYLON.Quaternion();
@@ -580,65 +579,62 @@ let editGrab = false;    // editor.js держит конус: мышь не д�
 let editingMap = false;  // editor.js: открыт режим правки площадки
 
 const MAX_SLOPE = 0.62;   // круче — считаем стеной, ~36°
-const STEP_UP = 0.5;      // более высокий уступ за кадр просто не берём
 const GRAVITY = 9.8;
 const WHEEL_OFF = [[1, -1], [1, 1], [-1, -1], [-1, 1]];   // [±колея, ±вперёд]
-const upSmooth = new BABYLON.Vector3(0, 1, 0);
 const upTarget = new BABYLON.Vector3(0, 1, 0);
 const carUp = new BABYLON.Vector3(0, 1, 0);
 const carRight = new BABYLON.Vector3(1, 0, 0);
 const carBack = new BABYLON.Vector3(0, 0, 1);
 const carQuat = new BABYLON.Quaternion();
-const supY = { y: 0, nx: 0, ny: 1, nz: 0, steep: 0, hit: true };
+// gp — уклон вперёд, gq — уклон вбок: это те же pitch/roll, что в рабочем
+// проекте, только в виде наклона нормали вместо углов
+const supY = { y: 0, gp: 0, gq: 0, steep: 0, hit: true };
 
-// Высота и наклон под четырьмя колёсами. Рейкаст идёт из точки НАД опорой:
-// луч из самой точки колеса на подъёме уходит вниз мимо эстакады и машина проваливается.
+// Опора под четырьмя колёсами — как в рабочем проекте: четыре рейкаста,
+// высота кузова это среднее четырёх контактов, наклон берётся из разницы их
+// высот. Отбрасывать слишком высокие точки и сглаживать наклон нельзя —
+// на гребне эстакады именно это уводит колеса под настил.
 function sampleSupport(x, z, fromY) {
-  // без редактора мир плоский: ровная земля на нуле, машина не проваливается
-  if (!surfaceProbe) {
-    supY.hit = true; supY.y = 0; supY.steep = 0;
-    supY.nx = 0; supY.ny = 1; supY.nz = 0;
-    return supY;
-  }
   const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);
   const rx = c, rz = s, fx = s, fz = -c;   // правый и передний векторы в мире
   const L = CAR.wheelbase / 2, T = CAR.track / 2;
-  const cap = fromY + STEP_UP;
-  let sumY = 0, n = 0, top = -1e9, nx = 0, ny = 0, nz = 0, steep = 0;
-  for (const o of WHEEL_OFF) {
-    const h = surfaceProbe ? surfaceProbe(x + rx * o[0] * T + fx * o[1] * L,
+  const h = [0, 0, 0, 0];
+  let sumY = 0, n = 0;
+  for (let i = 0; i < 4; i++) {
+    const o = WHEEL_OFF[i];
+    const p = surfaceProbe ? surfaceProbe(x + rx * o[0] * T + fx * o[1] * L,
                                           z + rz * o[0] * T + fz * o[1] * L, fromY) : null;
-    if (!h) continue;
-    if (h.y > top) top = h.y;
-    if (h.y > cap) continue;          // уступ выше допустимого — мимо
-    sumY += h.y; n++;
-    nx += h.nx; ny += h.ny; nz += h.nz;
-    const sl = Math.acos(clamp(h.ny, -1, 1));
-    if (sl > steep) steep = sl;
+    // промах — это ровная земля под точкой: земля бесконечная, пустоты быть не может
+    h[i] = p ? p.y : 0;
+    if (p) n++;
+    sumY += h[i];
   }
-  if (!n) {                              // под колёсами пусто — падать
-    supY.hit = false; supY.y = fromY; supY.steep = 0;
-    supY.nx = 0; supY.ny = 1; supY.nz = 0;
+  if (!n) {                              // под колёсами вообще ничего — падать
+    supY.hit = false; supY.y = fromY; supY.steep = 0; supY.gp = 0; supY.gq = 0;
     return supY;
   }
   supY.hit = true;
-  supY.y = sumY / n;
-  const len = Math.hypot(nx, ny, nz) || 1;
-  supY.nx = nx / len; supY.ny = ny / len; supY.nz = nz / len;
-  supY.steep = steep;
+  supY.y = sumY / 4;
+  // [0] правый задний, [1] правый передний, [2] левый задний, [3] левый передний
+  const rear = (h[0] + h[2]) / 2, front = (h[1] + h[3]) / 2;
+  const right = (h[0] + h[1]) / 2, left = (h[2] + h[3]) / 2;
+  supY.gp = (front - rear) / CAR.wheelbase;
+  supY.gq = (left - right) / CAR.track;
+  supY.steep = Math.atan(Math.hypot(supY.gp, supY.gq));
   return supY;
 }
 
-// Кузов садится на опору и доворачивается по её нормали. На ровной земле базис
-// даёт ровно rotation.y = -yaw, поэтому ровный режим не меняется.
-function applySupport(dt) {
+// Кузов садится ровно на среднюю высоту контактов и доворачивается по плоскости
+// четырёх точек. На ровной земле базис даёт ровно rotation.y = -yaw, поэтому
+// ровный режим не меняется.
+function applySupport() {
   const p = CAR.root.position;
-  upTarget.set(supY.nx, supY.ny, supY.nz);
+  const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);
+  // нормаль плоскости, проходящей через четыре контакта: минус уклон вперёд и
+  // вбок. Сглаживать нельзя — на стыках настила лаг ориентации топит колеса.
+  upTarget.set(-(s * supY.gp + c * supY.gq), 1, -(-c * supY.gp + s * supY.gq));
   if (upTarget.y < 0.05) { upTarget.y = 0.05; upTarget.normalize(); }
-  // интерполируем именно вектор, а не углы: углы дают gimbal lock на уклонах
-  BABYLON.Vector3.LerpToRef(upSmooth, upTarget, 1 - Math.exp(-dt * 12), upSmooth);
-  upSmooth.normalize();
-  carUp.copyFrom(upSmooth);
+  carUp.copyFrom(upTarget);
 
   // направление кузова, снятое с плоскости опоры
   carBack.set(-Math.sin(CAR.yaw), 0, Math.cos(CAR.yaw));
@@ -713,21 +709,16 @@ function drive(dt) {
     if (!blocked) { p.x = nx; p.z = nz; }
   }
 
-  // --- вертикаль: вверх прижимаемся к опоре, вниз падаем с ускорением,
-  // иначе съезд с вершины эстакады выглядит как прилипание к склону
+  // --- вертикаль: кузов стоит на средней высоте четырёх контактов, без
+  // инерции и задержки — иначе на гребне эстакады колеса уходят под настил
   const sup = sampleSupport(p.x, p.z, CAR.y);
   if (sup.hit) {
-    if (sup.y >= CAR.y - 0.01) { CAR.y = sup.y; CAR.vy = 0; }
-    else {
-      CAR.vy -= GRAVITY * dt;
-      CAR.y = Math.max(sup.y, CAR.y + CAR.vy * dt);
-      if (CAR.y <= sup.y) { CAR.y = sup.y; CAR.vy = 0; }
-    }
+    CAR.y = sup.y; CAR.vy = 0;
   } else {
     CAR.vy -= GRAVITY * dt;
     CAR.y += CAR.vy * dt;
   }
-  applySupport(dt);
+  applySupport();
 
   // колёса
   for (const w of CAR.wheels) {
