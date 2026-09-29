@@ -119,6 +119,11 @@ const LINE_WIDTH = { lines:0.1, curb:0.25, fence:0.05 };
 const LINE_H = { lines:0.006, curb:0.30, fence:1.7 };
 const LINE_Y = { lines:0.0042, curb:0.15, fence:0.85 };
 const EST_SLOPE = 0.16, EST_L2 = 5, EST_W = 4, FENCE_STEP = 3.2, EST_MAX_H = 3.2;
+// На какую высоту машина способна въехать на полотно эстакады, м. Порог должен
+// перекрывать разницу высот между носом кузова и передней осью (~1 м пути по
+// подъёму с уклоном 0.16), иначе въезд блокируется ещё до того, как колёса
+// доедут до настила. При этом борта настила (1.6–3.2 м) остаются непроезжаемыми.
+const EST_CLIMB_STEP = 0.3;
 let drawSeq = 0;
 
 const countLinesEl = est("countLines"), countCurbEl = est("countCurb");
@@ -500,10 +505,44 @@ function surfaceHeight(x, z) {
   return h ? Math.max(0, h.y) : 0;
 }
 
-// Бордюры, заборы и бока эстакады: машина не проходит сквозь них, но въезд
-// вдоль оси эстакады пропускаем — там подъём ловит рейкаст опоры.
-function carPointInBands(px, pz, y, dx, dz) {
-  const list = [["curb", LINE_WIDTH.curb + 0.18], ["fence", 0.4]];
+// Высота полотна эстакады в точке (x, z) или null, если точка не над эстакадой.
+function estacadaTopAt(x, z) {
+  const hw = EST_W / 2;
+  try {
+    for (const p of drawStore.estacada.polys) {
+      for (let i = 0; i < p.length - 1; i++) {
+        const ax = p[i][0], az = p[i][1], bx = p[i + 1][0], bz = p[i + 1][1];
+        const LL = Math.hypot(bx - ax, bz - az);
+        if (LL < 1e-4) continue;
+        const ux = (bx - ax) / LL, uz = (bz - az) / LL;
+        const rx = x - ax, rz = z - az;
+        const u = rx * ux + rz * uz, v = rx * -uz + rz * ux;
+        if (Math.abs(v) >= hw || u < 0 || u > LL + EST_L2 + LL) continue;
+        const h = Math.min(LL * EST_SLOPE, EST_MAX_H);
+        if (u <= LL) return u / LL * h;
+        if (u <= LL + EST_L2) return h;
+        return h * (1 - (u - LL - EST_L2) / LL);
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+// Машина едет ПО эстакаде, если её центр над полотном и колёса стоят на его
+// высоте. Такую машину не блокируем боком: пробы уходят вперёд по тому же
+// полотну и всегда «выше колёс», из-за чего въезд по оси был заблокирован.
+function carRidesEstacada(x, z, y) {
+  const t = estacadaTopAt(x, z);
+  return t !== null && Math.abs(t - y) < 0.35;
+}
+
+// Бордюры, заборы и бока эстакады: машина не проходит сквозь них.
+function carPointInBands(px, pz, y, dx, dz, skipEstacada) {
+  // Полосы столкновений задаём РЕАЛЬНОЙ половиной толщины меша плюс небольшой
+  // зазор на касание. Раньше здесь стояли LINE_WIDTH.curb + 0.18 и 0.4, то есть
+  // полная ширина меша принималась за полуширину: к зазору добавлялось ещё
+  // 0.3–0.4 м, и машина замирала за полметра до бордюра и забора, не касаясь их.
+  const list = [["curb", LINE_WIDTH.curb / 2 + CONTACT_GAP], ["fence", 0.04 + CONTACT_GAP]];
   try {
     for (const [t, hw] of list) {
       for (const poly of drawStore[t].polys) {
@@ -519,6 +558,7 @@ function carPointInBands(px, pz, y, dx, dz) {
         }
       }
     }
+    if (skipEstacada) return false;
     if (dx === 0 && dz === 0) return false;
     const hw = EST_W / 2, L2 = EST_L2;
     for (const p of drawStore.estacada.polys) {
@@ -530,27 +570,61 @@ function carPointInBands(px, pz, y, dx, dz) {
       const rx = px - ax, rz = pz - az;
       const u = rx * ux + rz * uz, v = rx * px2 + rz * py2;
       if (u < 0 || u > LL + L2 + LL || Math.abs(v) >= hw) continue;
-      const dU = dx * ux + dz * uz, dV = dx * px2 + dz * py2;
-      if (Math.abs(dV) <= 2 * Math.abs(dU)) continue;   // едем вдоль оси — это въезд
+      // Препятствие — эстакада. Порог высоты задан перебором: борт настила
+      // отстоит от земли на yt - y, и пока оно больше EST_CLIMB_STEP, машина в
+      // стену не едет. Раньше порог стоял 0.05, и въезд был невозможен: нос
+      // кузова на 2.3 м впереди колёс накрывал полотно первым, yt - y сразу
+      // перескакивало 5 см, и колёса не успевали заехать на подъём.
       const h = Math.min(LL * EST_SLOPE, 3.2);
       let yt;
       if (u <= LL) yt = u / LL * h;
       else if (u <= LL + L2) yt = h;
       else yt = h * (1 - (u - LL - L2) / LL);
-      if (yt - y > 0.05) return true;                   // поверхность выше колёс
+      if (yt - y > EST_CLIMB_STEP) return true;         // борт выше порога заезда
     }
   } catch (e) {}
   return false;
 }
+// Габарит для проверки препятствий берём из тех же замеров, что и для конусов.
+// OBST_MARGIN — во сколько метров пробы выносятся за корпус: это единственный
+// зазор до препятствия, держим его маленьким, чтобы кузов упирался в бордюр,
+// забор и борт эстакады, а не замирал за полметра до них.
+// CONTACT_GAP — дополнительный допуск к толщине самого препятствия.
+// Точки идут по периметру с шагом не больше OBST_STEP, иначе между двумя
+// пробами можно проскочить сквозь забор.
+const OBST_MARGIN = 0.04;
+const CONTACT_GAP = 0.03;
+const OBST_STEP = 0.45;
+
+function bodyProbePoints() {
+  const hw = CAR.halfW + OBST_MARGIN, hl = CAR.halfL + OBST_MARGIN;
+  const cx = CAR.bodyCx, cz = CAR.bodyCz;
+  const nx = Math.max(2, Math.ceil((2 * hw) / OBST_STEP));
+  const nz = Math.max(2, Math.ceil((2 * hl) / OBST_STEP));
+  const out = [];
+  for (let i = 0; i <= nx; i++) {
+    const lx = cx - hw + (2 * hw * i) / nx;
+    out.push([lx, cz - hl], [lx, cz + hl]);
+  }
+  for (let j = 1; j < nz; j++) {
+    const lz = cz - hl + (2 * hl * j) / nz;
+    out.push([cx - hw, lz], [cx + hw, lz]);
+  }
+  return out;
+}
+
 function obstacleBlocked(x, z, y, dx, dz) {
-  // пять точек кузова: четыре угла и середина переднего бампера
-  const pts = [[-0.85,-2.1],[0.85,-2.1],[-0.85,2.1],[0.85,2.1],[0,2.15]];
+  const pts = bodyProbePoints();
   const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);
+  const skipEst = carRidesEstacada(x, z, y);
   for (const p of pts) {
-    // локальные координаты кузова: +X вправо, -Z вперёд
-    const wx = x + p[0] * c + p[1] * s;
-    const wz = z - p[0] * s + p[1] * c;
-    if (carPointInBands(wx, wz, y, dx, dz)) return true;
+    // локальные оси КУЗОВА: +X = (cos, 0, sin), +Z = (−sin, 0, cos).
+    // Формула из simulator2 (x + lx·c + lz·s, z − lx·s + lz·c) соответствует
+    // движению в +Z и зеркалила кузов: пробы брались с противоположной стороны,
+    // и нос проезжал сквозь забор и бок эстакады насквозь.
+    const wx = x + p[0] * c - p[1] * s;
+    const wz = z + p[0] * s + p[1] * c;
+    if (carPointInBands(wx, wz, y, dx, dz, skipEst)) return true;
   }
   return false;
 }

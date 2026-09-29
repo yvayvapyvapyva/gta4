@@ -1030,17 +1030,33 @@ function drive(dt) {
     const dx = f0x * CAR.v * dt, dz = f0z * CAR.v * dt;
     // задняя ось едет по своей траектории, центр кузова добавляет снос
     const rx = p.x - CAR.rearZ * f0x, rz = p.z - CAR.rearZ * f0z;
-    const nx = rx + dx + CAR.rearZ * fwd.x;
-    const nz = rz + dz + CAR.rearZ * fwd.z;
-    let blocked = false;
-    if (sampleSupport(nx, nz, CAR.y).steep > MAX_SLOPE) {
-      blocked = true;
-      CAR.v *= 0.25;                   // упёрлись в откос: газуем в пол почти без толку
-    } else if (obstacleProbe && obstacleProbe(nx, nz, CAR.y, dx, dz)) {
-      blocked = true;
-      CAR.v = 0;
+    const tryMove = (ddx, ddz) => {
+      const tx = rx + ddx + CAR.rearZ * fwd.x, tz = rz + ddz + CAR.rearZ * fwd.z;
+      if (sampleSupport(tx, tz, CAR.y).steep > MAX_SLOPE) return "slope";
+      if (obstacleProbe && obstacleProbe(tx, tz, CAR.y, ddx, ddz)) return "wall";
+      return { x: tx, z: tz };
+    };
+    let res = tryMove(dx, dz);
+    if (res === "slope" || res === "wall") {
+      // Упёрлись. Раньше тут стояло CAR.v = 0 и позиция не применялась вовсе,
+      // так что машина не могла соскользнуть вдоль забора и застревала, пока не
+      // включишь задний ход. Теперь пробуем скольжение: двигаемся по направлению,
+      // которое не заворачивает внутрь препятствия. Лобовая стена по-прежнему
+      // останавливает намертво — соскальзывать просто некуда.
+      const step = Math.hypot(dx, dz);
+      const cands = [[dx, 0], [0, dz], [dx, dz], [dx, -dz]];
+      for (const [ax, az] of cands) {
+        const len = Math.hypot(ax, az);
+        // только по текущему курсу и не меньше трети шага, иначе можно было бы
+        // «выползти» назад или поползти зигзагом
+        if (len < step * 0.35 || (ax * dx + az * dz) <= 0) continue;
+        const r = tryMove(ax, az);
+        if (r && r.x !== undefined) { res = r; break; }
+      }
     }
-    if (!blocked) { p.x = nx; p.z = nz; }
+    if (res && res.x !== undefined) { p.x = res.x; p.z = res.z; }
+    else if (res === "slope") CAR.v *= 0.25;   // откос: газуем в пол почти без толку
+    else CAR.v = 0;
   }
 
   // --- вертикаль: кузов стоит на средней высоте четырёх контактов, без
