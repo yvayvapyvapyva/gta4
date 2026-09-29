@@ -435,6 +435,10 @@ const CAM_FOV_MIN = 0.7;                        // 40°  — узкий обзо
 const CAM_FOV_MAX = 130 * Math.PI / 180;        // 130° — широкий обзор, отдаление
 const CAM_DIST_MIN = 3.2;                       // м, ближе не подъехать
 const CAM_DIST_MAX = 60;                        // м, дальше не отъехать
+// Скорость обзора в салоне при перетаскивании, кратно «палец тянет точку».
+// 1 — угол поворота точно равен угловому смещению точки на экране; больше —
+// быстрее (удобнее на телефоне, где полный обзор одним пальцем не прокрутить).
+const LOOK_DRAG_SCALE = 1;
 
 const canvas = document.getElementById("view");
 const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, stencil:true }, true);
@@ -864,11 +868,16 @@ addEventListener("pointermove", (e) => {
   }
   if (!drag || editGrab) return;
   if (CAR.mode === 1) {
-    // в салоне тянем обзор наоборот: влево — смотрим вправо, вверх — вниз
-    // (знаки инвертированы). По горизонтали без ограничений, по вертикали
-    // держим рамки от залипания на полу.
-    CAR.lookYaw = wrapAngle(CAR.lookYaw + (e.clientX - lastX) * 0.005);
-    CAR.lookPitch = clamp(CAR.lookPitch - (e.clientY - lastY) * 0.004, -0.45, 0.55);
+    // Захват точки: палец «приклеивается» к месту, где взяли, и тянет картинку
+    // вместе с собой. Для этого поворот камеры должен равняться угловому
+    // смещению взятой точки на экране, а оно = dpx * 2*tan(fov/2)/height.
+    // Раньше шаг был фиксированным (0.005 рад/пиксель): точка из-под пальца
+    // уезжала, а скорость ещё гуляла вместе с зумом — на приближении обзор
+    // проворачивался вдвое быстрее, чем на отдалении. Теперь при любом зуме
+    // точка остаётся под пальцем, и LOOK_DRAG_SCALE задаёт общую скорость.
+    const k = 2 * Math.tan(CAR.camFov / 2) / Math.max(1, canvas.clientHeight) * LOOK_DRAG_SCALE;
+    CAR.lookYaw = wrapAngle(CAR.lookYaw + (e.clientX - lastX) * k);
+    CAR.lookPitch = clamp(CAR.lookPitch - (e.clientY - lastY) * k, -0.45, 0.55);
   } else {
     CAR.camYaw -= (e.clientX - lastX) * 0.006;
     CAR.camPitch = clamp(CAR.camPitch + (e.clientY - lastY) * 0.005, 0.32, 1.45);
