@@ -1113,11 +1113,10 @@ function drive(dt) {
     cam.beta += (CAR.camPitch - cam.beta) * (1 - Math.exp(-dt * 7));
     cam.radius += (CAR.camDist - cam.radius) * (1 - Math.exp(-dt * 7));
   } else if (CAR.mode === 1) {
-    // салон: камера уже сидит в кузове, остаётся только повернуть взгляд
-    if (!drag && performance.now() - CAR.idle > 1600) {
-      const back = Math.max(0, 1 - dt * 1.6);
-      CAR.lookYaw *= back; CAR.lookPitch *= back;
-    }
+    // салон: камера уже сидит в кузове, остаётся только повернуть взгляд.
+    // Автовозврата взгляда по центру больше нет: раньше через 1.6 с простоя
+    // lookYaw/lookPitch затухали обратно, и выбранный ракурс нельзя было
+    // удержать — взгляд сам возвращался вперёд. Сбросить взгляд можно вручную.
     // локальные оси кузова: -Z вперёд, поэтому разворот на π, а лево — это -Yaw
     cockpit.rotation.set(COCKPIT_PITCH + CAR.lookPitch, Math.PI - CAR.lookYaw, 0);
   }
