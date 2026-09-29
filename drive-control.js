@@ -151,9 +151,27 @@ addEventListener('keydown',e=>{
 window.setupIndicators=function(meshes){
   if(indGlow){indGlow.dispose();indGlow=null;}
   indSides=null;
-  const side=(re)=>meshes.filter(m=>re.test(m.name)||re.test((m.parent&&m.parent.name)||''));
-  const left=side(/indicator_l[a-z]/i),right=side(/indicator_r[a-z]/i);
-  if(!left.length&&!right.length)return;
+  const ind=meshes.filter(m=>/indicator/i.test(m.name)||/indicator/i.test((m.parent&&m.parent.name)||''));
+  if(!ind.length)return;
+  // Сторону фонаря берём из его положения относительно кузова, а НЕ из имени.
+  // В этой модели передняя пара названа наоборот: indicator_lf стоит справа
+  // (+X = 0.49), а indicator_rf — слева (−X = 0.47). Разложение по именам
+  // включало в левом поворотнике задний левый фонарь (верно) и передний
+  // правый (неверно), то есть в переднем фонаре горел чужой стороны.
+  // Переводим фонарь в локальные оси кузова: +X — правая сторона.
+  const invRoot=CAR.root.getWorldMatrix().clone().invert();
+  const wp=new BABYLON.Vector3(),lp=new BABYLON.Vector3();
+  const left=[],right=[];
+  for(const m of ind){
+    m.computeWorldMatrix(true);
+    const bb=m.getBoundingInfo().boundingBox;
+    BABYLON.Vector3.TransformCoordinatesToRef(bb.centerWorld,m.getWorldMatrix(),wp);
+    BABYLON.Vector3.TransformCoordinatesToRef(wp,invRoot,lp);
+    // если фонарь почти на оси — модель неоднозначна, откатываемся на имя
+    const byName=/indicator_l[a-z]/i.test(m.name)||/indicator_l[a-z]/i.test((m.parent&&m.parent.name)||'');
+    const isLeft=Math.abs(lp.x)>0.05?lp.x<0:byName;
+    (isLeft?left:right).push(m);
+  }
   for(const m of left.concat(right)){
     m.material=(m.material||new BABYLON.StandardMaterial('ind_'+m.name,scene)).clone('indm_'+m.name);
     m.material.emissiveColor=new BABYLON.Color3(0,0,0);
