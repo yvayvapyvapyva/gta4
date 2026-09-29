@@ -348,12 +348,21 @@ window.setupPlateLabels = function (meshes) {
 
 // ── Кнопки масштаба (+/−) ──────────────────────────────────────
 const zIn=document.getElementById('dvZoomIn'),zOut=document.getElementById('dvZoomOut');
+// В «следом» зум идёт через CAR.camDist, а не через cam.radius: радиусом камеры
+// каждый кадр управляет цикл рендера (cam.radius тянется к CAR.camDist), и запись
+// в cam.radius из кнопок сразу затиралась — кнопки выглядели мёртвыми. Во
+// «свободной» камерой управляет сама камера, там cam.radius и есть источник истины.
 function zoomStep(k){
   if(CAR.mode===1){setCamFov(CAR.camFov+(k<1?-0.06:0.06));return;}
+  if(CAR.mode===0){CAR.camDist=clamp(CAR.camDist*k,CAM_DIST_MIN,CAM_DIST_MAX);return;}
   cam.radius=Math.max(cam.lowerRadiusLimit,Math.min(cam.upperRadiusLimit,cam.radius*k));
 }
 function zoomHold(k,dt){
   if(CAR.mode===1){setCamFov(CAR.camFov+(k<1?-1:1)*0.9*dt);return;}
+  if(CAR.mode===0){
+    CAR.camDist=clamp(CAR.camDist*Math.exp(dt*Math.log(k)/0.13),CAM_DIST_MIN,CAM_DIST_MAX);
+    return;
+  }
   const f=Math.exp(dt*Math.log(k)/0.13);
   cam.radius=Math.max(cam.lowerRadiusLimit,Math.min(cam.upperRadiusLimit,cam.radius*f));
 }
