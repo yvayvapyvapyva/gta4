@@ -179,7 +179,14 @@ const PLATE_GREEN = "#12b312";
 // Текстура слоя букв: белые буквы на прозрачном фоне. Белые, потому что при
 // disableLighting Babylon выводит только цвет материала, а текстуру в
 // emissiveTexture игнорирует — проба с зелёными буквами прямо в текстуре дала
-// сплошной белый прямоугольник. Зелёный задаёт emissiveColor у буквенного слоя.
+// сплошной белый прямоугольник. Цвет задаёт emissiveColor слоя, текстура несёт
+// только альфу.
+//
+// Из-за этого же зелёные буквы и чёрная окантовка нельзя совместить в одной
+// текстуре: цвет у слоя один. Поэтому надпись рисуется двумя слоями —
+// outline=true даёт кольцо вокруг глифов (чёрный), outline=false сами глифы
+// (зелёные). Кольцо получается так: обводим и заливаем текст, затем
+// destination-out выбивает середину, и остаётся только ободок.
 //
 // Ориентацию UV проверяли опросом: непрозрачным делали по очереди каждый
 // квадрант канвы и смотрели, куда он попал на экране. Результат одинаковый у
@@ -188,27 +195,44 @@ const PLATE_GREEN = "#12b312";
 //   задний  (bumper_r_primitive12): x 29..399, y 195..272 для того же квадранта.
 // То есть UV обоих номеров перевёрнуты по вертикали, и без переворота надпись
 // выходит вверх ногами. Горизонталь правильная у обоих, отражать по X не нужно.
-function plateLettersTexture(name) {
+function plateLettersTexture(name, outline) {
   const tex = new BABYLON.DynamicTexture(name, { width:1024, height:256 }, scene, true);
   tex.hasAlpha = true;
   const g = tex.getContext();
   g.clearRect(0, 0, 1024, 256);
-  g.fillStyle = "#ffffff";
   g.textAlign = "center";
   g.textBaseline = "middle";
+  // Подгоняем кегль так, чтобы надпись заняла почти всю ширину номера.
+  // Масштабируем в обе стороны, а не только вниз: прежняя проверка «if (w > N)»
+  // умела лишь ужимать текст, который шире N, и при исходных 614 px из 1024
+  // ничего не делала — надпись оставалась мелкой. Теперь кегль всегда
+  // приводит ширину к 1000 px: текстура ровно натянута на номер шириной 0,57 м,
+  // так что это фактически во всю табличку. Запас по краям — на обводку.
+  const TARGET = 1000;
   let size = 150;
   g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
-  const w = g.measureText("КОЛЕСО").width;
-  if (w > 820) {
-    size = Math.floor(size * 820 / w);
-    g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
-  }
+  size = Math.max(1, Math.round(size * TARGET / g.measureText("КОЛЕСО").width));
+  g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
   // 512,128 — центр текстуры 1024×256, поэтому после переворота (256-128=128)
   // надпись остаётся центрированной, и подгонка кегля по ширине выше не ломается.
   g.save();
   g.translate(0, 256);
   g.scale(1, -1);
-  g.fillText("КОЛЕСО", 512, 128);
+  if (outline) {
+    g.fillStyle = "#ffffff";
+    g.strokeStyle = "#ffffff";
+    g.lineWidth = 12;
+    g.lineJoin = "round";
+    g.miterLimit = 2;
+    g.strokeText("КОЛЕСО", 512, 128);
+    g.fillText("КОЛЕСО", 512, 128);
+    g.globalCompositeOperation = "destination-out";
+    g.fillText("КОЛЕСО", 512, 128);           // выбиваем середину — остаётся ободок
+    g.globalCompositeOperation = "source-over";
+  } else {
+    g.fillStyle = "#ffffff";
+    g.fillText("КОЛЕСО", 512, 128);
+  }
   g.restore();
   tex.update();
   return tex;
@@ -230,22 +254,32 @@ function plateLayers(plate, front) {
   bg.material.specularColor = new BABYLON.Color3(0, 0, 0);
   bg.material.disableLighting = true;
 
-  // буквы: вторая копия той же формы вплотную снаружи, прозрачность — из букв
-  const fg = plate.clone(plate.name + "_labelFg", null, true);
-  fg.isPickable = false;
-  fg.position.z = plate.position.z + out * 0.0004;
-  fg.material = new BABYLON.StandardMaterial(plate.name + "_labelFgMat", scene);
-  fg.material.opacityTexture = plateLettersTexture(plate.name + "_labelTex");
-  fg.material.emissiveColor = BABYLON.Color3.FromHexString(PLATE_GREEN);
-  fg.material.diffuseColor = new BABYLON.Color3(0, 0, 0);
-  fg.material.specularColor = new BABYLON.Color3(0, 0, 0);
-  fg.material.disableLighting = true;
-  fg.material.zOffset = -4;                  // буквы ближе к камере, чем фон
+  // Копия с материалом слоя: общая заготовка для окантовки и букв.
+  const layer = (suffix, dz, texName, outline, color, zOffset) => {
+    const q = plate.clone(plate.name + suffix, null, true);
+    q.isPickable = false;
+    q.position.z = plate.position.z + out * dz;
+    q.material = new BABYLON.StandardMaterial(plate.name + suffix + "Mat", scene);
+    q.material.opacityTexture = plateLettersTexture(plate.name + texName, outline);
+    q.material.emissiveColor = color;
+    q.material.diffuseColor = new BABYLON.Color3(0, 0, 0);
+    q.material.specularColor = new BABYLON.Color3(0, 0, 0);
+    q.material.disableLighting = true;
+    q.material.zOffset = zOffset;
+    return q;
+  };
+
+  // Окантовка: кольцо вокруг глифов, чёрное. Лежит между фоном и буквами.
+  layer("_labelEdge", 0.0004, "_labelEdgeTex", true, new BABYLON.Color3(0, 0, 0), -4);
+  // Буквы: сами глифы, зелёные, снаружи окантовки — она оставляет видимую
+  // чёрную кромку только там, где глиф её не перекрывает.
+  const fg = layer("_labelFg", 0.0008, "_labelTex", false,
+                   BABYLON.Color3.FromHexString(PLATE_GREEN), -8);
 
   // Оригинал скрываем: копия стоит на его месте и полностью его закрывает,
   // поэтому ни цифр, ни красной полосы, ни кромки пластины не видно.
   plate.isVisible = false;
-  return bg;
+  return fg;
 }
 
 window.setupPlateLabels = function (meshes) {
