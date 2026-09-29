@@ -566,6 +566,10 @@ function human(n) {
 const CAR = {
   root: null,
   wheels: [],
+  steerWheel: null,   // узел руля в салоне
+  steerWheelBase: null, // исходный поворот узла руля
+  steerWheelAxis: null, // ось вращения руля в локальной системе узла
+  steerWheelTurns: 1.5, // оборотов руля на полный отворот колёс в каждую сторону
   v: 0,            // м/с, + = вперёд
   yaw: 0,          // рад, + = налево
   steer: 0,        // текущий угол поворота колёс, + = налево
@@ -595,6 +599,7 @@ const CAR = {
   width: 1.74,          // ширина кузова, м (замеряется по модели при загрузке)
   turnRadius: 4.38,     // радиус дуги = (turnDiameter − width) / 2
   maxSteer: 0.56,       // предельный угол колёс, рад (~32°)
+  steerLockToLock: 1,   // секунд на поворот руля от края до края (замедление)
   camYaw: 0, camPitch: 1.13, camDist: 7.4,
   camFov: 1.45,    // угол обзора салона, рад (~83° по вертикали)
   mode: 0,           // 0 следом · 1 салон · 2 свободная
@@ -968,10 +973,13 @@ function drive(dt) {
   const steerIn = left - right;
 
   // руль: полный отворот задан геометрией (CAR.maxSteer) и не гасится скоростью,
-  // поэтому радиус разворота одинаков на любом ходу
+  // поэтому радиус разворота одинаков на любом ходу. Скорость доворота задана
+  // CAR.steerLockToLock — временем на поворот от края до края (1 секунда), в
+  // центральное положение руль возвращается быстрее.
   const maxSteer = CAR.maxSteer;
   const want = touchSteerEnabled ? touchSteerAngle : steerIn * maxSteer;
-  const rate = (want === 0 ? 6 : 3.4) * dt;
+  const steerRate = 2 * maxSteer / CAR.steerLockToLock;  // рад/с
+  const rate = (want === 0 ? steerRate * 1.6 : steerRate) * dt;
   CAR.steer += clamp(want - CAR.steer, -rate, rate);
 
   // продольная динамика
@@ -1048,6 +1056,15 @@ function drive(dt) {
     // руль поворота — в локальной системе модели, где +X это правая сторона,
     // поэтому поворот налево (CAR.steer > 0) это +rotation.y
     if (w.front) w.steer.rotation.y = CAR.steer;
+  }
+
+  // руль в салоне поворачивается вместе с колёсами: полный отворот колёс даёт
+  // полтора оборота руля (CAR.steerWheelTurns). Знак минус — CAR.steer
+  // положителен при повороте налево, а руль налево крутится по часовой стрелке.
+  if (CAR.steerWheel) {
+    CAR.steerWheel.rotationQuaternion = CAR.steerWheelBase.multiply(
+      BABYLON.Quaternion.RotationAxis(
+        CAR.steerWheelAxis, -CAR.steer / CAR.maxSteer * Math.PI * 2 * CAR.steerWheelTurns));
   }
 
   // земля едет за машиной, текстура асфальта остаётся в мировых координатах
@@ -1196,6 +1213,52 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   // z < 0, значит задняя ось на z > 0; её смещение от центра и есть rearZ.
   if (zMax > 0) CAR.rearZ = zMax;
   for (const w of CAR.wheels) w.front = w.node.getAbsolutePosition().z < (zMin + zMax) / 2;
+
+  const _swLocal = BABYLON.Matrix.Identity();
+
+  // --- руль в салоне. Поворачивается вместе с колёсами: на полный отворот
+  // колёс (|CAR.steer| = CAR.maxSteer) делает полтора оборота, а не один.
+  // В модели пивот уже есть — пустой узел steeringwheel (потомок chassis) стоит
+  // ровно в ступице и несёт наклон колонки, но геометрия руля лежит отдельным
+  // мешем steeringwheel_high и в этот узел не входит. Поэтому перевешиваем её
+  // в пивот, пересчитав локальные трансформы из мировых матриц (setParent этого
+  // не делает). Ось вращения берём из нормали к граням руля и переводим в
+  // локальную систему пивота — тогда наклон колонки учитывается сам.
+  {
+    let pivot = null;
+    for (const n of scene.transformNodes) {
+      if (/steeringwheel/i.test(n.name) && !n.getChildMeshes(false).length && n.parent) { pivot = n; break; }
+    }
+    const parts = [];
+    for (const m of meshes) {
+      if (m.parent && /steeringwheel/i.test(m.parent.name) && m.getTotalVertices() > 0) parts.push(m);
+    }
+    if (pivot && parts.length) {
+      // мировые матрицы деталей ДО перевешивания
+      const worlds = parts.map(m => { m.computeWorldMatrix(true); return m.getWorldMatrix().clone(); });
+
+      {
+        if (!pivot.rotationQuaternion) {
+          pivot.rotationQuaternion = BABYLON.Quaternion.FromEulerAngles(pivot.rotation.x, pivot.rotation.y, pivot.rotation.z);
+        }
+        const invPivot = pivot.computeWorldMatrix(true).invert();
+        CAR.steerWheel = pivot;
+        CAR.steerWheelBase = pivot.rotationQuaternion.clone();
+        // Ось вращения — локальная Y пивота: узел уже стоит в ступице и повёрнут
+        // ровно на наклон рулевой колонки, поэтому Y совпадает с осью вала.
+        // Проверено замером: у обода расстояние до этой оси почти постоянно
+        // (разброс 54 мм при радиусе 143 мм), тогда как у X разброс 164 мм.
+        CAR.steerWheelAxis = BABYLON.Axis.Y;
+        parts.forEach((m, i) => {
+          m.parent = pivot;
+          m.rotationQuaternion = m.rotationQuaternion || new BABYLON.Quaternion();
+          // Babylon строит world = local * parent, поэтому local = world * inv(parent)
+          worlds[i].multiplyToRef(invPivot, _swLocal);
+          _swLocal.decompose(m.scaling, m.rotationQuaternion, m.position);
+        });
+      }
+    }
+  }
 
   // --- угол полного отворота: измеряем ширину кузова (без колёс и зеркал —
   // они не входят в габарит разворота) и считаем угол по диаметру разворота.
