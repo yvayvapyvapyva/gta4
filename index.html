@@ -596,7 +596,12 @@ const CAR = {
   // разворота по формуле atan(колеиная база / радиус дуги) и не зависит от
   // скорости — иначе на быстром ходу машину разворачивает заметно шире.
   turnDiameter: 10.5,   // диаметр разворота по внешней кромке, м
-  width: 1.74,          // ширина кузова, м (замеряется по модели при загрузке)
+  width: 1.74,          // ширина кузова, м (замер по модели в локальных осях)
+  length: 4.35,         // длина кузова, м (замер по модели в локальных осях)
+  halfW: 0.98,          // полугабарит по X от реального центра кузова, м
+  halfL: 2.22,          // полугабарит по Z от реального центра кузова, м
+  bodyCx: 0,            // центр кузова по X в локальных осях, м
+  bodyCz: 0,            // центр кузова по Z в локальных осях, м
   turnRadius: 4.38,     // радиус дуги = (turnDiameter − width) / 2
   maxSteer: 0.56,       // предельный угол колёс, рад (~32°)
   steerLockToLock: 1,   // секунд на поворот руля от края до края (замедление)
@@ -1280,6 +1285,36 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
     }
     if (w > 0.5) CAR.width = w;
   }
+  // Замер идёт в ЛОКАЛЬНЫХ координатах машины (через обратную матрицу root), а
+  // не в мировых: сцена собрана с зеркальным корнем scale 1,1,-1, поэтому мировой
+  // замер отражал длину и граница уезжала на другую сторону от кузова.
+  // Полугабариты берём от РЕАЛЬНОГО центра кузова, а не половиной размаха:
+  // кузов смещён относительно CAR.root, и симметричный прямоугольник обрезал
+  // корму и борта, из-за чего часть конусов не сбивалась.
+  {
+    const invRoot = root.getWorldMatrix().clone().invert();
+    const lp = new BABYLON.Vector3();
+    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (const m of meshes) {
+      if (/wheel|mirror|slipstream|exhaust|steering/i.test(m.name)) continue;
+      m.computeWorldMatrix(true);
+      const bb = m.getBoundingInfo().boundingBox;
+      for (let i = 0; i < 8; i++) {
+        BABYLON.Vector3.TransformCoordinatesToRef(bb.vectors[i], m.getWorldMatrix(), tmp);
+        BABYLON.Vector3.TransformCoordinatesToRef(tmp, invRoot, lp);
+        x0 = Math.min(x0, lp.x); x1 = Math.max(x1, lp.x);
+        z0 = Math.min(z0, lp.z); z1 = Math.max(z1, lp.z);
+      }
+    }
+    if (x1 > x0 && z1 > z0) {
+      CAR.bodyCx = (x0 + x1) / 2;
+      CAR.bodyCz = (z0 + z1) / 2;
+      CAR.halfW = Math.max(Math.abs(x0 - CAR.bodyCx), Math.abs(x1 - CAR.bodyCx));
+      CAR.halfL = Math.max(Math.abs(z0 - CAR.bodyCz), Math.abs(z1 - CAR.bodyCz));
+      // CAR.width/CAR.length НЕ трогаем: по ним считается turnRadius и maxSteer,
+      // то есть настроенное руление. Для конусов используем отдельные поля выше.
+    }
+  }
   CAR.turnRadius = (CAR.turnDiameter - CAR.width) / 2;
   CAR.maxSteer = Math.atan(CAR.wheelbase / CAR.turnRadius);
 
@@ -1365,8 +1400,11 @@ engine.runRenderLoop(() => {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
   if (ready) {
-    if (objectTick) objectTick(dt);
     if (editorTick) editorTick(dt); else drive(dt);
+    // конусы проверяем ПОСЛЕ движения машины — как в simulator2: иначе удар
+    // считается по позиции прошлого кадра и на большой скорости конус
+    // проскакивает между проверками
+    if (objectTick) objectTick(dt);
     if (mirrorTick) mirrorTick();
     if (typeof tickBlink === "function") tickBlink(dt);
     if (typeof syncDvWheel === "function") syncDvWheel();

@@ -37,9 +37,6 @@ const hintline = est("hintline");
 const finishLineBtn = est("finishLineBtn");
 const editTypeSel = null;                        // тип выбирается галереей, селекта нет
 
-// габариты машины для проверки попаданий: модель Renault Symbol
-const CAR_HALF_W = 0.88, CAR_HALF_L = 2.05;
-
 // ── конусы ────────────────────────────────────────────────────────────
 const coneNodes = [];
 const occupied = new Set();
@@ -561,12 +558,23 @@ function obstacleBlocked(x, z, y, dx, dz) {
 // ── конусы: удар и падение ───────────────────────────────────────────
 const flying = [];
 const LYING_Y = 0.12;
+// Радиус основания конуса: касание кузова считаем попаданием, поэтому конус
+// цепляется о самый край бампера, а не только о середину грани.
+const CONE_R = 0.13;
+// Попадание конуса в кузов.
+// Локальные координаты строим по осям КУЗОВА, а не по формуле из simulator2:
+// здесь машина едет в −Z (fwd = sin(yaw), −cos(yaw)), поэтому локальные оси —
+// +X = (cos, 0, sin), +Z = (−sin, 0, cos). Формула simulator2 (dx·c − dz·s,
+// dx·s + dz·c) соответствует движению в +Z и на повороте разворачивала бокс в
+// другую сторону — конусы у бамперов проскакивали. При yaw = 0 обе формулы
+// совпадают, поэтому ошибка не видна на прямой.
 const carHits = (px, pz) => {
   const dx = px - CAR.root.position.x, dz = pz - CAR.root.position.z;
   const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);
-  const lx = dx * c - dz * s, lz = dx * s + dz * c;
-  return Math.abs(lx) <= CAR_HALF_W && Math.abs(lz) <= CAR_HALF_L;
-};
+  const lx = dx * c + dz * s, lz = -dx * s + dz * c;
+  return Math.abs(lx - CAR.bodyCx) <= CAR.halfW + CONE_R
+      && Math.abs(lz - CAR.bodyCz) <= CAR.halfL + CONE_R;
+}
 function knockCone(node, carPos) {
   const ud = node.userData;
   ud.knocked = true;
