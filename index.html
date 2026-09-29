@@ -1271,6 +1271,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
 
   // после загрузки геометрии можно настроить поворотники
   if (typeof window.setupIndicators === "function") window.setupIndicators(meshes);
+  if (typeof window.setupPlateLabels === "function") window.setupPlateLabels(meshes);
 
   cam.lowerRadiusLimit = 3.2;
   cam.upperRadiusLimit = 26;

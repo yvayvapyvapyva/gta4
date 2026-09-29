@@ -167,6 +167,121 @@ window.setupIndicators=function(meshes){
   syncBlinkBtns();applyBlink();
 };
 
+// Номера. Числа на табличках — не текстура, а отдельные чёрные меши (материал
+// siyah, ~1956 вершин), выступающие вперёд на 1,3 см. Слева на номере ещё
+// красная полоса с флагом Турции — она тоже часть текстуры plaka. Здесь меши
+// с цифрами прячутся, а сверху на 4 мм кладётся наклейка во весь размер
+// номера: белый слой перекрывает и цифры, и красную полосу, поверх него —
+// зелёная надпись.
+const PLATE_GREEN = "#12b312";
+
+// Наклейка делается двумя плоскостями. При disableLighting Babylon выводит
+// только цвет материала, а текстуру в emissiveTexture игнорирует — проба с
+// зелёными буквами прямо в текстуре дала белый прямоугольник. Поэтому фон и
+// буквы разнесены по слоям: непрозрачный белый фон перекрывает и цифры, и
+// красную полосу, а поверх буквы отдельным слоем с зелёным цветом материала.
+function plateLayers(plate, localBox, front) {
+  const bb = localBox(plate), mn = bb.minimum, mx = bb.maximum;
+  const w = mx.x - mn.x, h = mx.y - mn.y;
+  // Отступ 4 мм, а не 1,5: на 1,5 мм слой фона стоял впритык к передней
+  // грани таблички и начинал z-fighting — сквозь него проступали одиночные
+  // красные пиксели полосы по всей площади номера. zOffset ниже добивает
+  // остаток дрожания глубины.
+  const z = front ? mn.z - 0.004 : mx.z + 0.004;
+  // наружу от таблички: спереди это -Z, сзади +Z. Отсчёт отсюда, иначе на
+  // заднем номере слой букв оказывается под фоном и не виден вовсе.
+  const out = front ? -1 : 1;
+  const x = (mn.x + mx.x) / 2, y = (mn.y + mx.y) / 2;
+  const rotY = front ? 0 : Math.PI;         // на задней табличке текст от себя
+
+  const makePlane = (name, dz) => {
+    const q = BABYLON.MeshBuilder.CreatePlane(name, { width:1, height:1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
+    q.scaling.set(w, h, 1);
+    q.isPickable = false;
+    q.parent = plate;
+    q.position.set(x, y, z + out * dz);
+    q.rotation.y = rotY;
+    return q;
+  };
+
+  // фон: непрозрачный белый, свою текстуру не несёт
+  const bg = makePlane(plate.name + "_labelBg", 0);
+  bg.material = new BABYLON.StandardMaterial(plate.name + "_labelBgMat", scene);
+  bg.material.emissiveColor = new BABYLON.Color3(0.95, 0.95, 0.95);
+  bg.material.diffuseColor = new BABYLON.Color3(0, 0, 0);
+  bg.material.specularColor = new BABYLON.Color3(0, 0, 0);
+  bg.material.disableLighting = true;
+  bg.material.backFaceCulling = false;
+  bg.material.zOffset = -2;                   // притянуть слой ближе к камере
+
+  // буквы: текстура с белыми буквами на прозрачном фоне, цвет — зелёный
+  const tex = new BABYLON.DynamicTexture(plate.name + "_labelTex", { width:1024, height:256 }, scene, true);
+  tex.hasAlpha = true;
+  const g = tex.getContext();
+  g.clearRect(0, 0, 1024, 256);
+  g.fillStyle = "#ffffff";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  let size = 150;
+  g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
+  const tw = g.measureText("КОЛЕСО").width;
+  if (tw > 900) {
+    size = Math.floor(size * 900 / tw);
+    g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
+  }
+  // Надпись зеркалим по горизонтали. Отражаем только слой букв: сдвиг на
+  // 1024 и масштаб -1 по X оставляют центр (x=512 при textAlign=center)
+  // на месте, так что кегль и подгонка ширины выше остаются в силе.
+  g.save();
+  g.translate(1024, 0);
+  g.scale(-1, 1);
+  g.fillText("КОЛЕСО", 512, 132);
+  g.restore();
+  tex.update();
+
+  const fg = makePlane(plate.name + "_label", 0.0012);    // 1,2 мм снаружи фона
+  fg.material = new BABYLON.StandardMaterial(plate.name + "_labelMat", scene);
+  fg.material.opacityTexture = tex;                       // прозрачность — из букв
+  fg.material.emissiveColor = BABYLON.Color3.FromHexString(PLATE_GREEN);
+  fg.material.diffuseColor = new BABYLON.Color3(0, 0, 0);
+  fg.material.specularColor = new BABYLON.Color3(0, 0, 0);
+  fg.material.disableLighting = true;
+  fg.material.backFaceCulling = false;
+  fg.material.zOffset = -4;                               // слой букв — самый ближний
+  return bg;
+}
+
+window.setupPlateLabels = function (meshes) {
+  const plates = meshes.filter((m) => m.material && /plaka/i.test(m.material.name));
+  if (!plates.length) return;
+  // Работаем в локальной системе таблички: её вершины уже лежат в системе
+  // координат узла машины, и локальные координаты ребёнка — те же самые.
+  // Мировые брать нельзя: наклейка — ребёнок таблички, и мировое смещение
+  // приплюсовалось бы к трансформу машины второй раз.
+  const localBox = (m) => m.getBoundingInfo().boundingBox;
+  for (const plate of plates) {
+    const bb = localBox(plate), mn = bb.minimum, mx = bb.maximum;
+    // цифры на номере: чёрные меши того же материала, что стоят на этой же
+    // таблицечке. Совпадение проверяем по всем трём осям, иначе в переднюю
+    // выборку попадает задний номер (а у него ось Z вообще другого знака)
+    // и наклейка встаёт не на ту сторону.
+    const near = (m) => {
+      const b2 = localBox(m);
+      const cx2 = (b2.maximum.x + b2.minimum.x) / 2, cy2 = (b2.maximum.y + b2.minimum.y) / 2, cz2 = (b2.maximum.z + b2.minimum.z) / 2;
+      const cx = (mn.x + mx.x) / 2, cy = (mn.y + mx.y) / 2, cz = (mn.z + mx.z) / 2;
+      return b2.maximum.x - b2.minimum.x < 0.6
+        && Math.abs(cx2 - cx) < 0.2 && Math.abs(cy2 - cy) < 0.2 && Math.abs(cz2 - cz) < 0.2
+        && (b2.minimum.z < mn.z - 0.001 || b2.maximum.z > mx.z + 0.001);
+    };
+    const nums = meshes.filter((m) => m !== plate && m.material && /^siyah/i.test(m.material.name) && near(m));
+    if (!nums.length) continue;                 // цифр нет — наклейку не куда класть
+    const front = nums[0] && localBox(nums[0]).minimum.z < mn.z;
+    for (const n of nums) n.isVisible = false;
+
+    plateLayers(plate, localBox, front);
+  }
+};
+
 // ── Кнопки масштаба (+/−) ──────────────────────────────────────
 const zIn=document.getElementById('dvZoomIn'),zOut=document.getElementById('dvZoomOut');
 function zoomStep(k){
