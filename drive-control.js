@@ -114,9 +114,13 @@ function setSide(list,on){
 }
 function applyBlink(){
   blinkOn=(blinkT%BLINK)<BLINK_DUTY;
+  // Обе стороны задаём явно, а не только активную: иначе выключенная сторона
+  // залипает в последнем состоянии. Раньше turn off в светлой фазе мигания
+  // оставлял фонари включёнными навсегда (tickBlink при выключенных
+  // поворотниках сразу выходит, а setSide вызывался только для активной стороны).
   if(indSides){
-    if(blinkerLeft)setSide(indSides.left,blinkOn);
-    if(blinkerRight)setSide(indSides.right,blinkOn);
+    setSide(indSides.left,blinkerLeft&&blinkOn);
+    setSide(indSides.right,blinkerRight&&blinkOn);
   }
 }
 window.tickBlink=function(dt){
