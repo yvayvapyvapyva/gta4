@@ -89,18 +89,23 @@ const DV_LOCK = () => CAR.maxSteer;
   };
 })();
 
-// ── Кнопка переключения вида (салон / снаружи) ─────────────────
+// ── Кнопка переключения вида (следом / салон / свободная) ─────
 const dvView=document.getElementById('dvView');
 function syncDvView(){
   if(!dvView)return;
+  const modes=(typeof CAM_MODES!=='undefined')?CAM_MODES:['следом','салон','свободная'];
+  const name=modes[CAR.mode]||'';
+  const next=modes[(CAR.mode+1)%modes.length];
   dvView.textContent='👁';
   dvView.classList.toggle('active',CAR.mode===1);
-  dvView.setAttribute('aria-label',CAR.mode===1?'Вид: салон. Переключить наружу':'Вид: снаружи. Переключить в салон');
+  dvView.setAttribute('aria-label','Вид: '+name+'. Переключить на «'+next+'»');
 }
 if(dvView)dvView.addEventListener('click',()=>{
   if(!ready)return;
-  CAR.mode=CAR.mode===1?0:1;   // свободный режим с панели не берём: там мышь
-  applyCamMode();
+  // Раньше было CAR.mode=CAR.mode===1?0:1 — кнопка знала только салон и «следом»,
+  // свободный вид был недостижим. Теперь циклит все виды, как клавиша C.
+  if(typeof toggleCam==='function')toggleCam();
+  else{CAR.mode=(CAR.mode+1)%3;applyCamMode();}
 });
 syncDvView();
 
