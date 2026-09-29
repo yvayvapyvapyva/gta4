@@ -73,9 +73,16 @@ const DV_LOCK = () => CAR.maxSteer;
   window.addEventListener('blur',()=>{rotDrag=null;touchSteerEnabled=false;});
   // руль и полоска индикатора догоняют реальный угол колёс, когда его не держат
   window.syncDvWheel=()=>{
+    const lk=DV_LOCK();
     let cur;
-    if(rotDrag)cur=wAng/WMAX;
-    else{const lk=DV_LOCK();wAng=(CAR.steer/lk)*WMAX;cur=CAR.steer/lk;}
+    // Инвариант из setWheel: touchSteerAngle = -(wAng/WMAX)*DV_LOCK(), то есть
+    // cur = touchSteerAngle/DV_LOCK() = -(wAng/WMAX) — СО ЗНАКОМ МИНУС.
+    // Раньше здесь стояло cur=wAng/WMAX, а после отпускания ещё и
+    // wAng=(CAR.steer/lk)*WMAX: минус терялся в обеих строках, и при отпускании
+    // маркер шкалы прыгал на противоположную сторону, а сам руль — через сотни
+    // градусов (замер: rotate(180deg) -> rotate(-93.6deg)).
+    if(rotDrag)cur=-wAng/WMAX;
+    else{wAng=-(CAR.steer/lk)*WMAX;cur=CAR.steer/lk;}
     rotEl.style.transform='rotate('+wAng+'deg)';
     const ind=document.getElementById('dvIndMarker');
     if(ind)ind.style.left=(50-cur*48)+'%';
