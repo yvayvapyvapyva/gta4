@@ -844,10 +844,11 @@ addEventListener("pointermove", (e) => {
   }
   if (!drag || editGrab) return;
   if (CAR.mode === 1) {
-    // в салоне тянем обзор: вправо — смотрим вправо, вниз — вниз.
-    // по горизонтали без ограничений, по вертикали держим рамки от залипания на полу
-    CAR.lookYaw = wrapAngle(CAR.lookYaw - (e.clientX - lastX) * 0.005);
-    CAR.lookPitch = clamp(CAR.lookPitch + (e.clientY - lastY) * 0.004, -0.45, 0.55);
+    // в салоне тянем обзор наоборот: влево — смотрим вправо, вверх — вниз
+    // (знаки инвертированы). По горизонтали без ограничений, по вертикали
+    // держим рамки от залипания на полу.
+    CAR.lookYaw = wrapAngle(CAR.lookYaw + (e.clientX - lastX) * 0.005);
+    CAR.lookPitch = clamp(CAR.lookPitch - (e.clientY - lastY) * 0.004, -0.45, 0.55);
   } else {
     CAR.camYaw -= (e.clientX - lastX) * 0.006;
     CAR.camPitch = clamp(CAR.camPitch + (e.clientY - lastY) * 0.005, 0.32, 1.45);
