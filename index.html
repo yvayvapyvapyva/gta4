@@ -292,7 +292,7 @@
     <h4>Угол обзора из кабины</h4>
     <div class="win-row">
       <label>FOV</label>
-      <input type="range" id="setFov" min="40" max="120" step="1" value="83">
+      <input type="range" id="setFov" min="40" max="130" step="1" value="83">
       <span class="val" id="setFovV">83°</span>
     </div>
     <div class="win-note">Ширина поля зрения водителя</div>
@@ -427,6 +427,15 @@
 const MODEL = new URLSearchParams(location.search).get("model") || "auto/car.glb";
 const ENV_URL = "https://assets.babylonjs.com/environments/environmentSpecular.env";
 
+// Пределы зума. Объявлены до создания камеры: ниже они сразу идут в
+// lowerRadiusLimit, а обращение к const до инициализации уронило бы страницу.
+// Салон ограничен углом обзора по вертикали, остальные виды — дистанцией;
+// свободная камера берёт те же границы из RadiusLimit.
+const CAM_FOV_MIN = 0.7;                        // 40°  — узкий обзор, приближение
+const CAM_FOV_MAX = 130 * Math.PI / 180;        // 130° — широкий обзор, отдаление
+const CAM_DIST_MIN = 3.2;                       // м, ближе не подъехать
+const CAM_DIST_MAX = 60;                        // м, дальше не отъехать
+
 const canvas = document.getElementById("view");
 const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, stencil:true }, true);
 const scene = new BABYLON.Scene(engine);
@@ -441,8 +450,8 @@ ip.contrast = 1.08;
 
 const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2, Math.PI / 2.6, 9, new BABYLON.Vector3(0, 0.7, 0), scene);
 cam.attachControl(canvas, true);
-cam.lowerRadiusLimit = 2.2;
-cam.upperRadiusLimit = 40;
+cam.lowerRadiusLimit = CAM_DIST_MIN;
+cam.upperRadiusLimit = CAM_DIST_MAX;
 cam.lowerBetaLimit = 0.12;
 cam.upperBetaLimit = Math.PI / 2 + 0.15;
 cam.wheelDeltaPercentage = 0.02;
@@ -816,7 +825,7 @@ function resetCar() {
 
 // угол обзора салона: мышь — колесо, телефон — щипок
 function setCamFov(f) {
-  CAR.camFov = clamp(f, 0.7, 1.9);
+  CAR.camFov = clamp(f, CAM_FOV_MIN, CAM_FOV_MAX);
   if (cockpit) cockpit.fov = CAR.camFov;
 }
 
@@ -849,7 +858,7 @@ addEventListener("pointermove", (e) => {
   if (CAR.mode === 0 && ptrs.size >= 2) {
     const [a, b] = [...ptrs.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (pinch > 0 && d > 0) CAR.camDist = clamp(CAR.camDist * (pinch / d), 3.2, 26);
+    if (pinch > 0 && d > 0) CAR.camDist = clamp(CAR.camDist * (pinch / d), CAM_DIST_MIN, CAM_DIST_MAX);
     pinch = d;
     return;
   }
@@ -880,7 +889,7 @@ canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   if (CAR.mode === 1) { setCamFov(CAR.camFov * (1 + Math.sign(e.deltaY) * 0.07)); return; }
   if (CAR.mode !== 0) return;
-  CAR.camDist = clamp(CAR.camDist * (1 + Math.sign(e.deltaY) * 0.08), 3.2, 26);
+  CAR.camDist = clamp(CAR.camDist * (1 + Math.sign(e.deltaY) * 0.08), CAM_DIST_MIN, CAM_DIST_MAX);
 }, { passive:false });
 
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -1398,8 +1407,8 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   if (typeof window.setupIndicators === "function") window.setupIndicators(meshes);
   if (typeof window.setupPlateLabels === "function") window.setupPlateLabels(meshes);
 
-  cam.lowerRadiusLimit = 3.2;
-  cam.upperRadiusLimit = 26;
+  cam.lowerRadiusLimit = CAM_DIST_MIN;
+  cam.upperRadiusLimit = CAM_DIST_MAX;
   cam.alpha = CAR.yaw + Math.PI / 2;
   cam.beta = CAR.camPitch;
   cam.radius = CAR.camDist;
