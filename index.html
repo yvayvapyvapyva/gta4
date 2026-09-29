@@ -466,8 +466,12 @@ const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), 
 hemi.intensity = 0.45;
 hemi.groundColor = new BABYLON.Color3(0.16, 0.17, 0.2);
 
-const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.55, -1, 0.45), scene);
-sun.position = new BABYLON.Vector3(7, 11, -6);
+// Солнце сверху. Направление задаёт ход лучей, поэтому у солнца на высоте 79°
+// вектор почти вертикальный: наклон 11° вбок оставлен намеренно — при строго
+// вертикальном свете тень ложится ровно под машиной и кузов читается плоско,
+// а боковой уход даёт теням форму и показывает, где у машины крылья.
+const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.15, -1, 0.13), scene);
+sun.position = new BABYLON.Vector3(2, 14, -2);
 sun.intensity = 2.6;
 
 const shadow = new BABYLON.ShadowGenerator(2048, sun);
