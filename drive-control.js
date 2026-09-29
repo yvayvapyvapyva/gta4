@@ -168,54 +168,20 @@ window.setupIndicators=function(meshes){
 };
 
 // Номера. Числа на табличках — не текстура, а отдельные чёрные меши (материал
-// siyah, ~1956 вершин), выступающие вперёд на 1,3 см. Слева на номере ещё
-// красная полоса с флагом Турции — она тоже часть текстуры plaka. Здесь меши
-// с цифрами прячутся, а сверху на 4 мм кладётся наклейка во весь размер
-// номера: белый слой перекрывает и цифры, и красную полосу, поверх него —
-// зелёная надпись.
+// siyah, ~1956 вершин), выступающие вперёд на 1,3 см. Сама табличка — скруглённая
+// пластина с текстурой plaka, где слева красная полоса флага Турции.
+// Убираем и то и другое: меши с цифрами скрываем, а саму пластину заменяем её
+// копией с той же геометрией — поэтому скругление и толщина сохраняются —
+// и новой текстурой: белый фон с зелёной надписью. Плоскую наклейку сверху
+// класть не нужно, копия стоит ровно на месте оригинала и закрывает его целиком.
 const PLATE_GREEN = "#12b312";
 
-// Наклейка делается двумя плоскостями. При disableLighting Babylon выводит
-// только цвет материала, а текстуру в emissiveTexture игнорирует — проба с
-// зелёными буквами прямо в текстуре дала белый прямоугольник. Поэтому фон и
-// буквы разнесены по слоям: непрозрачный белый фон перекрывает и цифры, и
-// красную полосу, а поверх буквы отдельным слоем с зелёным цветом материала.
-function plateLayers(plate, localBox, front) {
-  const bb = localBox(plate), mn = bb.minimum, mx = bb.maximum;
-  const w = mx.x - mn.x, h = mx.y - mn.y;
-  // Отступ 4 мм, а не 1,5: на 1,5 мм слой фона стоял впритык к передней
-  // грани таблички и начинал z-fighting — сквозь него проступали одиночные
-  // красные пиксели полосы по всей площади номера. zOffset ниже добивает
-  // остаток дрожания глубины.
-  const z = front ? mn.z - 0.004 : mx.z + 0.004;
-  // наружу от таблички: спереди это -Z, сзади +Z. Отсчёт отсюда, иначе на
-  // заднем номере слой букв оказывается под фоном и не виден вовсе.
-  const out = front ? -1 : 1;
-  const x = (mn.x + mx.x) / 2, y = (mn.y + mx.y) / 2;
-  const rotY = front ? 0 : Math.PI;         // на задней табличке текст от себя
-
-  const makePlane = (name, dz) => {
-    const q = BABYLON.MeshBuilder.CreatePlane(name, { width:1, height:1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
-    q.scaling.set(w, h, 1);
-    q.isPickable = false;
-    q.parent = plate;
-    q.position.set(x, y, z + out * dz);
-    q.rotation.y = rotY;
-    return q;
-  };
-
-  // фон: непрозрачный белый, свою текстуру не несёт
-  const bg = makePlane(plate.name + "_labelBg", 0);
-  bg.material = new BABYLON.StandardMaterial(plate.name + "_labelBgMat", scene);
-  bg.material.emissiveColor = new BABYLON.Color3(0.95, 0.95, 0.95);
-  bg.material.diffuseColor = new BABYLON.Color3(0, 0, 0);
-  bg.material.specularColor = new BABYLON.Color3(0, 0, 0);
-  bg.material.disableLighting = true;
-  bg.material.backFaceCulling = false;
-  bg.material.zOffset = -2;                   // притянуть слой ближе к камере
-
-  // буквы: текстура с белыми буквами на прозрачном фоне, цвет — зелёный
-  const tex = new BABYLON.DynamicTexture(plate.name + "_labelTex", { width:1024, height:256 }, scene, true);
+// Текстура слоя букв: белые буквы на прозрачном фоне. Белые, потому что при
+// disableLighting Babylon выводит только цвет материала, а текстуру в
+// emissiveTexture игнорирует — проба с зелёными буквами прямо в текстуре дала
+// сплошной белый прямоугольник. Зелёный задаёт emissiveColor у буквенного слоя.
+function plateLettersTexture(name) {
+  const tex = new BABYLON.DynamicTexture(name, { width:1024, height:256 }, scene, true);
   tex.hasAlpha = true;
   const g = tex.getContext();
   g.clearRect(0, 0, 1024, 256);
@@ -224,30 +190,54 @@ function plateLayers(plate, localBox, front) {
   g.textBaseline = "middle";
   let size = 150;
   g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
-  const tw = g.measureText("КОЛЕСО").width;
-  if (tw > 900) {
-    size = Math.floor(size * 900 / tw);
+  const w = g.measureText("КОЛЕСО").width;
+  if (w > 820) {
+    size = Math.floor(size * 820 / w);
     g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
   }
-  // Надпись зеркалим по горизонтали. Отражаем только слой букв: сдвиг на
-  // 1024 и масштаб -1 по X оставляют центр (x=512 при textAlign=center)
-  // на месте, так что кегль и подгонка ширины выше остаются в силе.
+  // Надпись зеркалим по горизонтали. Сдвиг на 1024 и масштаб -1 по X оставляют
+  // центр (x=512 при textAlign=center) на месте, так что кегль и подгонка
+  // ширины выше остаются в силе.
   g.save();
   g.translate(1024, 0);
   g.scale(-1, 1);
   g.fillText("КОЛЕСО", 512, 132);
   g.restore();
   tex.update();
+  return tex;
+}
 
-  const fg = makePlane(plate.name + "_label", 0.0012);    // 1,2 мм снаружи фона
-  fg.material = new BABYLON.StandardMaterial(plate.name + "_labelMat", scene);
-  fg.material.opacityTexture = tex;                       // прозрачность — из букв
+function plateLayers(plate, front) {
+  // наружу от таблички: спереди это -Z, сзади +Z. Отсчёт отсюда, иначе на
+  // заднем номере буквенный слой оказывается под фоном и не виден вовсе.
+  const out = front ? -1 : 1;
+
+  // Копия геометрии вместо плоской плоскости: скругление и толщина те же.
+  // clone без newParent наследует родителя оригинала, так что копия едет
+  // вместе с машиной сама.
+  const bg = plate.clone(plate.name + "_label", null, true);
+  bg.isPickable = false;
+  bg.material = new BABYLON.StandardMaterial(plate.name + "_labelMat", scene);
+  bg.material.emissiveColor = new BABYLON.Color3(0.95, 0.95, 0.95);
+  bg.material.diffuseColor = new BABYLON.Color3(0, 0, 0);
+  bg.material.specularColor = new BABYLON.Color3(0, 0, 0);
+  bg.material.disableLighting = true;
+
+  // буквы: вторая копия той же формы вплотную снаружи, прозрачность — из букв
+  const fg = plate.clone(plate.name + "_labelFg", null, true);
+  fg.isPickable = false;
+  fg.position.z = plate.position.z + out * 0.0004;
+  fg.material = new BABYLON.StandardMaterial(plate.name + "_labelFgMat", scene);
+  fg.material.opacityTexture = plateLettersTexture(plate.name + "_labelTex");
   fg.material.emissiveColor = BABYLON.Color3.FromHexString(PLATE_GREEN);
   fg.material.diffuseColor = new BABYLON.Color3(0, 0, 0);
   fg.material.specularColor = new BABYLON.Color3(0, 0, 0);
   fg.material.disableLighting = true;
-  fg.material.backFaceCulling = false;
-  fg.material.zOffset = -4;                               // слой букв — самый ближний
+  fg.material.zOffset = -4;                  // буквы ближе к камере, чем фон
+
+  // Оригинал скрываем: копия стоит на его месте и полностью его закрывает,
+  // поэтому ни цифр, ни красной полосы, ни кромки пластины не видно.
+  plate.isVisible = false;
   return bg;
 }
 
@@ -278,7 +268,7 @@ window.setupPlateLabels = function (meshes) {
     const front = nums[0] && localBox(nums[0]).minimum.z < mn.z;
     for (const n of nums) n.isVisible = false;
 
-    plateLayers(plate, localBox, front);
+    plateLayers(plate, front);
   }
 };
 
