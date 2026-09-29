@@ -20,6 +20,19 @@ const MIRROR_LEVEL = 0.92;      // стекло чуть гасит отраже
 const MIRROR_ANISO = 16;        // фильтрация при взгляде на зеркало под углом
 const MIRROR_ADJ_DEG = 0.5;    // шаг регулировки зеркала, градусы за нажатие
 const MIRROR_ADJ = MIRROR_ADJ_DEG * Math.PI / 180;   // то же в радианах
+// Регулировка зеркал по умолчанию, градусы: поворот по горизонтали (← →) и
+// наклон (↑ ↓). Левое чуть развёрнуто наружу, оба опущены — в салон видно
+// дорогу, а не крышу. Все значения кратны шагу MIRROR_ADJ_DEG, поэтому
+// подгонка к сетке шага их не сдвигает. Задаются в градусах, потому что
+// ровно в градусах их показывает HUD.
+const MIRROR_DEFAULT_DEG = {
+  left:  { yaw: 1.0,  pitch: -9.5 },
+  right: { yaw: 10.5, pitch: -7.5 },
+};
+const mirrorDefault = side => {
+  const d = MIRROR_DEFAULT_DEG[side] || { yaw: 0, pitch: 0 };
+  return { yaw: d.yaw * Math.PI / 180, pitch: d.pitch * Math.PI / 180 };
+};
 
 let mirrorEntries = [];   // { mesh, tex, mat, srcMat, srcVC, point, normal, baseNormal, yaw, pitch }
 let mirrorPlates = null;  // Set мешей-стёкол: их нельзя рисовать в самом RTT
@@ -299,8 +312,10 @@ function mirrorAdjStep(dx, dy) {
 function mirrorAdjReset() {
   const e = mirrorEntries[mirrorAdjSide] || mirrorEntries[0];
   if (!e) return;
-  e.yaw = 0;
-  e.pitch = 0;
+  // сброс возвращает не нули, а штатную настройку этого зеркала
+  const d = mirrorDefault(e.side);
+  e.yaw = d.yaw;
+  e.pitch = d.pitch;
   mirrorHudShow();
 }
 
@@ -344,12 +359,13 @@ function setupMirrors(opts) {
     mat.backFaceCulling = false;
 
     mirrorPlates.add(p.mesh);
+    const side = p.center.x < 0 ? "right" : "left";
     mirrorEntries.push({
       mesh: p.mesh, tex, mat,
       srcMat: p.mesh.material, srcVC: p.mesh.useVertexColors,
-      side: p.center.x < 0 ? "right" : "left",
+      side,
       center: p.center.clone(), baseNormal: n.clone(),
-      yaw: 0, pitch: 0,
+      yaw: mirrorDefault(side).yaw, pitch: mirrorDefault(side).pitch,
     });
   });
   refreshMirrorList(true);
