@@ -102,7 +102,7 @@ syncDvView();
 // стороны своя копия материала, иначе включённый левый зажигает оба фонаря.
 const BLINK=0.8, BLINK_DUTY=0.4;
 let blinkT=0, blinkOn=false;
-let indSides=null, indGlow=null;
+let indSides=null;
 const AMBER=new BABYLON.Color3(1,0.55,0.05);
 
 function setSide(list,on){
@@ -153,7 +153,6 @@ addEventListener('keydown',e=>{
 
 // Фонари включаем только после загрузки модели: до этого их в сцене нет.
 window.setupIndicators=function(meshes){
-  if(indGlow){indGlow.dispose();indGlow=null;}
   indSides=null;
   const ind=meshes.filter(m=>/indicator/i.test(m.name)||/indicator/i.test((m.parent&&m.parent.name)||''));
   if(!ind.length)return;
@@ -182,10 +181,10 @@ window.setupIndicators=function(meshes){
     m.isVisible=false;
   }
   indSides={left,right};
-  // свечение: в сцену попадают только фонари, остальное не трогаем
-  indGlow=new BABYLON.GlowLayer('indGlow',scene,{kernel:32,mainTextureFixedSize:256});
-  indGlow.intensity=0.8;
-  for(const m of left.concat(right))indGlow.addIncludedOnlyMesh(m);
+  // Свечение (GlowLayer) убрано: оно компонуется аддитивно поверх итоговой
+  // картинки и не проверяет глубину, поэтому фонарь за кузовом просвечивал
+  // насквозь. Материал фонаря emissive сам по себе даёт яркое жёлтое пятно,
+  // а перекрытие кузовом теперь работает обычным тестом глубины.
   syncBlinkBtns();applyBlink();
 };
 
