@@ -1330,12 +1330,9 @@ surfaceProbe = probeSurface;
 obstacleProbe = obstacleBlocked;
 objectTick = tickWorld;
 setEditType("cones");
-loadCones();
-for (const t of DRAW_TYPES) loadDraw(t);
-// Первый запуск: сохранённой карты нет — подставляем карту по умолчанию из
-// default-map.js. Дальше пользуемся только localStorage пользователя.
-if (typeof DEFAULT_MAP === "object" && !localStorage.getItem(STORE_CONES) &&
-    !DRAW_TYPES.some((t) => localStorage.getItem(LINE_KEY[t]))) {
+// Карта всегда берётся только из модуля default-map.js — ни загрузки, ни
+// записи в localStorage. Каждый запуск площадка начинается в исходном виде.
+if (typeof DEFAULT_MAP === "object") {
   try { applyMapJson(DEFAULT_MAP); } catch (e) {}
 }
 updateCount();
