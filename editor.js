@@ -350,6 +350,16 @@ function showLen(previewLen) {
 }
 function hideLen() { lineLenEl.hidden = true; }
 
+// Конусы: показываем, какое расстояние от курсора (узла привязки) до ПОСЛЕДНЕГО
+// установленного конуса. Так видно равный шаг при расстановке вдоль трассы.
+let lastCone = null;
+function showConeDist(sx, sz) {
+  if (!lastCone) { lineLenEl.hidden = true; return; }
+  const d = Math.hypot(sx - lastCone.x, sz - lastCone.z);
+  lineLenEl.textContent = "До конуса: " + d.toFixed(2) + " м";
+  lineLenEl.hidden = false;
+}
+
 function updateLinePreview() {
   if (!openLine) return;
   if (editType === "estacada") { updateRampPreview(); return; }
@@ -784,12 +794,17 @@ const drawHint = (t) => DRAWHINTS[t] || DRAWHINTS.lines;
 function setEditType(t) {
   if (t !== editType && editType !== "cones") finishLine();
   editType = t;
+  lineLenEl.hidden = true;
   typeIco.innerHTML = THUMBS[t] ? '<img src="' + THUMBS[t] + '" alt="">' : (TYPE_ICONS[t] || "");
   typeName.textContent = TYPE_NAMES[t] || t;
   setMode(mode);
 }
+// Cones: счётчик расстояния живёт только у расстановки. Любое другое действие —
+// смена режима, типа или выход из редактора — обнуляет точку отсчёта, и новый
+// отсчёт начинается только после следующей установки конуса.
 function setMode(m) {
   finishLine();
+  lastCone = null;
   mode = m;
   for (const b of document.querySelectorAll("#editModes button")) b.classList.toggle("active", b.dataset.mode === m);
   hintline.textContent = editType === "cones" ? HINTS[mode] : drawHint(editType)[mode];
@@ -829,7 +844,10 @@ scene.onPointerObservable.add((pi) => {
         dragging.rotationQuaternion = BABYLON.Quaternion.Identity();
         dragging.userData.knocked = false;
       }
-      if (editType !== "cones" && mode === "place") updateLinePreview();
+      if (editType !== "cones") {
+        if (mode === "place") updateLinePreview();
+        else hideLinePreview();
+      } else if (mode === "place") showConeDist(sx, sz);
       else hideLinePreview();
     } else {
       preview.isVisible = false;
@@ -888,7 +906,7 @@ scene.onPointerObservable.add((pi) => {
       if (p.hit) {
         const px = snapX(p.pickedPoint.x), pz = snapZ(p.pickedPoint.z);
         if (editType !== "cones") addLinePoint(px, pz);
-        else addConeAt(px, pz);
+        else { const cn = addConeAt(px, pz); if (cn) lastCone = { x: px, z: pz }; }
       }
     }
   }
@@ -1010,6 +1028,7 @@ function openEdit(o) {
     setMode(mode);
   } else {
     finishLine();
+    lastCone = null;
     hideLinePreview();
     preview.isVisible = false;
     setGridVisible(false);                // вернулись в езду — сетка не нужна
