@@ -1332,6 +1332,12 @@ objectTick = tickWorld;
 setEditType("cones");
 loadCones();
 for (const t of DRAW_TYPES) loadDraw(t);
+// Первый запуск: сохранённой карты нет — подставляем карту по умолчанию из
+// default-map.js. Дальше пользуемся только localStorage пользователя.
+if (typeof DEFAULT_MAP === "object" && !localStorage.getItem(STORE_CONES) &&
+    !DRAW_TYPES.some((t) => localStorage.getItem(LINE_KEY[t]))) {
+  try { applyMapJson(DEFAULT_MAP); } catch (e) {}
+}
 updateCount();
 updateCounts();
 for (const m of scene.meshes) editorMeshes.add(m);
