@@ -128,7 +128,7 @@ const LINE_KEY = { lines:"gta4_map_lines", curb:"gta4_map_curbs", fence:"gta4_ma
 const LINE_WIDTH = { lines:0.1, curb:0.25, fence:0.05 };
 const LINE_H = { lines:0.006, curb:0.30, fence:1.7 };
 const LINE_Y = { lines:0.0042, curb:0.15, fence:0.85 };
-const EST_SLOPE = 0.16, EST_L2 = 5, EST_W = 4, FENCE_STEP = 3.2, EST_MAX_H = 3.2;
+const EST_SLOPE = 0.16, EST_L2 = 5, EST_W = 7.5, FENCE_STEP = 3.2, EST_MAX_H = 3.2;
 // На какую высоту машина способна въехать на полотно эстакады, м. Порог должен
 // перекрывать разницу высот между носом кузова и передней осью (~1 м пути по
 // подъёму с уклоном 0.16), иначе въезд блокируется ещё до того, как колёса
