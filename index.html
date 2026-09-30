@@ -449,6 +449,11 @@ const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, st
 const scene = new BABYLON.Scene(engine);
 scene.clearColor = new BABYLON.Color4(0.07, 0.08, 0.10, 1);
 scene.useRightHandedSystem = false;
+// Дымка сходится с цветом неба на горизонте: земля не заканчивается краем,
+// а растворяется вдали. Сфера неба затуманивание не трогает — градиент целый.
+scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+scene.fogDensity = 0.0015;
+scene.fogColor = new BABYLON.Color3(0.55, 0.72, 0.94);
 
 const ip = scene.imageProcessingConfiguration;
 ip.toneMappingEnabled = true;
@@ -521,9 +526,15 @@ const sky = BABYLON.MeshBuilder.CreateSphere("sky", { diameter:4000, segments:24
 sky.material = skyMat;
 sky.infiniteDistance = true;
 sky.isPickable = false;
+sky.fogEnabled = false;
 
-const GROUND_SIZE = 320;
+const GROUND_SIZE = 4000;
 const TILE = 8;
+
+// Плоскость земли тянется за горизонт (4000 м >> дальнего плана), а дымка
+// растворяет её в цвет неба раньше, чем достигает края. maxZ держим чуть больше
+// половины плоскости, чтобы камера не обрезала её вдали резким краем.
+cam.maxZ = GROUND_SIZE + 1;
 
 const ground = BABYLON.MeshBuilder.CreateGround("ground", { width:GROUND_SIZE, height:GROUND_SIZE, subdivisions:1 }, scene);
 const gm = new BABYLON.StandardMaterial("gm", scene);
