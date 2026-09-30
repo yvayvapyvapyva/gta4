@@ -924,7 +924,7 @@ scene.onPointerObservable.add((pi) => {
 });
 
 // ── джойстик панорамирования камеры ──────────────────────────────────
-const PAN_SPEED = 34;
+const PAN_SPEED = 5;
 const panState = { x:0, z:0 };
 const joyBase = est("joyBase"), joyKnob = est("joyKnob");
 const JOY_R = 30, JOY_RM = 33;
