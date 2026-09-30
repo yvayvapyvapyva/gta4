@@ -128,6 +128,7 @@ let drawSeq = 0;
 
 const countLinesEl = est("countLines"), countCurbEl = est("countCurb");
 const countFenceEl = est("countFence"), countEstacadaEl = est("countEstacada");
+const lineLenEl = est("lineLen");
 const FINISH_LABELS = {
   lines:"Завершить линию", curb:"Завершить бордюр",
   fence:"Завершить забор", estacada:"Завершить эстакаду",
@@ -331,6 +332,24 @@ const pickGround = () => scene.pick(scene.pointerX, scene.pointerY, (m) => m.nam
 const pickCone = () => scene.pick(scene.pointerX, scene.pointerY, (m) => m.metadata && m.metadata.isCone);
 const pickLine = () => scene.pick(scene.pointerX, scene.pointerY, (m) => m.metadata && m.metadata.isLine);
 
+// Текущая длина линий/бордюров/заборов/эстакад: показываем, чтобы видеть,
+// сколько метров уже нарисовано (с учётом живого участка до курсора).
+const polyLen = (pts) => {
+  let s = 0;
+  for (let i = 1; i < pts.length; i++)
+    s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  return s;
+};
+function showLen(previewLen) {
+  if (editType === "cones" || !openLine || !openLine.pts || !openLine.pts.length) {
+    lineLenEl.hidden = true; return;
+  }
+  const L = polyLen(openLine.pts) + (previewLen || 0);
+  lineLenEl.textContent = "Длина: " + L.toFixed(2) + " м";
+  lineLenEl.hidden = false;
+}
+function hideLen() { lineLenEl.hidden = true; }
+
 function updateLinePreview() {
   if (!openLine) return;
   if (editType === "estacada") { updateRampPreview(); return; }
@@ -345,10 +364,12 @@ function updateLinePreview() {
     previewSeg.scaling.set(LINE_WIDTH[editType], LINE_H[editType], L);
     previewSeg.rotation.y = Math.atan2(dx, dz);
     previewSeg.isVisible = true;
-  } else previewSeg.isVisible = false;
+    showLen(L);
+  } else { previewSeg.isVisible = false; showLen(0); }
 }
 function hideLinePreview() {
   previewSeg.isVisible = false;
+  hideLen();
   if (rampPreviewGroup) { const old = rampPreviewGroup; rampPreviewGroup = null; old.dispose(); }
 }
 function updateRampPreview() {
@@ -360,6 +381,7 @@ function updateRampPreview() {
   const dx = sx - last[0], dz = sz - last[1];
   const D = Math.hypot(dx, dz);
   if (D <= 1e-4) return;
+  showLen(D);
   const h = Math.min(D * EST_SLOPE, 3.2);
   const g = new BABYLON.TransformNode("rampPrev" + (drawSeq++), scene);
   const poly = buildRampMesh(D, h, "rampPrevMesh" + (drawSeq++));
