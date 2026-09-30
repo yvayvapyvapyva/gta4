@@ -877,7 +877,7 @@ addEventListener("pointermove", (e) => {
     CAR.lookPitch = clamp(CAR.lookPitch - (e.clientY - lastY) * k, -0.45, 0.55);
   } else {
     CAR.camYaw -= (e.clientX - lastX) * 0.006;
-    CAR.camPitch = clamp(CAR.camPitch + (e.clientY - lastY) * 0.005, 0.32, 1.45);
+    CAR.camPitch = clamp(CAR.camPitch - (e.clientY - lastY) * 0.005, 0.32, 1.45);
   }
   lastX = e.clientX; lastY = e.clientY;
   CAR.idle = performance.now();
