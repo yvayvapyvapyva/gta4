@@ -28,9 +28,6 @@
   #spd { font-size:44px; font-weight:600; line-height:1; letter-spacing:-2px;
     font-variant-numeric:tabular-nums; text-shadow:0 2px 10px rgba(0,0,0,.6); }
   #spd small { font-size:14px; font-weight:400; color:var(--dim); margin-left:5px; letter-spacing:0; }
-  #gear { min-width:34px; height:44px; display:grid; place-items:center; font-size:22px; font-weight:600;
-    color:var(--acc); background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
-    border-radius:8px; }
   #keys { position:fixed; right:14px; bottom:14px; z-index:5; pointer-events:none;
     color:var(--dim); font-size:11.5px; text-align:right; text-shadow:0 1px 6px rgba(0,0,0,.7); }
   #keys b { color:var(--fg); font-weight:600; }
@@ -45,8 +42,8 @@
      десктопе она компактная (колесо 110px), на телефоне — во всю ширину и
      заметно выше, поэтому считаем её низ от собственной высоты панели. */
   #gearBtn { position:fixed; left:14px; bottom:172px; z-index:7; width:40px; height:40px; padding:0;
-    display:flex; align-items:center; justify-content:center; border-radius:10px; cursor:pointer;
-    color:var(--dim); background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16);
+    display:flex; align-items:center; justify-content:center; border-radius:14px; cursor:pointer;
+    color:#d8e5ee; background:rgba(12,22,32,.85); border:1px solid #2a4257;
     backdrop-filter:blur(6px); -webkit-tap-highlight-color:transparent;
     user-select:none; -webkit-user-select:none; }
   @media (pointer:coarse) {
@@ -54,8 +51,9 @@
   }
   #gearBtn svg { width:20px; height:20px; stroke:currentColor; stroke-width:1.7; fill:none;
     stroke-linecap:round; stroke-linejoin:round; }
-  #gearBtn:hover, #gearBtn.on { color:var(--acc); border-color:var(--acc); background:rgba(255,138,61,.16); }
-  #gearBtn:active { background:var(--acc); color:#12141a; }
+  #gearBtn:hover { border-color:var(--acc); color:var(--acc); }
+  #gearBtn.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
+  #gearBtn:active { background:#ff6d00; border-color:#ff6d00; color:#12141a; }
   body.edit-mode #gearBtn { display:none; }
 
   .win-sec { margin:0 0 16px; }
@@ -81,11 +79,6 @@
   #settingsWin { width:min(340px,94vw); max-height:86vh; overflow-y:auto; }
 
   /* ── редактор площадки ─────────────────────────────────────────── */
-  #mapBtn { position:fixed; right:14px; top:14px; z-index:7; padding:8px 14px; border-radius:9px;
-    font:inherit; font-size:12.5px; color:var(--fg); background:rgba(255,255,255,.08);
-    border:1px solid rgba(255,255,255,.16); backdrop-filter:blur(6px); cursor:pointer; }
-  #mapBtn:hover { background:rgba(255,255,255,.14); }
-  #mapBtn.on { background:rgba(255,138,61,.32); border-color:var(--acc); }
 
   /* панель редактора: карточка снизу слева, джойстик + выбор типа + режимы */
   #mapEdit { position:fixed; left:max(14px,env(safe-area-inset-left,0px)); bottom:14px; z-index:8;
@@ -196,7 +189,7 @@
     display:flex;align-items:center;justify-content:center;touch-action:none}
   .dv-zoombtn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
   #driveCtrl,#driveCtrl *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
-  #mapBtn,#mapEdit *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  #mapEdit *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   .dv-wheelwrap{position:relative;width:min(30vw,500px,calc(50vh - 30px));display:flex;flex-direction:column;
     align-items:flex-end;justify-content:flex-end;pointer-events:none;box-sizing:border-box;padding:0}
   .dv-wheel{position:relative;border-radius:50%;pointer-events:auto;touch-action:none;cursor:grab;
@@ -245,7 +238,6 @@
 <div id="mirrorhud" hidden></div>
 
 <div id="hud">
-  <div id="gear">N</div>
   <div id="spd">0<small>км/ч</small></div>
 </div>
 <div id="keys">
@@ -332,8 +324,6 @@
     </div>
   </div>
 </div>
-
-<button id="mapBtn">Площадка</button>
 
 <div id="mapEdit">
   <div class="me-joy">
@@ -572,7 +562,6 @@ const fill = document.getElementById("fill");
 const msg = document.getElementById("msg");
 const loader = document.getElementById("loader");
 const spdEl = document.getElementById("spd");
-const gearEl = document.getElementById("gear");
 const camNameEl = document.getElementById("camname");
 
 let meshes = [];
@@ -1135,8 +1124,6 @@ function drive(dt) {
   // спидометр
   const kmh = Math.abs(CAR.v) * 3.6;
   spdEl.firstChild.nodeValue = String(Math.round(kmh));
-  const a2 = Math.abs(CAR.v);
-  gearEl.textContent = CAR.v < -0.3 ? "R" : a2 < 0.3 ? "N" : String(clamp(Math.floor(a2 / 9) + 1, 1, 5));
 
   // камера. target пишем напрямую: setTarget() пересчитывает alpha/beta/radius
   // по текущей позиции и каждый кадр уводил бы камеру в сторону.

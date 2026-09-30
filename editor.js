@@ -1004,7 +1004,6 @@ function openEdit(o) {
   editingMap = o;
   document.body.classList.toggle("edit-mode", o);
   est("mapEdit").classList.toggle("open", o);
-  est("mapBtn").classList.toggle("on", o);
   if (!o) { openMapWin(false); openTypeWin(false); }
   if (o) {
     finishLine();
@@ -1043,7 +1042,7 @@ function openEdit(o) {
     applyCamMode();
   }
 }
-est("mapBtn").addEventListener("click", () => openEdit(true));
+est("mapDone").addEventListener("click", () => openEdit(false));
 
 est("mapDone").addEventListener("click", () => openEdit(false));
 
