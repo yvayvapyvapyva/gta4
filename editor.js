@@ -35,7 +35,6 @@ const clampSnap = (v, a, b, c) => Math.max(a, Math.min(b, snapAxis(v, c)));
 const countEl = est("count");
 const hintline = est("hintline");
 const finishLineBtn = est("finishLineBtn");
-const editTypeSel = null;                        // тип выбирается галереей, селекта нет
 
 // ── конусы ────────────────────────────────────────────────────────────
 // Два материала: обычный и высокий (вдвое выше по высоте колонны). Типы в
@@ -84,7 +83,6 @@ function addConeAt(x, z, high) {
   n.position.set(x, surfaceHeight(x, z), z);
   n.userData = { cellKey:k, knocked:false, high:!!high };
   updateCount();
-  saveCones();
   return n;
 }
 
@@ -95,36 +93,13 @@ function deleteCone(n) {
   if (i >= 0) coneNodes.splice(i, 1);
   n.dispose();
   updateCount();
-  saveCones();
 }
 
 function clearCones() { [...coneNodes].forEach(deleteCone); }
 function updateCount() { countEl.textContent = coneNodes.length; }
 
-// ── сохранение конусов в localStorage ─────────────────────────────────
-const STORE_CONES = "gta4_editor_cones";
-function saveCones() {
-  try {
-    localStorage.setItem(STORE_CONES, JSON.stringify(coneNodes.map((n) => [
-      Math.round(n.position.x * 1e4) / 1e4, Math.round(n.position.z * 1e4) / 1e4,
-      n.userData.high ? 1 : 0,
-    ])));
-  } catch (e) {}
-}
-function loadCones() {
-  try {
-    const data = JSON.parse(localStorage.getItem(STORE_CONES) || "[]");
-    if (Array.isArray(data)) {
-      for (const p of data) {
-        if (Array.isArray(p) && typeof p[0] === "number" && typeof p[1] === "number") addConeAt(p[0], p[1], p[2] === 1);
-      }
-    }
-  } catch (e) {}
-}
-
 // ── линии: разметка, бордюр, забор, эстакада ──────────────────────────
 const DRAW_TYPES = ["lines", "curb", "fence", "estacada"];
-const LINE_KEY = { lines:"gta4_map_lines", curb:"gta4_map_curbs", fence:"gta4_map_fences", estacada:"gta4_map_estacadas" };
 const LINE_WIDTH = { lines:0.1, curb:0.25, fence:0.05 };
 const LINE_H = { lines:0.006, curb:0.30, fence:1.7 };
 const LINE_Y = { lines:0.0042, curb:0.15, fence:0.85 };
@@ -435,11 +410,7 @@ function finishLine() {
   openLine = null;
   hideLinePreview();
   syncFinishBtn();
-  saveDraw(editType);
   updateCounts();
-}
-function saveDraw(type) {
-  try { localStorage.setItem(LINE_KEY[type], JSON.stringify(drawStore[type].polys)); } catch (e) {}
 }
 function pushPolyline(type, pts) {
   const groups = [];
@@ -449,20 +420,6 @@ function pushPolyline(type, pts) {
   }
   drawStore[type].polys.push(pts);
   drawStore[type].groups.push(groups);
-}
-function loadDraw(type) {
-  try {
-    const d = JSON.parse(localStorage.getItem(LINE_KEY[type]) || "[]");
-    if (Array.isArray(d)) {
-      for (const poly of d) {
-        if (!Array.isArray(poly)) continue;
-        const pts = poly.filter((p) => Array.isArray(p) && p.length === 2 &&
-          typeof p[0] === "number" && typeof p[1] === "number");
-        if (pts.length >= 2) pushPolyline(type, pts);
-      }
-    }
-    updateCounts();
-  } catch (e) {}
 }
 function findDrawPolyline(mesh) {
   const group = mesh.metadata && mesh.metadata.group;
@@ -482,7 +439,6 @@ function deletePolylineFromMesh(mesh) {
   drawStore[f.type].groups.splice(f.i, 1);
   drawStore[f.type].polys.splice(f.i, 1);
   updateCounts();
-  saveDraw(f.type);
 }
 function clearDraw() {
   finishLine();
@@ -490,7 +446,6 @@ function clearDraw() {
     for (const arr of drawStore[t].groups) for (const g of arr) { try { g.dispose(); } catch (e) {} }
     drawStore[t].polys.length = 0;
     drawStore[t].groups.length = 0;
-    saveDraw(t);
   }
   updateCounts();
 }
@@ -579,7 +534,7 @@ function carRidesEstacada(x, z, y) {
 }
 
 // Бордюры, заборы и бока эстакады: машина не проходит сквозь них.
-function carPointInBands(px, pz, y, dx, dz, skipEstacada) {
+function carPointInBands(px, pz, y, skipEstacada) {
   // Полосы столкновений задаём РЕАЛЬНОЙ половиной толщины меша плюс небольшой
   // зазор на касание. Раньше здесь стояли LINE_WIDTH.curb + 0.18 и 0.4, то есть
   // полная ширина меша принималась за полуширину: к зазору добавлялось ещё
@@ -601,7 +556,6 @@ function carPointInBands(px, pz, y, dx, dz, skipEstacada) {
       }
     }
     if (skipEstacada) return false;
-    if (dx === 0 && dz === 0) return false;
     const hw = EST_W / 2, L2 = EST_L2;
     for (const p of drawStore.estacada.polys) {
       const ax = p[0][0], az = p[0][1], bx = p[1][0], bz = p[1][1];
@@ -655,7 +609,7 @@ function bodyProbePoints() {
   return out;
 }
 
-function obstacleBlocked(x, z, y, dx, dz) {
+function obstacleBlocked(x, z, y) {
   const pts = bodyProbePoints();
   const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);
   const skipEst = carRidesEstacada(x, z, y);
@@ -666,7 +620,7 @@ function obstacleBlocked(x, z, y, dx, dz) {
     // и нос проезжал сквозь забор и бок эстакады насквозь.
     const wx = x + p[0] * c - p[1] * s;
     const wz = z + p[0] * s + p[1] * c;
-    if (carPointInBands(wx, wz, y, dx, dz, skipEst)) return true;
+    if (carPointInBands(wx, wz, y, skipEst)) return true;
   }
   return false;
 }
@@ -897,7 +851,6 @@ scene.onPointerObservable.add((pi) => {
       ud.cellKey = k;
     }
     updateCount();
-    saveCones();
     dragging = null;
     dragOldKey = null;
     editGrab = false;
@@ -1062,8 +1015,6 @@ function openEdit(o) {
     applyCamMode();
   }
 }
-est("mapDone").addEventListener("click", () => openEdit(false));
-
 est("mapDone").addEventListener("click", () => openEdit(false));
 
 // пока идёт правка, машина стоит: едем только объекты и превью
@@ -1289,8 +1240,6 @@ function applyMapJson(data) {
   }
   updateCount();
   updateCounts();
-  for (const t of DRAW_TYPES) saveDraw(t);
-  saveCones();
 }
 function loadMapFile(file) {
   const rd = new FileReader();
@@ -1330,8 +1279,9 @@ surfaceProbe = probeSurface;
 obstacleProbe = obstacleBlocked;
 objectTick = tickWorld;
 setEditType("cones");
-// Карта всегда берётся только из модуля default-map.js — ни загрузки, ни
-// записи в localStorage. Каждый запуск площадка начинается в исходном виде.
+// Карта всегда берётся только из модуля default-map.js: своего хранилища у
+// приложения нет. Каждый запуск площадка начинается в исходном виде, а правки
+// пользователя сохраняются кнопкой «Сохранить карту» в JSON-файл.
 if (typeof DEFAULT_MAP === "object") {
   try { applyMapJson(DEFAULT_MAP); } catch (e) {}
 }

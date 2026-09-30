@@ -931,7 +931,7 @@ let cockpit = null;   // камера салона, едет вместе с к�
 // editor.js подключает surfaceProbe: тот сообщает высоту и нормаль поверхности
 // под точкой (эстакады), а obstacleProbe — где стоят бордюры и заборы.
 // surfaceProbe(x, z, fromY) → {y, nx, ny, nz} | null
-// obstacleProbe(x, z, y, dx, dz) → true, если машину туда не пускать
+// obstacleProbe(x, z, y) → true, если машину туда не пускать
 let surfaceProbe = null;
 let obstacleProbe = null;
 let editorTick = null;   // editor.js перехватывает кадр, пока включён режим правки
@@ -1077,7 +1077,7 @@ function drive(dt) {
     const tryMove = (ddx, ddz) => {
       const tx = rx + ddx + CAR.rearZ * fwd.x, tz = rz + ddz + CAR.rearZ * fwd.z;
       if (sampleSupport(tx, tz, CAR.y).steep > MAX_SLOPE) return "slope";
-      if (obstacleProbe && obstacleProbe(tx, tz, CAR.y, ddx, ddz)) return "wall";
+      if (obstacleProbe && obstacleProbe(tx, tz, CAR.y)) return "wall";
       return { x: tx, z: tz };
     };
     let res = tryMove(dx, dz);
