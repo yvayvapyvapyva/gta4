@@ -577,10 +577,6 @@ const camNameEl = document.getElementById("camname");
 let meshes = [];
 let ready = false;
 
-function human(n) {
-  return n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
-}
-
 // ===================== вождение =====================
 // Модель: вперёд −Z, вверх +Y, +X — левая сторона, ось колёс X.
 const CAR = {
@@ -1164,11 +1160,14 @@ fill.style.background = "";
 // ни земля, ни объекты редактора. Если бы мы обошли всю сцену, меши конусов
 // утащили бы свои узлы под корень машины — и конусы ездили бы вместе с ней.
 const preModelMeshes = new Set(scene.meshes);
+// Реальный размер файла модели — 27 597 404 байта. Прогресс считается от него,
+// а не от ev.total: так шкала всегда соответствует фактическому размеру модели.
+const MODEL_BYTES = 27597404;
 BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   (ev) => {
-    if (ev.lengthComputable) fill.style.width = ((ev.loaded / ev.total) * 100).toFixed(1) + "%";
-    else fill.style.width = "100%";
-    msg.textContent = human(ev.loaded / 1048576) + " / " + human(ev.total / 1048576) + " MB";
+    const pct = Math.min(100, (ev.loaded || 0) / MODEL_BYTES * 100);
+    fill.style.width = pct.toFixed(1) + "%";
+    msg.textContent = Math.round(pct) + "%";
   }
 ).then(() => {
   meshes = scene.meshes.filter(m => !preModelMeshes.has(m) && !editorMeshes.has(m) && m.getTotalVertices() > 0);
