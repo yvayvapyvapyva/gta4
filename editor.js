@@ -38,6 +38,10 @@ const finishLineBtn = est("finishLineBtn");
 const editTypeSel = null;                        // тип выбирается галереей, селекта нет
 
 // ── конусы ────────────────────────────────────────────────────────────
+// Два материала: обычный и высокий (вдвое выше по высоте колонны). Типы в
+// галерее — cones и coneHigh; проверка «это точечный объект» везде через
+// CONE_TYPES, чтобы новые материалы не забывали добавить в ветки расстановки.
+const CONE_TYPES = ["cones", "coneHigh"];
 const coneNodes = [];
 const occupied = new Set();
 const matBase = new BABYLON.StandardMaterial("coneBase", scene);
@@ -50,7 +54,7 @@ const matStripe = new BABYLON.StandardMaterial("coneStripe", scene);
 matStripe.diffuseColor = new BABYLON.Color3(1, 1, 1);
 matStripe.specularColor = new BABYLON.Color3(0, 0, 0);
 
-function createCone() {
+function createCone(high) {
   const node = new BABYLON.TransformNode("cone", scene);
   node.rotationQuaternion = BABYLON.Quaternion.Identity();
   const base = BABYLON.MeshBuilder.CreateBox("coneBaseM", { width:0.25, depth:0.25, height:0.035 }, scene);
@@ -61,19 +65,24 @@ function createCone() {
   const stripe = BABYLON.MeshBuilder.CreateCylinder("coneStripeM",
     { diameterTop:0.10, diameterBottom:0.14, height:0.11, tessellation:24 }, scene);
   stripe.parent = node; stripe.position.y = 0.255; stripe.material = matStripe; stripe.metadata = { isCone:true };
+  if (high) {
+    // Высокий конус: растягиваем колонну строго вверх в 2 раза (основание не
+    // трогаем — оно только становится устойчивее). Полоса уезжает вдвое выше.
+    node.scaling.y = 2;
+  }
   for (const m of [base, body, stripe]) shadow.addShadowCaster(m);
   coneNodes.push(node);
   return node;
 }
 
-function addConeAt(x, z) {
+function addConeAt(x, z, high) {
   const k = cellKey(x, z);
   if (occupied.has(k)) return null;
   occupied.add(k);
-  const n = createCone();
+  const n = createCone(high);
   // конус стоит на опоре: если под ним эстакада, поднимаем на её высоту
   n.position.set(x, surfaceHeight(x, z), z);
-  n.userData = { cellKey:k, knocked:false };
+  n.userData = { cellKey:k, knocked:false, high:!!high };
   updateCount();
   saveCones();
   return n;
@@ -98,6 +107,7 @@ function saveCones() {
   try {
     localStorage.setItem(STORE_CONES, JSON.stringify(coneNodes.map((n) => [
       Math.round(n.position.x * 1e4) / 1e4, Math.round(n.position.z * 1e4) / 1e4,
+      n.userData.high ? 1 : 0,
     ])));
   } catch (e) {}
 }
@@ -106,7 +116,7 @@ function loadCones() {
     const data = JSON.parse(localStorage.getItem(STORE_CONES) || "[]");
     if (Array.isArray(data)) {
       for (const p of data) {
-        if (Array.isArray(p) && typeof p[0] === "number" && typeof p[1] === "number") addConeAt(p[0], p[1]);
+        if (Array.isArray(p) && typeof p[0] === "number" && typeof p[1] === "number") addConeAt(p[0], p[1], p[2] === 1);
       }
     }
   } catch (e) {}
@@ -324,7 +334,7 @@ function updateCounts() {
   countEstacadaEl.textContent = drawStore.estacada.polys.length;
 }
 function syncFinishBtn() {
-  const show = editType !== "cones" && mode === "place" && !!openLine;
+  const show = !CONE_TYPES.includes(editType) && mode === "place" && !!openLine;
   finishLineBtn.style.display = show ? "" : "none";
   finishLineBtn.textContent = FINISH_LABELS[editType] || "Завершить";
 }
@@ -341,7 +351,7 @@ const polyLen = (pts) => {
   return s;
 };
 function showLen(previewLen) {
-  if (editType === "cones" || !openLine || !openLine.pts || !openLine.pts.length) {
+  if (CONE_TYPES.includes(editType) || !openLine || !openLine.pts || !openLine.pts.length) {
     lineLenEl.hidden = true; return;
   }
   const L = polyLen(openLine.pts) + (previewLen || 0);
@@ -781,9 +791,10 @@ const DRAWHINTS = {
 const CURSORS = { place:"crosshair", move:"grab", delete:"pointer" };
 let editType = "cones";
 const typeIco = est("typeIco"), typeName = est("typeName");
-const TYPE_NAMES = { cones:"Конус", lines:"Разметка", curb:"Бордюр", fence:"Забор", estacada:"Эстакада" };
+const TYPE_NAMES = { cones:"Конус", coneHigh:"Высокий конус", lines:"Разметка", curb:"Бордюр", fence:"Забор", estacada:"Эстакада" };
 const TYPE_ICONS = {
   cones:'<svg viewBox="0 0 24 24"><path d="M12 2.6 15.8 21H8.2Z" fill="#ff8c3b" stroke="#1a1200" stroke-width="1.1" stroke-linejoin="round"/><ellipse cx="12" cy="14.4" rx="2.4" ry="1.1" fill="#fff" stroke="#1a1200" stroke-width=".8"/></svg>',
+  coneHigh:'<svg viewBox="0 0 24 24"><path d="M12 1.5 16.4 21H7.6Z" fill="#ff8c3b" stroke="#1a1200" stroke-width="1.1" stroke-linejoin="round"/><ellipse cx="12" cy="17.2" rx="2.2" ry="1" fill="#fff" stroke="#1a1200" stroke-width=".8"/><ellipse cx="12" cy="8.6" rx="2.4" ry="1.05" fill="#fff" stroke="#1a1200" stroke-width=".8"/></svg>',
   lines:'<svg viewBox="0 0 24 24"><rect x="3" y="10.3" width="4" height="1.7" rx=".85" fill="#fff"/><rect x="10" y="10.3" width="4" height="1.7" rx=".85" fill="#fff"/><rect x="17" y="10.3" width="4" height="1.7" rx=".85" fill="#fff"/></svg>',
   curb:'<svg viewBox="0 0 24 24"><rect x="2.5" y="8.6" width="19" height="5.6" rx="1.2" fill="#fff" stroke="#22303a" stroke-width="1"/><rect x="2.5" y="14.2" width="19" height="1.8" rx=".9" fill="#e8eaed" stroke="#22303a" stroke-width=".8"/></svg>',
   fence:'<svg viewBox="0 0 24 24"><rect x="14" y="5" width="2" height="16" rx=".6" fill="#6a7075" stroke="#22303a" stroke-width=".8"/><rect x="18.5" y="5" width="2" height="16" rx=".6" fill="#6a7075" stroke="#22303a" stroke-width=".8"/><rect x="3" y="7" width="17.4" height="1.8" rx=".9" fill="#f2f4f6" stroke="#22303a" stroke-width=".7"/><rect x="3" y="14" width="17.4" height="1.8" rx=".9" fill="#f2f4f6" stroke="#22303a" stroke-width=".7"/></svg>',
@@ -792,7 +803,7 @@ const TYPE_ICONS = {
 const drawHint = (t) => DRAWHINTS[t] || DRAWHINTS.lines;
 
 function setEditType(t) {
-  if (t !== editType && editType !== "cones") finishLine();
+  if (t !== editType && !CONE_TYPES.includes(editType)) finishLine();
   editType = t;
   lineLenEl.hidden = true;
   typeIco.innerHTML = THUMBS[t] ? '<img src="' + THUMBS[t] + '" alt="">' : (TYPE_ICONS[t] || "");
@@ -807,7 +818,7 @@ function setMode(m) {
   lastCone = null;
   mode = m;
   for (const b of document.querySelectorAll("#editModes button")) b.classList.toggle("active", b.dataset.mode === m);
-  hintline.textContent = editType === "cones" ? HINTS[mode] : drawHint(editType)[mode];
+  hintline.textContent = CONE_TYPES.includes(editType) ? HINTS[mode] : drawHint(editType)[mode];
   canvas.style.cursor = CURSORS[mode];
   preview.isVisible = false;
   syncFinishBtn();
@@ -844,7 +855,7 @@ scene.onPointerObservable.add((pi) => {
         dragging.rotationQuaternion = BABYLON.Quaternion.Identity();
         dragging.userData.knocked = false;
       }
-      if (editType !== "cones") {
+      if (!CONE_TYPES.includes(editType)) {
         if (mode === "place") updateLinePreview();
         else hideLinePreview();
       } else if (mode === "place") showConeDist(sx, sz);
@@ -905,8 +916,8 @@ scene.onPointerObservable.add((pi) => {
       const p = pickGround();
       if (p.hit) {
         const px = snapX(p.pickedPoint.x), pz = snapZ(p.pickedPoint.z);
-        if (editType !== "cones") addLinePoint(px, pz);
-        else { const cn = addConeAt(px, pz); if (cn) lastCone = { x: px, z: pz }; }
+        if (!CONE_TYPES.includes(editType)) addLinePoint(px, pz);
+        else { const cn = addConeAt(px, pz, editType === "coneHigh"); if (cn) lastCone = { x: px, z: pz }; }
       }
     }
   }
@@ -1079,7 +1090,7 @@ addEventListener("keydown", (e) => {
     else if (e.code === "Digit2") setMode("move");
     else if (e.code === "Digit3") setMode("delete");
     else {
-      const order = ["cones", "lines", "curb", "fence", "estacada"];
+      const order = ["cones", "coneHigh", "lines", "curb", "fence", "estacada"];
       setEditType(order[(order.indexOf(editType) + 1) % order.length]);
     }
   } else if (e.code === "KeyC" && !e.repeat) {
@@ -1111,7 +1122,7 @@ for (const c of document.querySelectorAll("#typeWin .tg-card")) {
 // ── статичные 3D-превью типов объектов ───────────────────────────────
 // Кадр рендерится через CreateScreenshotUsingRenderTargetAsync в отдельном слое:
 // основная камера этот слой не видит, поэтому превью не мелькают в сцене.
-const THUMBS = { cones:null, lines:null, curb:null, fence:null, estacada:null };
+const THUMBS = { cones:null, coneHigh:null, lines:null, curb:null, fence:null, estacada:null };
 const THUMB_SIZE = 256, THUMB_MASK = 0x20000000, THUMB_K = 2.1;
 const previewFrame = (type) => ({
   a: (type === "fence" || type === "curb") ? Math.PI / 2 : Math.PI / 4,
@@ -1125,7 +1136,7 @@ function buildTypedPreview(type, parent) {
     m.specularColor = new BABYLON.Color3(0.12, 0.12, 0.12);
     return m;
   };
-  if (type === "cones") {
+  if (type === "cones" || type === "coneHigh") {
     const base = BABYLON.MeshBuilder.CreateBox("tb", { width:0.25, depth:0.25, height:0.035 }, scene);
     base.parent = n; base.position.y = 0.0175; base.material = plain("b", [0.82, 0.24, 0.07]);
     const body = BABYLON.MeshBuilder.CreateCylinder("tc",
@@ -1134,6 +1145,7 @@ function buildTypedPreview(type, parent) {
     const st = BABYLON.MeshBuilder.CreateCylinder("ts",
       { diameterTop:0.10, diameterBottom:0.14, height:0.11, tessellation:24 }, scene);
     st.parent = n; st.position.y = 0.255; st.material = plain("s", [1, 1, 1]);
+    if (type === "coneHigh") n.scaling.set(1, 2, 1);
   } else if (type === "lines") {
     const m = BABYLON.MeshBuilder.CreateBox("tl", { width:0.22, height:0.02, depth:0.8 }, scene);
     m.parent = n; m.position.y = 0.01; m.material = plain("l", [1, 1, 1]);
@@ -1202,7 +1214,7 @@ function applyThumbs() {
   for (const c of document.querySelectorAll("#typeWin .tg-card")) fill(c.querySelector(".tg-fallback"), c.dataset.type);
 }
 requestAnimationFrame(() => requestAnimationFrame(async () => {
-  for (const t of ["cones", "lines", "curb", "fence", "estacada"]) await captureThumb(t);
+  for (const t of ["cones", "coneHigh", "lines", "curb", "fence", "estacada"]) await captureThumb(t);
   applyThumbs();
 }));
 
@@ -1218,7 +1230,7 @@ function setMapFileStatus(text, err) {
 function collectMapJson() {
   const map = {
     format: MAP_FORMAT, version: MAP_VERSION, savedAt: new Date().toISOString(),
-    cones: coneNodes.map((n) => [r4(n.position.x), r4(n.position.z)]),
+    cones: coneNodes.map((n) => [r4(n.position.x), r4(n.position.z), n.userData.high ? 1 : 0]),
   };
   for (const t of DRAW_TYPES) map[t] = drawStore[t].polys.map((poly) => poly.map((p) => [r4(p[0]), r4(p[1])]));
   return map;
@@ -1265,7 +1277,7 @@ function applyMapJson(data) {
     for (const c of data.cones) {
       if (!Array.isArray(c)) continue;
       const x = mapNum(c[0]), z = mapNum(c[1]);
-      if (x !== null && z !== null) addConeAt(r4(x), r4(z));
+      if (x !== null && z !== null) addConeAt(r4(x), r4(z), c[2] === 1);
     }
   }
   for (const t of DRAW_TYPES) {
