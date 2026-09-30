@@ -9,20 +9,17 @@
  *     свойствами window и вызываются из главного скрипта.
  *
  * Знак поворота: в index.html угол CAR.steer положителен при повороте налево,
- * поэтому угол руля здесь берётся со знаком минус — по часовой стрелке налево нет.
+ * поэтому положение ручки берётся со знаком минус — ручка влево это налево.
  */
 
 // Полный отворот берём у CAR: он считается по диаметру разворота при загрузке
 // модели, иначе панель разошлась бы с физикой на машинах с другой геометрией.
 const DV_LOCK = () => CAR.maxSteer;
 
-// ── Руль и кнопки «вперёд/назад» ────────────────────────────────
+// ── Руль-ползунок и кнопки «вперёд/назад» ─────────────────────────
 (function(){
   const dv=document.getElementById('driveCtrl');if(!dv)return;
   const fwd=document.getElementById('dvFwd'),back=document.getElementById('dvBack');
-  const wheel=document.getElementById('dvWheel'),rotEl=document.getElementById('dvRot');
-  const WMAX=540;          // градусов поворота руля при полном отвороте
-  let wAng=0,rotDrag=null;
   // Кнопки вперёд/назад: каждый палец запоминается по pointerId, отпускание
   // ловится глобально на window. Без setPointerCapture, чтобы не блокировать мультитач.
   const keyState={forward:new Set(),back:new Set()};
@@ -39,53 +36,67 @@ const DV_LOCK = () => CAR.maxSteer;
   window.addEventListener('pointerup',e=>{releaseKey('forward',e.pointerId);releaseKey('back',e.pointerId);});
   window.addEventListener('pointercancel',e=>{releaseKey('forward',e.pointerId);releaseKey('back',e.pointerId);});
 
-  // Сенсорный руль без захвата указателя — движение отслеживается глобально
-  // по pointerId, поэтому в мультитаче остальные кнопки работают.
-  const setWheel=(ang)=>{
-    wAng=Math.max(-WMAX,Math.min(WMAX,ang));
-    rotEl.style.transform='rotate('+wAng+'deg)';
-    touchSteerEnabled=true;touchSteerAngle=-(wAng/WMAX)*DV_LOCK();
+  // Сенсорный руль-ползунок без захвата указателя — движение отслеживается
+  // глобально по pointerId, поэтому в мультитаче остальные кнопки работают.
+  const slider=document.getElementById('dvSlider'),handle=document.getElementById('dvSliderH');
+  if(!slider||!handle)return;
+  // Ход ручки в пикселях: половина разницы между шириной шкалы и ручки, то есть
+  // ровно от центра до края. Кэшируем и пересчитываем только при изменении
+  // размеров: чтение clientWidth каждый кадр заставляло бы браузер пересчитывать
+  // раскладку прямо в цикле рендера.
+  let travel=1;
+  const measure=()=>{travel=Math.max(1,(slider.clientWidth-handle.offsetWidth)/2);};
+  measure();
+  addEventListener('resize',measure);
+
+  let pos=0,drag=null;   // pos — положение ручки в -1..1, вправо это плюс
+  // Инвариант панели: pos = -steer/DV_LOCK(). Ручка вправо (pos>0) означает
+  // поворот вправо, а CAR.steer положителен при повороте влево, поэтому минус
+  // в обеих формулах. Раньше здесь знак терялся, и при отпускании маркер шкалы
+  // прыгал на противоположную сторону, а сам руль — через сотни градусов.
+  const draw=(p)=>{
+    handle.style.transform='translate(-50%,-50%) translateX('+(p*travel).toFixed(1)+'px)';
+    slider.setAttribute('aria-valuenow',Math.round(p*100));
   };
-  wheel.addEventListener('pointerdown',e=>{
+  const setPos=(p)=>{
+    pos=Math.max(-1,Math.min(1,p));
+    touchSteerEnabled=true;touchSteerAngle=-pos*DV_LOCK();
+    draw(pos);
+  };
+  slider.addEventListener('pointerdown',e=>{
     e.preventDefault();
-    const r=wheel.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
-    const a=Math.atan2(e.clientY-cy,e.clientX-cx);
-    // угол от вертикали вверх: 0 на 12 часах, растёт по часовой стрелке
-    const target=a*180/Math.PI+90;
-    setWheel(target+Math.round((wAng-target)/360)*360);
-    rotDrag={id:e.pointerId,last:a,cx,cy};
+    measure();
+    // Запоминаем точку захвата и ведём ручку по смещению пальца: касание сбоку
+    // от центра не должно дёргать руль в ноль.
+    drag={id:e.pointerId,x:e.clientX,start:pos};
+    slider.classList.add('dragging');
+    setPos(pos);
   });
   window.addEventListener('pointermove',e=>{
-    if(!rotDrag||rotDrag.id!==e.pointerId)return;
+    if(!drag||drag.id!==e.pointerId)return;
     e.preventDefault();
-    const a=Math.atan2(e.clientY-rotDrag.cy,e.clientX-rotDrag.cx);
-    let d=a-rotDrag.last;
-    while(d>Math.PI)d-=Math.PI*2;while(d<-Math.PI)d+=Math.PI*2;
-    rotDrag.last=a;
-    setWheel(wAng+d*180/Math.PI);
+    setPos(drag.start+(e.clientX-drag.x)/travel);
   });
   const endDrag=e=>{
-    if(!rotDrag||rotDrag.id!==e.pointerId)return;
-    rotDrag=null;touchSteerEnabled=false;
+    if(!drag||drag.id!==e.pointerId)return;
+    drag=null;
+    slider.classList.remove('dragging');
+    touchSteerEnabled=false;
   };
   window.addEventListener('pointerup',endDrag);
   window.addEventListener('pointercancel',endDrag);
-  window.addEventListener('blur',()=>{rotDrag=null;touchSteerEnabled=false;});
-  // руль и полоска индикатора догоняют реальный угол колёс, когда его не держат
+  window.addEventListener('blur',()=>{
+    if(!drag)return;
+    drag=null;slider.classList.remove('dragging');touchSteerEnabled=false;
+  });
+  // Когда руль не держат, ползунок показывает реальный угол колёс, а вместе с
+  // ним и возвращается в центр: CAR.steer стремится к нулю сам (в index.html
+  // want=0, а скорость возврата в 1.6 раза выше обычной). Пружинить ручку через
+  // CSS не нужно — она и так едет по физике, иначе визуал отставал бы от колёс.
   window.syncDvWheel=()=>{
-    const lk=DV_LOCK();
-    let cur;
-    // Инвариант из setWheel: touchSteerAngle = -(wAng/WMAX)*DV_LOCK(), то есть
-    // cur = touchSteerAngle/DV_LOCK() = -(wAng/WMAX) — СО ЗНАКОМ МИНУС.
-    // Раньше здесь стояло cur=wAng/WMAX, а после отпускания ещё и
-    // wAng=(CAR.steer/lk)*WMAX: минус терялся в обеих строках, и при отпускании
-    // маркер шкалы прыгал на противоположную сторону, а сам руль — через сотни
-    // градусов (замер: rotate(180deg) -> rotate(-93.6deg)).
-    if(rotDrag)cur=-wAng/WMAX;
-    else{wAng=-(CAR.steer/lk)*WMAX;cur=CAR.steer/lk;}
-    rotEl.style.transform='rotate('+wAng+'deg)';
-    const ind=document.getElementById('dvIndMarker');
-    if(ind)ind.style.left=(50-cur*48)+'%';
+    if(drag)return;
+    pos=Math.max(-1,Math.min(1,-CAR.steer/DV_LOCK()));
+    draw(pos);
   };
 })();
 
