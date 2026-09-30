@@ -979,15 +979,18 @@ function buildGridAxes() {
   if (gridMesh) { gridMesh.dispose(); gridMesh = null; }
   if (gridAxes) { gridAxes.dispose(); gridAxes = null; }
   const h = MAP_HALF;
-  gridMesh = BABYLON.MeshBuilder.CreateLineSystem("grid", { lines: gridLines(GRID_STEP, h, parkX, parkZ, 0.01) }, scene);
-  gridMesh.color = new BABYLON.Color3(0.30, 0.30, 0.30);
+  gridMesh = BABYLON.MeshBuilder.CreateLineSystem("grid", { lines: gridLines(GRID_STEP, h, parkX, parkZ, 0.015) }, scene);
+  // Линии в CreateLineSystem красятся emissive-цветом, так что светом их не
+  // утащить, но слишком тёмный цвет тонет в ярком от солнца асфальте. Держим
+  // заметно светлее асфальта, а оси — почти белые, чтобы «вида сверху» хватало.
+  gridMesh.color = new BABYLON.Color3(0.37, 0.37, 0.41);
   gridMesh.isPickable = false;
   gridMesh.isVisible = vis;
   gridAxes = BABYLON.MeshBuilder.CreateLineSystem("axes", { lines: [
-    [new BABYLON.Vector3(parkX, 0.02, parkZ - h), new BABYLON.Vector3(parkX, 0.02, parkZ + h)],
-    [new BABYLON.Vector3(parkX - h, 0.02, parkZ), new BABYLON.Vector3(parkX + h, 0.02, parkZ)],
+    [new BABYLON.Vector3(parkX, 0.025, parkZ - h), new BABYLON.Vector3(parkX, 0.025, parkZ + h)],
+    [new BABYLON.Vector3(parkX - h, 0.025, parkZ), new BABYLON.Vector3(parkX + h, 0.025, parkZ)],
   ]}, scene);
-  gridAxes.color = new BABYLON.Color3(0.55, 0.55, 0.55);
+  gridAxes.color = new BABYLON.Color3(0.70, 0.70, 0.75);
   gridAxes.isPickable = false;
   gridAxes.isVisible = vis;
 }
@@ -997,11 +1000,17 @@ function setGridVisible(o) {
 }
 
 // ── вход и выход из режима правки ────────────────────────────────────
+let sunEditorIntensity = null;              // запоминаем, чтобы приглушить солнце в правке
 function openEdit(o) {
   if (o === editOn) return;
   if (typeof openSettings === "function") openSettings(false);
   editOn = o;
   editingMap = o;
+  // В режиме правки сетку тяжело читать: её линии светятся сами, но яркий —
+  // почти вертикальный — солнечный свет выжигает асфальт и съедает контраст.
+  // На время правки опускаем солнце и возвращаем яркость при выходе.
+  if (o && sunEditorIntensity === null) sunEditorIntensity = sun.intensity;
+  sun.intensity = (o ? Math.min(sunEditorIntensity, 1.7) : sunEditorIntensity);
   document.body.classList.toggle("edit-mode", o);
   est("mapEdit").classList.toggle("open", o);
   if (!o) { openMapWin(false); openTypeWin(false); }
