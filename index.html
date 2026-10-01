@@ -1165,8 +1165,10 @@ function drive(dt) {
   if (CAR.mode === 0) {
     BABYLON.Vector3.LerpToRef(camTarget, new BABYLON.Vector3(p.x, p.y + 0.75, p.z), 1 - Math.exp(-dt * 9), camTarget);
     cam.target.copyFrom(camTarget);
-    // возврат камеры за спину по реальному времени, а не по числу кадров
-    if (!drag && performance.now() - CAR.idle > 1600) CAR.camYaw *= Math.max(0, 1 - dt * 1.2);
+    // возврат камеры за спину по реальному времени, а не по числу кадров.
+    // Задержка 3 с (было 1.6): столько ждём после последнего касания, прежде
+    // чем угол начнёт затухать к нулю.
+    if (!drag && performance.now() - CAR.idle > 3000) CAR.camYaw *= Math.max(0, 1 - dt * 1.2);
     const k = 1 - Math.exp(-dt * 5);
     cam.alpha = wrapAngle(cam.alpha + wrapAngle((CAR.yaw + Math.PI / 2 + CAR.camYaw) - cam.alpha) * k);
     cam.beta += (CAR.camPitch - cam.beta) * (1 - Math.exp(-dt * 7));
