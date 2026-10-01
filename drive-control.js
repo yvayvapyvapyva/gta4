@@ -408,3 +408,19 @@ document.addEventListener('selectstart',e=>{
   const t=e.target;
   if(t&&t.closest&&t.closest('#driveCtrl'))e.preventDefault();
 });
+
+// ── Зум страницы двойным тапом (iPad) ───────────────────────────
+// CSS тут не помогает: Safari с iOS 10 игнорирует user-scalable=no в meta,
+// а touch-action:none на html,body двойной тап на iPad всё равно пропускает.
+// Ловим жест по касаниям: iOS распознаёт двойной тап через touchend, и его
+// умолчание (зум) отменяется именно там. preventDefault() в pointerdown из
+// обработчиков кнопок от зума не спасает — событие другое.
+//
+// Считаем через e.detail (счётчик тапов, в Safari работает): detail>1 — это
+// второй и последующие тапы, их и гасим. Одиночный тап не трогаем, поэтому
+// обычное нажатие на кнопку зума по-прежнему срабатывает.
+document.addEventListener('touchend',e=>{
+  if(e.detail>1)e.preventDefault();
+},{passive:false});
+// Пинч-зум: на iOS свой жест, гасится отдельно от двойного тапа.
+document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
