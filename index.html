@@ -1022,15 +1022,26 @@ function drive(dt) {
   const throttle = gas - back;
   const steerIn = left - right;
 
-  // руль: полный отворот задан геометрией (CAR.maxSteer) и не гасится скоростью,
-  // поэтому радиус разворота одинаков на любом ходу. Скорость доворота задана
-  // CAR.steerLockToLock — временем на поворот от края до края (1 секунда), в
-  // центральное положение руль возвращается быстрее.
+  // Ползунок и колёса связаны 1:1: куда ведёт ползунок, там сразу стоят колёса,
+  // без рампы и догоняющего задерживающего шага. Раньше угол шёл к цели со
+  // скоростью CAR.steerLockToLock, и колёса заметно отставали от пальца — при
+  // резком довороте руль ещё доворачивал, когда машина уже входила в поворот.
+  // Полный отворот задан геометрией (CAR.maxSteer) и не гасится скоростью,
+  // поэтому радиус разворота одинаков на любом ходу.
   const maxSteer = CAR.maxSteer;
-  const want = touchSteerEnabled ? touchSteerAngle : steerIn * maxSteer;
-  const steerRate = 2 * maxSteer / CAR.steerLockToLock;  // рад/с
-  const rate = (want === 0 ? steerRate * 1.6 : steerRate) * dt;
-  CAR.steer += clamp(want - CAR.steer, -rate, rate);
+  if (touchSteerEnabled) {
+    CAR.steer = touchSteerAngle;
+  } else {
+    // Клавиатура дискретна: A/D сразу дают полный отворот, поэтому рампа здесь
+    // лишь делает нажатие не мгновенным, зато отпускание возвращает руль в центр
+    // мягко. Множитель 2 — по просьбе управлять рулем с клавиатуры вдвое быстрее
+    // (полный отворот за 0.25 с вместо 0.5), а ползунок уже мгновенный.
+    // Возврат к центру остаётся в 1.6 раза быстрее доворота, то есть 0.16 с.
+    const want = steerIn * maxSteer;
+    const steerRate = 2 * maxSteer / CAR.steerLockToLock * 2;  // рад/с
+    const rate = (want === 0 ? steerRate * 1.6 : steerRate) * dt;
+    CAR.steer += clamp(want - CAR.steer, -rate, rate);
+  }
 
   // продольная динамика
   let a = 0;
