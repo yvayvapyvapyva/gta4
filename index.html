@@ -11,14 +11,19 @@
   /* Safari (iPhone): долгое нажатие выделяет текст/вызывает контекстное меню,
      двойной тап и пинч приближают страницу. Глушим это для всего приложения:
      и user-select, и touch-callout (иначе на iOS не наследуются надёжно),
-     а touch-action:manipulation снимает зум по двойному тапу и задержку тапа. */
+     а touch-action:none на html,body запрещает зум и прокрутку целиком. */
   * { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none;
     -webkit-tap-highlight-color:transparent; }
   html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--fg);
     font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
     -webkit-tap-highlight-color:transparent; -webkit-user-drag:none;
-    touch-action:manipulation; overscroll-behavior:none; }
+    /* none, а не manipulation: запрещает любой жест масштабирования и
+       прокрутки страницы, включая двойной тап на iPad. manipulation гасит
+       только двойной тап, а пинч оставляет. Скроллить тут нечего — игра целиком
+       на канвасе, поэтому запрет безопасен; если появится элемент, которому
+       нужен пинч, гасить придётся точечно. */
+    touch-action:none; overscroll-behavior:none; }
   #view { width:100%; height:100%; display:block; touch-action:none; outline:none; }
 
   #loader { position:fixed; inset:0; display:grid; place-items:center; background:var(--bg); z-index:10; transition:opacity .5s; }
@@ -187,7 +192,7 @@
   .dv-aux>.dv-btn{font-size:clamp(15px,4.4vw,26px)}
   .dv-btn{width:calc((min(30vw,500px,50vh - 30px) - 8px)/2);aspect-ratio:1;font-size:clamp(20px,7vw,40px);
     color:#d8e5ee;background:rgba(12,22,32,.85);border:1px solid #2a4257;border-radius:14px;cursor:pointer;
-    touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
     display:flex;align-items:center;justify-content:center}
   .dv-btn.on,.dv-btn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
   .dv-btn.active{background:#62d0df;color:#1a1200;border-color:#62d0df}
@@ -196,12 +201,12 @@
   .dv-blink{pointer-events:auto;
     font-size:clamp(15px,4.4vw,26px);color:#fff;background:rgba(12,22,32,.85);border:1px solid #2a4257;
     border-radius:50%;cursor:pointer;user-select:none;-webkit-user-select:none;
-    -webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;touch-action:none}
+    -webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;touch-action:manipulation}
   .dv-blink.active{background:#ffd60a;color:#1a1200;border-color:#ffd60a}
   .dv-zoombtn{pointer-events:auto;font-size:22px;line-height:1;color:#fff;
     background:rgba(12,22,32,.85);border:1px solid #2a4257;border-radius:10px;cursor:pointer;
     user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
-    display:flex;align-items:center;justify-content:center;touch-action:none}
+    display:flex;align-items:center;justify-content:center;touch-action:manipulation}
   .dv-zoombtn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
   #driveCtrl,#driveCtrl *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   #mapEdit *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
