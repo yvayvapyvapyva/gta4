@@ -104,19 +104,23 @@ const DV_LOCK = () => CAR.maxSteer;
 const dvView=document.getElementById('dvView');
 function syncDvView(){
   if(!dvView)return;
+  // Свободной камеры в езде нет: в списке для подписи она ещё есть (ею
+  // пользуется редактор), но кнопка показывает только следующий из двух
+  // ездовых режимов.
   const modes=(typeof CAM_MODES!=='undefined')?CAM_MODES:['следом','салон','свободная'];
+  const driveCount=(typeof CAM_DRIVE_MODES!=='undefined')?CAM_DRIVE_MODES:2;
   const name=modes[CAR.mode]||'';
-  const next=modes[(CAR.mode+1)%modes.length];
+  const next=modes[(CAR.mode+1)%driveCount];
   dvView.textContent='👁';
   dvView.classList.toggle('active',CAR.mode===1);
   dvView.setAttribute('aria-label','Вид: '+name+'. Переключить на «'+next+'»');
 }
 if(dvView)dvView.addEventListener('click',()=>{
   if(!ready)return;
-  // Раньше было CAR.mode=CAR.mode===1?0:1 — кнопка знала только салон и «следом»,
-  // свободный вид был недостижим. Теперь циклит все виды, как клавиша C.
+  // Свободный вид убран из езды, как и в клавише C: ходим только по
+  // «следом» и «салон». Ветка на случай отсутствия toggleCam держит ту же логику.
   if(typeof toggleCam==='function')toggleCam();
-  else{CAR.mode=(CAR.mode+1)%3;applyCamMode();}
+  else{CAR.mode=CAR.mode===1?0:1;applyCamMode();}
 });
 syncDvView();
 

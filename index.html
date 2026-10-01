@@ -444,6 +444,15 @@ const CAM_DIST_MAX = 90;                        // м, дальше не отъ�
 // 1 — угол поворота точно равен угловому смещению точки на экране; больше —
 // быстрее (удобнее на телефоне, где полный обзор одним пальцем не прокрутить).
 const LOOK_DRAG_SCALE = 1;
+// Плавность щипка. Раньше множитель брался прямо из отношения расстояний
+// между пальцами к каждому событию pointermove, поэтому зум дёргался ровно так
+// же резко, как двигались пальцы, да ещё и с частотой событий, а не кадров.
+// Теперь два ограничителя: PINCH_GAIN режет чувствительность (меньше 1 —
+// разводить пальцы приходится дальше), а PINCH_SMOOTH догоняет цель по
+// реальному времени со скоростью 1/с, поэтому отклик одинаков при любом
+// количестве событий pointermove.
+const PINCH_GAIN = 0.45;
+const PINCH_SMOOTH = 14;   // 1/с, время реакции ~0.07 с
 
 const canvas = document.getElementById("view");
 const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, stencil:true }, true);
@@ -641,7 +650,11 @@ const CAR = {
   idle: performance.now(),
 };
 
+// Полный список индексов: свободная камера нужна редактору карты (мышь
+// орбитит и зумит), поэтому индекс 2 остаётся. В езде она недостижима —
+// переключатель ходит только по первым CAM_DRIVE_MODES режимам.
 const CAM_MODES = ["следом", "салон", "свободная"];
+const CAM_DRIVE_MODES = 2;   // в езде доступны только «следом» и «салон»
 const COCKPIT_PITCH = 0.16;   // базовый наклон взгляда вниз, рад
 
 const keys = Object.create(null);
@@ -725,7 +738,9 @@ function applyCamMode() {
 }
 
 function toggleCam() {
-  CAR.mode = (CAR.mode + 1) % CAM_MODES.length;
+  // Свободная камера в езде убрана: ходим только по «следом» и «салон».
+  // Из режима 2 (он возможен только в редакторе) тоже возвращаемся в езду.
+  CAR.mode = CAR.mode === 1 ? 0 : 1;
   applyCamMode();
 }
 
@@ -848,6 +863,23 @@ function setCamFov(f) {
   if (cockpit) cockpit.fov = CAR.camFov;
 }
 
+// Один шаг щипка: сколько именно изменить масштаб за это событие pointermove.
+// Отношение расстояний уходит в степень PINCH_GAIN (меньше 1 — мягче), а сама
+// величина догоняется по времени сглаживания PINCH_SMOOTH. Итог не зависит от
+// того, сколько событий пришло за кадр: плавно и одинаково на 30 и 120 Гц.
+let pinchPrevT = 0;
+function pinchStep(prev, cur) {
+  const target = Math.pow(cur / prev, PINCH_GAIN);
+  const now = performance.now();
+  const dt = pinchPrevT ? Math.min(0.1, (now - pinchPrevT) / 1000) : 0;
+  pinchPrevT = now;
+  // на первом событии шага ещё не с чем сравнивать, поэтому усиливаем целевой
+  // множитель на ту же долю, что и при нулевом dt — 1 означало бы мгновенный
+  // перескок на всю величину, то есть ровно прежнюю резкость
+  const k = dt > 0 ? 1 - Math.exp(-dt * PINCH_SMOOTH) : PINCH_SMOOTH / 60;
+  return target + (1 - target) * (1 - k);
+}
+
 // ручной облёт камеры мышью (в режимах «следом» и «салон»)
 let drag = false, lastX = 0, lastY = 0;
 const ptrs = new Map();   // активные указатели — по ним ловим щипок
@@ -865,8 +897,8 @@ addEventListener("pointermove", (e) => {
   if (CAR.mode === 1 && ptrs.size >= 2) {
     const [a, b] = [...ptrs.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
-    // раздвинули пальцы — приблизили
-    if (pinch > 0 && d > 0) setCamFov(CAR.camFov * (pinch / d));
+    // раздвинули пальцы — приблизили (angle через gain, см. PINCH_GAIN)
+    if (pinch > 0 && d > 0) setCamFov(CAR.camFov * pinchStep(pinch, d));
     pinch = d;
     return;
   }
@@ -877,7 +909,7 @@ addEventListener("pointermove", (e) => {
   if (CAR.mode === 0 && ptrs.size >= 2) {
     const [a, b] = [...ptrs.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (pinch > 0 && d > 0) CAR.camDist = clamp(CAR.camDist * (pinch / d), CAM_DIST_MIN, CAM_DIST_MAX);
+    if (pinch > 0 && d > 0) CAR.camDist = clamp(CAR.camDist * pinchStep(pinch, d), CAM_DIST_MIN, CAM_DIST_MAX);
     pinch = d;
     return;
   }
@@ -902,13 +934,13 @@ addEventListener("pointermove", (e) => {
 });
 const dropPointer = (e) => {
   ptrs.delete(e.pointerId);
-  if (ptrs.size < 2) pinch = 0;
+  if (ptrs.size < 2) { pinch = 0; pinchPrevT = 0; }
   if (drag) CAR.idle = performance.now();
   drag = false;
 };
 addEventListener("pointerup", dropPointer);
 addEventListener("pointercancel", dropPointer);
-addEventListener("blur", () => { ptrs.clear(); pinch = 0; drag = false; });
+addEventListener("blur", () => { ptrs.clear(); pinch = 0; pinchPrevT = 0; drag = false; });
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   if (CAR.mode === 1) { setCamFov(CAR.camFov * (1 + Math.sign(e.deltaY) * 0.07)); return; }
