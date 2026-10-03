@@ -74,6 +74,19 @@
   #gearBtn.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
   #gearBtn:active { background:#ff6d00; border-color:#ff6d00; color:#12141a; }
   body.edit-mode #gearBtn { display:none; }
+  #recBtn { position:fixed; right:max(14px,env(safe-area-inset-right,0px));
+    top:calc(max(14px,env(safe-area-inset-top,0px)) + 54px); z-index:7; width:40px; height:40px; padding:0;
+    display:flex; align-items:center; justify-content:center; border-radius:14px; cursor:pointer;
+    background:rgba(12,22,32,.85); border:1px solid #2a4257;
+    backdrop-filter:blur(6px); -webkit-tap-highlight-color:transparent;
+    user-select:none; -webkit-user-select:none; }
+  #recBtn svg { width:22px; height:22px; }
+  #recBtn:hover { border-color:#ff3b3b; background:rgba(255,59,59,.15); }
+  #recBtn.recording { background:rgba(255,59,59,.25); border-color:#ff3b3b; animation:pulse 1s infinite; }
+  #recBtn.recording svg { animation:blink 1s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow:0 0 0 0 rgba(255,59,59,.4); } 50% { box-shadow:0 0 0 8px rgba(255,59,59,0); } }
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  body.edit-mode #recBtn { display:none; }
   .win-btns button.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
 
   .win-sec { margin:0 0 16px; }
@@ -296,6 +309,10 @@
   </svg>
 </button>
 
+<button id="recBtn" aria-label="Запись реплея" title="Запись реплея (R)">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="#ff3b3b"/></svg>
+</button>
+
 <div id="settingsBackdrop" class="win-backdrop"></div>
 <div id="settingsWin" class="win">
   <h3>Настройки<button id="settingsClose" aria-label="Закрыть">✕</button></h3>
@@ -306,6 +323,14 @@
       <button id="setEditBtn">Редактировать площадку</button>
     </div>
     <div class="win-note">Конусы, разметка, бордюры, заборы и эстакады</div>
+  </div>
+
+  <div class="win-sec">
+    <h4>Реплеи</h4>
+    <div class="win-btns">
+      <button id="replayListBtn">Список сохранённых</button>
+    </div>
+    <div class="win-note">Запись: кнопка ● справа сверху или клавиша <b>R</b></div>
   </div>
 
   <div class="win-sec">
@@ -442,6 +467,14 @@
     <button id="mapSaveBtn">Сохранить карту</button>
     <button id="mapLoadBtn">Загрузить карту</button>
   </div>
+</div>
+
+<div id="replayBackdrop" class="win-backdrop"></div>
+<div id="replayWin" class="win">
+  <h3>Сохранённые реплеи<button id="replayClose" aria-label="Закрыть">✕</button></h3>
+  <div id="replayList" style="max-height:60vh; overflow-y:auto;"></div>
+  <div class="win-note">Клик — воспроизвести. Shift+клик — удалить.</div>
+</div>
   <div id="mapFileStatus"></div>
   <button id="mapClearAll">Очистить карту</button>
 </div>
@@ -834,6 +867,10 @@ document.getElementById("setEditBtn").addEventListener("click", () => {
   openSettings(false);
   if (typeof openEdit === "function") openEdit(true);
 });
+document.getElementById("replayListBtn")?.addEventListener("click", () => {
+  openSettings(false);
+  if (typeof window.Replay?.openList === "function") window.Replay.openList(true);
+});
 setCamBtn.addEventListener("click", () => { toggleCam(); syncSettings(); });
 
 // X-ray: прозрачный кузов (кнопка на нижней панели — dvXray)
@@ -1139,14 +1176,31 @@ function applySupport() {
 }
 
 function drive(dt) {
+  // === REPLAY: воспроизведение ===
+  if (typeof replayTick === 'function' && window.Replay?.isPlaying?.()) {
+    if (!replayTick(dt)) {
+      // реплей закончился или не активен — продолжаем нормальную езду
+    } else {
+      // в режиме воспроизведения входа уже подставлены в applyReplayFrame
+      // запрещаем пользовательский ввод
+    }
+  }
+
+  // === REPLAY: запись ===
+  if (typeof captureFrame === 'function' && window.Replay?.isRecording?.()) {
+    captureFrame(performance.now());
+  }
+
+  // Входы: клавиатура/тач (игнорируются во время воспроизведения)
   const gas = keys.KeyW ? 1 : 0;
   const back = keys.KeyS ? 1 : 0;
   const left = keys.KeyA ? 1 : 0;
   const right = keys.KeyD ? 1 : 0;
-  const hand = keys.Space ? 1 : 0;
+  const hand = (window._replayHandbrake !== undefined) ? window._replayHandbrake : (keys.Space ? 1 : 0);
 
   // Камера: стрелки в игровом цикле (плавно, не сбиваются другими клавишами)
-  if (!mirrorAdjActive?.()) {
+  // Во время реплея не трогаем камеру — она уже выставлена из кадра
+  if (!window.Replay?.isPlaying?.() && !mirrorAdjActive?.()) {
     const step = 0.00875 * 60 * dt; // ~0.5°/s при 60fps, масштабируется по dt
     if (keys.ArrowLeft) {
       if (CAR.mode === 0) { CAR.camYaw -= step; CAR.idle = performance.now(); }
@@ -1178,9 +1232,11 @@ function drive(dt) {
   // резком довороте руль ещё доворачивал, когда машина уже входила в поворот.
   // Полный отворот задан геометрией (CAR.maxSteer) и не гасится скоростью,
   // поэтому радиус разворота одинаков на любом ходу.
-  const maxSteer = CAR.maxSteer;
+const maxSteer = CAR.maxSteer;
   if (touchSteerEnabled) {
     CAR.steer = touchSteerAngle;
+  } else if (window.Replay?.isPlaying?.()) {
+    // Во время реплея CAR.steer уже задан из кадра — не применяем рампу
   } else {
     // Клавиатура дискретна: A/D сразу дают полный отворот, поэтому рампа здесь
     // лишь делает нажатие не мгновенным, зато отпускание возвращает руль в центр
@@ -1671,7 +1727,9 @@ engine.runRenderLoop(() => {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
   if (ready) {
-    if (editorTick) editorTick(dt); else drive(dt);
+    // Во время реплея используем фиксированный dt для детерминированности
+    const replayFixedDt = (window.Replay?.isPlaying?.() && window.Replay?.FIXED_DT) ? window.Replay.FIXED_DT : dt;
+    if (editorTick) editorTick(dt); else drive(replayFixedDt);
     // конусы проверяем ПОСЛЕ движения машины — как в simulator2: иначе удар
     // считается по позиции прошлого кадра и на большой скорости конус
     // проскакивает между проверками
@@ -1692,5 +1750,6 @@ engine.runRenderLoop(() => {
 <script src="mirror.js"></script>
 <script src="drive-control.js"></script>
 <script src="sounds.js"></script>
+<script src="replay.js"></script>
 </body>
 </html>
