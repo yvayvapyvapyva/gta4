@@ -37,13 +37,16 @@ const DV_LOCK = () => CAR.maxSteer;
     draw(pos);
   };
   // Клик/тап по полосе слайдера — прыжок ручки к месту касания
+  // Тап по ручке — начало драга без прыжка
   slider.addEventListener('pointerdown', e => {
-    if (e.target === handle) return; // если нажали на ручку — начинаем драг
     measure();
-    const rect = slider.getBoundingClientRect();
-    const p = (e.clientX - rect.left - rect.width / 2) / travel;
-    setPos(p);
-    // начинаем драг от этой позиции
+    const isHandle = e.target === handle;
+    if (!isHandle) {
+      const rect = slider.getBoundingClientRect();
+      const p = (e.clientX - rect.left - rect.width / 2) / travel;
+      setPos(p);
+    }
+    // начинаем драг (и для ручки, и для полосы)
     drag = { id: e.pointerId, startPos: pos, startX: e.clientX };
     slider.classList.add('dragging');
   });
@@ -84,13 +87,16 @@ const DV_LOCK = () => CAR.maxSteer;
     draw(pos);
   };
   // Клик/тап по полосе слайдера — прыжок ручки к месту касания
+  // Тап по ручке — начало драга без прыжка
   slider.addEventListener('pointerdown', e => {
-    if (e.target === handle) return; // если нажали на ручку — начинаем драг
     measure();
-    const rect = slider.getBoundingClientRect();
-    const p = -(e.clientY - rect.top - rect.height / 2) / travel;
-    setPos(p);
-    // начинаем драг от этой позиции
+    const isHandle = e.target === handle;
+    if (!isHandle) {
+      const rect = slider.getBoundingClientRect();
+      const p = -(e.clientY - rect.top - rect.height / 2) / travel;
+      setPos(p);
+    }
+    // начинаем драг (и для ручки, и для полосы)
     drag = { id: e.pointerId, startPos: pos, startY: e.clientY };
     slider.classList.add('dragging');
   });
