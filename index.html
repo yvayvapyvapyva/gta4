@@ -822,10 +822,11 @@ function toggleXray() {
   if (xrayBtn) xrayBtn.classList.toggle("on", xrayOn);
 
   const mat = getXrayMaterial();
+  const isIndicator = (m) => /indicator/i.test(m.name) || /indicator/i.test((m.parent && m.parent.name) || '');
 
   if (xrayOn) {
     for (const m of meshes) {
-      if (!m.material) continue;
+      if (!m.material || isIndicator(m)) continue;  // пропускаем поворотники
       if (!originalMaterials.has(m)) originalMaterials.set(m, m.material);
       m.material = mat;
       m.renderingGroupId = 1;
@@ -833,6 +834,7 @@ function toggleXray() {
     }
   } else {
     for (const m of meshes) {
+      if (isIndicator(m)) continue;  // поворотники не трогаем
       const orig = originalMaterials.get(m);
       if (orig) {
         m.material = orig;
