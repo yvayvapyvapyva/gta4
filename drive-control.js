@@ -36,11 +36,16 @@ const DV_LOCK = () => CAR.maxSteer;
     touchSteerEnabled = true; touchSteerAngle = -pos * DV_LOCK();
     draw(pos);
   };
+  // Клик/тап по полосе слайдера — прыжок ручки к месту касания
   slider.addEventListener('pointerdown', e => {
+    if (e.target === handle) return; // если нажали на ручку — начинаем драг
     measure();
+    const rect = slider.getBoundingClientRect();
+    const p = (e.clientX - rect.left - rect.width / 2) / travel;
+    setPos(p);
+    // начинаем драг от этой позиции
     drag = { id: e.pointerId, startPos: pos, startX: e.clientX };
     slider.classList.add('dragging');
-    setPos(pos);
   });
   window.addEventListener('pointermove', e => {
     if (!drag || drag.id !== e.pointerId) return;
@@ -78,11 +83,16 @@ const DV_LOCK = () => CAR.maxSteer;
     touchThrottle = pos;  // аналоговое значение -1..1
     draw(pos);
   };
+  // Клик/тап по полосе слайдера — прыжок ручки к месту касания
   slider.addEventListener('pointerdown', e => {
+    if (e.target === handle) return; // если нажали на ручку — начинаем драг
     measure();
+    const rect = slider.getBoundingClientRect();
+    const p = -(e.clientY - rect.top - rect.height / 2) / travel;
+    setPos(p);
+    // начинаем драг от этой позиции
     drag = { id: e.pointerId, startPos: pos, startY: e.clientY };
     slider.classList.add('dragging');
-    setPos(pos);
   });
   window.addEventListener('pointermove', e => {
     if (!drag || drag.id !== e.pointerId) return;
