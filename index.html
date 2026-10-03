@@ -189,13 +189,7 @@
      даёт ей ужиматься, если слева широкая кнопка. */
   .dv-row{display:flex;gap:8px;pointer-events:auto;align-items:center;align-self:stretch;
     justify-content:space-between;width:100%}
-  /* Верхняя строка: «Вперёд», а справа от него вид, зум и поворотники.
-     justify-content:flex-end прижимает их к правому краю своей половины,
-     а min-width:0 позволяет сжаться вместо выпирания за край. */
-  .dv-aux{display:flex;gap:8px;pointer-events:auto;align-items:center;justify-content:flex-end;
-    flex:0 1 50%;min-width:0}
-  .dv-aux>*{flex:1 1 0;min-width:0;width:auto;max-width:88px;aspect-ratio:1;align-self:center}
-  .dv-aux>.dv-btn{font-size:clamp(15px,4.4vw,26px)}
+  
   .dv-btn{width:calc((min(30vw,500px,50vh - 30px) - 8px)/2);aspect-ratio:1;font-size:clamp(20px,7vw,40px);
     color:#d8e5ee;background:rgba(12,22,32,.85);border:1px solid #2a4257;border-radius:14px;cursor:pointer;
     touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
@@ -207,7 +201,7 @@
   /* Все кнопки в .dv-aux одинакового размера: квадрат, aspect-ratio:1 */
   .dv-aux{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
   .dv-aux .dv-btn{width:clamp(44px,10vw,64px);aspect-ratio:1;font-size:clamp(18px,4vw,28px);
-    border-radius:12px;display:flex;align-items:center;justify-content:center}
+    border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
   /* Поворотники: переиспользуем .dv-btn, меняем только иконку/активное состояние */
   .dv-blink{color:#fff}
   .dv-blink.active{background:#ffd60a;color:#1a1200;border-color:#ffd60a}
@@ -229,7 +223,7 @@
   .dv-slider-v.dragging{cursor:grabbing;touch-action:none}
   .dv-slider-v::before{content:'';position:absolute;top:50%;left:16%;right:16%;height:2px;
     background:#2a4257;border-radius:1px;transform:translateY(-50%)}
-  .dv-slider-v-h{position:absolute;top:50%;left:50%;width:calc(100% - 16px);height:64px;max-height:34%;
+  .dv-slider-v-h{position:absolute;top:50%;left:50%;width:64px;height:64px;
     transform:translate(-50%,-50%);border-radius:12px;
     background:#ff6d00;border:2px solid #1a1200;box-shadow:0 3px 10px rgba(0,0,0,.55)}
   .dv-left-controls{display:flex;flex-direction:column;gap:6px;justify-content:center}
@@ -255,18 +249,18 @@
   .dv-slider.dragging{cursor:grabbing;touch-action:none}
   .dv-slider::before{content:'';position:absolute;left:50%;top:16%;bottom:16%;width:2px;
     background:#2a4257;border-radius:1px;transform:translateX(-50%)}
-  .dv-slider-h{position:absolute;top:50%;left:50%;width:64px;max-width:34%;height:calc(100% - 16px);
+  .dv-slider-h{position:absolute;top:50%;left:50%;width:54px;height:54px;
     transform:translate(-50%,-50%);border-radius:12px;
     background:#ff6d00;border:2px solid #1a1200;box-shadow:0 3px 10px rgba(0,0,0,.55)}
   /* Мобильная панель — везде */
   #driveCtrl{display:flex;left:0;right:0;bottom:0;max-width:none;border-radius:0;border-left:none;border-right:none}
   .dv-btns{padding:0 12px 8px 16px}
   .dv-row-main{gap:8px}
-  .dv-control-row .dv-btn{width:clamp(44px,10vw,64px);font-size:clamp(18px,4vw,28px)}
-  .dv-aux .dv-btn{width:clamp(44px,10vw,64px);font-size:clamp(18px,4vw,28px)}
-  .dv-slider{height:64px}
-  .dv-slider-v{width:64px;height:200px}
-  .dv-slider-v-h{width:calc(100% - 16px);height:64px}
+  .dv-control-row .dv-btn{width:54px;font-size:clamp(18px,4vw,28px)}
+  .dv-aux .dv-btn{width:54px;font-size:clamp(18px,4vw,28px)}
+  .dv-slider{height:54px}
+  .dv-slider-v{width:54px;height:200px}
+  .dv-slider-v-h{width:54px;height:54px}
   .dv-slider-wrap{max-width:280px}
   .win{max-height:calc(100vh - 140px)}
   /* в режиме правки площадки панель уступает карточке редактора */
