@@ -1341,18 +1341,24 @@ function drive(dt) {
     BABYLON.Vector3.LerpToRef(camTarget, camTargetTmp, 1 - Math.exp(-dt * 9), camTarget);
     cam.target.copyFrom(camTarget);
     const k = 1 - Math.exp(-dt * 5);
-    // автовозврат камеры за спину через 3 с бездействия (только yaw, pitch не трогаем)
+    // автовозврат камеры за спину через 3 с бездействия (по кратчайшему пути)
     if (performance.now() - CAR.idle > 3000) {
       const decay = 1 - Math.exp(-dt * 1.2);
-      CAR.camYaw *= Math.max(0, 1 - decay);
+      const targetAlpha = CAR.yaw + Math.PI / 2; // строго за спиной
+      let diff = targetAlpha - cam.alpha;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      cam.alpha = wrapAngle(cam.alpha + diff * decay);
+      // синхронизируем camYaw с новым alpha, чтобы не было скачка при следующем ручном управлении
+      CAR.camYaw = wrapAngle(cam.alpha - targetAlpha);
     }
     // не оборачиваем целевой угол — позволяем camYaw расти бесконечно
-    const targetAlpha = CAR.yaw + Math.PI / 2 + CAR.camYaw;
+    const targetAlpha2 = CAR.yaw + Math.PI / 2 + CAR.camYaw;
     // кратчайший угловой интерполированный путь
-    let diff = targetAlpha - cam.alpha;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    cam.alpha = wrapAngle(cam.alpha + diff * k);
+    let diff2 = targetAlpha2 - cam.alpha;
+    while (diff2 > Math.PI) diff2 -= Math.PI * 2;
+    while (diff2 < -Math.PI) diff2 += Math.PI * 2;
+    cam.alpha = wrapAngle(cam.alpha + diff2 * k);
     cam.beta += (CAR.camPitch - cam.beta) * (1 - Math.exp(-dt * 7));
     cam.radius += (CAR.camDist - cam.radius) * (1 - Math.exp(-dt * 7));
   } else if (CAR.mode === 1) {
