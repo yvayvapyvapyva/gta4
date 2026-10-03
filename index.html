@@ -314,8 +314,9 @@
       <button id="setCamBtn">Камера: следом</button>
     </div>
     <div class="win-note">
-      Езда: <b>W/A/S/D</b> или стрелки · <b>Space</b> — ручник · <b>C</b> — камера<br>
-      <b>R</b> — сброс · <b>M</b> — зеркала · <b>Q/E</b> — поворотники
+      Езда: <b>W/A/S/D</b> · <b>Space</b> — ручник · <b>C</b> — камера<br>
+      <b>R</b> — сброс · <b>M</b> — зеркала · <b>Q/E</b> — поворотники<br>
+      <b>Стрелки</b> — вращение камеры (в режимах «Следом» и «Свободная»)
     </div>
   </div>
 
@@ -674,7 +675,8 @@ const CAR = {
   camFov: 1.45,    // угол обзора салона, рад (~83° по вертикали)
   mode: 0,           // 0 следом · 1 салон · 2 свободная
   eye: null,         // точка обзора в локальной системе кузова (заполняется по модели)
-  lookYaw: 0, lookPitch: 0,  // смещение взгляда в салоне мышью
+  lookYaw: 0, lookPitch: 0,       // текущее смещение взгляда в салоне
+  lookYawTarget: 0, lookPitchTarget: 0,  // целевое смещение для интерполяции
   idle: performance.now(),
 };
 
@@ -711,6 +713,31 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyC" && !editingMap) toggleCam();
   if (e.code === "KeyR") resetCar();
   if (e.code === "KeyX" && typeof toggleXray === "function") toggleXray();
+  // Стрелки: управление камерой (yaw/pitch) во всех режимах
+  if (!mirrorAdjActive?.()) {
+    const step = 0.035; // ~2°
+    if (e.code === "ArrowLeft") {
+      if (CAR.mode === 0) CAR.camYaw -= step;
+      else if (CAR.mode === 1) CAR.lookYawTarget += step; // инвертировано в салоне
+      else cam.alpha -= step;
+      e.preventDefault();
+    } else if (e.code === "ArrowRight") {
+      if (CAR.mode === 0) CAR.camYaw += step;
+      else if (CAR.mode === 1) CAR.lookYawTarget -= step; // инвертировано в салоне
+      else cam.alpha += step;
+      e.preventDefault();
+    } else if (e.code === "ArrowUp") {
+      if (CAR.mode === 0) CAR.camPitch = Math.max(1 * Math.PI / 180, CAR.camPitch - step);
+      else if (CAR.mode === 1) CAR.lookPitchTarget = Math.max(-Math.PI/2, CAR.lookPitchTarget - step);
+      else cam.beta = Math.max(cam.lowerBetaLimit, cam.beta - step);
+      e.preventDefault();
+    } else if (e.code === "ArrowDown") {
+      if (CAR.mode === 0) CAR.camPitch = Math.min(89 * Math.PI / 180, CAR.camPitch + step);
+      else if (CAR.mode === 1) CAR.lookPitchTarget = Math.min(Math.PI/2, CAR.lookPitchTarget + step);
+      else cam.beta = Math.min(cam.upperBetaLimit, cam.beta + step);
+      e.preventDefault();
+    }
+  }
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
@@ -943,6 +970,7 @@ function resetCar() {
   if (!CAR.root) return;
   CAR.v = 0; CAR.yaw = 0; CAR.steer = 0;
   CAR.lookYaw = 0; CAR.lookPitch = 0;
+  CAR.lookYawTarget = 0; CAR.lookPitchTarget = 0;
   CAR.y = 0; CAR.vy = 0;
   // ориентация живёт в кватернионе (наклон по опоре), Euler оставляем нулевым
   CAR.root.rotation.set(0, 0, 0);
@@ -1007,17 +1035,13 @@ addEventListener("pointermove", (e) => {
     return;
   }
   if (!drag || editGrab) return;
-  if (CAR.mode === 1) {
+if (CAR.mode === 1) {
     // Захват точки: палец «приклеивается» к месту, где взяли, и тянет картинку
     // вместе с собой. Для этого поворот камеры должен равняться угловому
-    // смещению взятой точки на экране, а оно = dpx * 2*tan(fov/2)/height.
-    // Раньше шаг был фиксированным (0.005 рад/пиксель): точка из-под пальца
-    // уезжала, а скорость ещё гуляла вместе с зумом — на приближении обзор
-    // проворачивался вдвое быстрее, чем на отдалении. Теперь при любом зуме
-    // точка остаётся под пальцем, и LOOK_DRAG_SCALE задаёт общую скорость.
+    // смещению взятой точки на экране, и оно = dpx * 2*tan(fov/2)/height.
     const k = 2 * Math.tan(CAR.camFov / 2) / Math.max(1, canvas.clientHeight) * LOOK_DRAG_SCALE;
-    CAR.lookYaw = wrapAngle(CAR.lookYaw + (e.clientX - lastX) * k);
-    CAR.lookPitch = clamp(CAR.lookPitch - (e.clientY - lastY) * k, -0.45, 0.55);
+    CAR.lookYawTarget = wrapAngle(CAR.lookYawTarget + (e.clientX - lastX) * k);
+    CAR.lookPitchTarget = clamp(CAR.lookPitchTarget - (e.clientY - lastY) * k, -0.45, 0.55);
   } else {
     CAR.camYaw -= (e.clientX - lastX) * 0.006;
     CAR.camPitch = clamp(CAR.camPitch - (e.clientY - lastY) * 0.005, 1 * Math.PI / 180, 89 * Math.PI / 180);
@@ -1140,10 +1164,10 @@ function applySupport() {
 }
 
 function drive(dt) {
-  const gas = keys.KeyW || keys.ArrowUp ? 1 : 0;
-  const back = keys.KeyS || keys.ArrowDown ? 1 : 0;
-  const left = keys.KeyA || keys.ArrowLeft ? 1 : 0;
-  const right = keys.KeyD || keys.ArrowRight ? 1 : 0;
+  const gas = keys.KeyW ? 1 : 0;
+  const back = keys.KeyS ? 1 : 0;
+  const left = keys.KeyA ? 1 : 0;
+  const right = keys.KeyD ? 1 : 0;
   const hand = keys.Space ? 1 : 0;
 
   const steerIn = left - right;
@@ -1319,16 +1343,21 @@ function drive(dt) {
     // возврат камеры за спину по реальному времени, а не по числу кадров.
     // Задержка 3 с (было 1.6): столько ждём после последнего касания, прежде
     // чем угол начнёт затухать к нулю.
-    if (!drag && performance.now() - CAR.idle > 3000) CAR.camYaw *= Math.max(0, 1 - dt * 1.2);
     const k = 1 - Math.exp(-dt * 5);
-    cam.alpha = wrapAngle(cam.alpha + wrapAngle((CAR.yaw + Math.PI / 2 + CAR.camYaw) - cam.alpha) * k);
+    // не оборачиваем целевой угол — позволяем camYaw расти бесконечно
+    const targetAlpha = CAR.yaw + Math.PI / 2 + CAR.camYaw;
+    // кратчайший угловой интерполированный путь
+    let diff = targetAlpha - cam.alpha;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    cam.alpha = wrapAngle(cam.alpha + diff * k);
     cam.beta += (CAR.camPitch - cam.beta) * (1 - Math.exp(-dt * 7));
     cam.radius += (CAR.camDist - cam.radius) * (1 - Math.exp(-dt * 7));
   } else if (CAR.mode === 1) {
-    // салон: камера уже сидит в кузове, остаётся только повернуть взгляд.
-    // Автовозврата взгляда по центру больше нет: раньше через 1.6 с простоя
-    // lookYaw/lookPitch затухали обратно, и выбранный ракурс нельзя было
-    // удержать — взгляд сам возвращался вперёд. Сбросить взгляд можно вручную.
+    // салон: плавная интерполяция взгляда к целевому
+    const k = 1 - Math.exp(-dt * 10); // скорость поворота головы
+    CAR.lookYaw += (CAR.lookYawTarget - CAR.lookYaw) * k;
+    CAR.lookPitch += (CAR.lookPitchTarget - CAR.lookPitch) * k;
     // локальные оси кузова: -Z вперёд, поэтому разворот на π, а лево — это -Yaw
     cockpit.rotation.set(COCKPIT_PITCH + CAR.lookPitch, Math.PI - CAR.lookYaw, 0);
   }
