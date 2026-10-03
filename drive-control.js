@@ -160,7 +160,7 @@ if(dvXray)dvXray.addEventListener('click',()=>{
 const BLINK=0.8, BLINK_DUTY=0.4;
 let blinkT=0, blinkOn=false;
 let indSides=null;
-const AMBER=new BABYLON.Color3(1,0.55,0.05);
+const AMBER=new BABYLON.Color3(2.5, 1.2, 0.1);  // ярче и насыщеннее
 
 function setSide(list,on){
   for(const m of list){
@@ -239,9 +239,9 @@ window.setupIndicators=function(meshes){
   }
   indSides={left,right};
   // GlowLayer для индикаторов: включаем только сами фонари,
-  // интенсивность подбираем так, чтобы свечение было заметно, но не пересвечивало
-  window.indicatorGlowLayer = new BABYLON.GlowLayer("indicatorGlow", scene, { mainTextureFixedSize: 256 });
-  window.indicatorGlowLayer.intensity = 1.2;
+  // интенсивность увеличена для яркого свечения
+  window.indicatorGlowLayer = new BABYLON.GlowLayer("indicatorGlow", scene, { mainTextureFixedSize: 512 });
+  window.indicatorGlowLayer.intensity = 3.5;
   window.indicatorGlowLayer.customEmissiveColorSelector = (mesh, subMesh, material, result) => {
     // в салоне (CAR.mode === 1) свечение отключено — не светится сквозь стекло
     if (typeof CAR !== 'undefined' && CAR.mode === 1) {
@@ -249,7 +249,7 @@ window.setupIndicators=function(meshes){
       return;
     }
     if (/indicator/i.test(mesh.name) || /indicator/i.test((mesh.parent && mesh.parent.name) || '')) {
-      result.set(1, 0.55, 0.05);  // янтарный цвет свечения
+      result.set(1, 0.6, 0.08);  // более насыщенный янтарный цвет свечения
     } else {
       result.set(0, 0, 0);
     }
