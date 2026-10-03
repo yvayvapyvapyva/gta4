@@ -496,8 +496,8 @@ const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2, Math.PI / 2.6, 9, n
 cam.attachControl(canvas, true);
 cam.lowerRadiusLimit = CAM_DIST_MIN;
 cam.upperRadiusLimit = CAM_DIST_MAX;
-cam.lowerBetaLimit = 0.12;
-cam.upperBetaLimit = Math.PI / 2 + 0.15;
+cam.lowerBetaLimit = 0;                         // 0 — строго сверху (top-down)
+cam.upperBetaLimit = 89 * Math.PI / 180;        // 89° — почти горизонт
 cam.wheelDeltaPercentage = 0.02;
 cam.pinchDeltaPercentage = 0.02;
 cam.panningSensibility = 0;
@@ -994,7 +994,7 @@ addEventListener("pointermove", (e) => {
     CAR.lookPitch = clamp(CAR.lookPitch - (e.clientY - lastY) * k, -0.45, 0.55);
   } else {
     CAR.camYaw -= (e.clientX - lastX) * 0.006;
-    CAR.camPitch = clamp(CAR.camPitch - (e.clientY - lastY) * 0.005, 0.32, 1.45);
+    CAR.camPitch = clamp(CAR.camPitch - (e.clientY - lastY) * 0.005, 0, 89 * Math.PI / 180);
   }
   lastX = e.clientX; lastY = e.clientY;
   CAR.idle = performance.now();
