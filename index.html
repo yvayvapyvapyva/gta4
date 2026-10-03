@@ -228,7 +228,7 @@
   .dv-slider-h{position:absolute;top:50%;left:50%;width:64px;max-width:34%;height:calc(100% - 16px);
     transform:translate(-50%,-50%);border-radius:12px;
     background:#ff6d00;border:2px solid #1a1200;box-shadow:0 3px 10px rgba(0,0,0,.55)}
-  @media (pointer:fine){
+  @media (min-width: 1024px) and (pointer:fine){
     #driveCtrl{display:flex;left:14px;right:auto;bottom:14px;width:auto;max-width:520px;
       justify-content:flex-end;gap:10px;padding:8px;
       background:rgba(12,22,32,.9);border:1px solid #2a4257;border-radius:14px;
@@ -241,7 +241,7 @@
     .dv-slider{flex:0 0 270px;height:48px;border-radius:12px}
     .dv-slider-h{width:40px;height:calc(100% - 12px);border-radius:9px}
   }
-  @media (pointer:coarse){
+  @media (max-width: 1023px){
     #driveCtrl{display:flex}
     .win{max-height:calc(100vh - 140px)}
   }
