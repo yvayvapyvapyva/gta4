@@ -99,3 +99,40 @@ window.tickBlinkSounds = tickBlinkSounds;
 let masterVolume = 1;
 window.setMasterVolume = (v) => { masterVolume = Math.max(0, Math.min(1, v)); };
 window.getMasterVolume = () => masterVolume;
+
+// Громкий БИП при сбитии конуса
+function createConeHitBuffer(ctx) {
+  const sampleRate = ctx.sampleRate;
+  const duration = 0.25;
+  const samples = Math.floor(sampleRate * duration);
+  const buffer = ctx.createBuffer(1, samples, sampleRate);
+  const data = buffer.getChannelData(0);
+
+  // Резкий пик 1200 Гц -> 800 Гц с быстрым затуханием, много гармоник
+  for (let i = 0; i < samples; i++) {
+    const t = i / sampleRate;
+    const freq = 1200 * Math.exp(-t * 8) + 800;
+    const envelope = Math.exp(-t * 12);
+    // Добавляем квадратную волну для "пищалки"
+    const square = Math.sign(Math.sin(2 * Math.PI * freq * t));
+    const sine = Math.sin(2 * Math.PI * freq * t);
+    data[i] = (square * 0.6 + sine * 0.4) * envelope * 0.8;
+  }
+  return buffer;
+}
+
+function playConeHit() {
+  const ctx = ensureAudioContext();
+  if (!soundBuffers.has('coneHit')) {
+    soundBuffers.set('coneHit', createConeHitBuffer(ctx));
+  }
+  const buffer = soundBuffers.get('coneHit');
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  const gain = ctx.createGain();
+  gain.gain.value = 1.0; // громко
+  source.connect(gain).connect(ctx.destination);
+  source.start();
+}
+
+window.playConeHit = playConeHit;

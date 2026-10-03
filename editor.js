@@ -669,6 +669,8 @@ function knockCone(node, carPos) {
   ud.spin = (Math.random() * 8 + 5) * (Math.random() < 0.5 ? 1 : -1);
   node.position.y = surfaceHeight(node.position.x, node.position.z) + 0.4;
   flying.push(node);
+  if (typeof window.playConeHit === 'function') window.playConeHit();
+  if (typeof window.showToast === 'function') window.showToast('СБИТ КОНУС!(3 балла)');
 }
 function landCone(n) {
   n.userData.vel = null;
