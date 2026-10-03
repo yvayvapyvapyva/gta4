@@ -687,7 +687,7 @@ let touchSteerEnabled = false, touchSteerAngle = 0;
 let touchThrottle = 0;  // -1..1: вертикальный ползунок (газ/тормоз)
 let blinkerLeft = false, blinkerRight = false;
 
-const CONTROL_KEYS = new Set(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space","KeyC","KeyR"]);
+const CONTROL_KEYS = new Set(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space","KeyC","KeyR","KeyX"]);
 addEventListener("keydown", (e) => {
   if (CONTROL_KEYS.has(e.code)) e.preventDefault();
   // режим регулировки зеркал перехватывает стрелки, чтобы они не управляли машиной
@@ -704,6 +704,7 @@ addEventListener("keydown", (e) => {
   keys[e.code] = true;
   if (e.code === "KeyC" && !editingMap) toggleCam();
   if (e.code === "KeyR") resetCar();
+  if (e.code === "KeyX" && typeof toggleXray === "function") toggleXray();
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
@@ -837,13 +838,13 @@ function getXrayMaterial() {
   if (!xrayMat) {
     xrayMat = new BABYLON.StandardMaterial("xrayMat", scene);
     xrayMat.diffuseColor = new BABYLON.Color3(1, 1, 1);
-    xrayMat.alpha = 0.05;
+    xrayMat.alpha = 0.08;
     xrayMat.backFaceCulling = false;
     xrayMat.forceDepthWrite = false;
     xrayMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
     xrayMat.separateCullingPass = true;
     xrayMat.disableLighting = true;
-    xrayMat.emissiveColor = new BABYLON.Color3(0.6, 0.7, 0.9);
+    xrayMat.emissiveColor = new BABYLON.Color3(1, 1, 1);
   }
   return xrayMat;
 }
