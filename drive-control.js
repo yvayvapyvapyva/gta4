@@ -215,10 +215,26 @@ window.setupIndicators=function(meshes){
     m.isVisible=false;
   }
   indSides={left,right};
-  // Свечение (GlowLayer) убрано: оно компонуется аддитивно поверх итоговой
-  // картинки и не проверяет глубину, поэтому фонарь за кузовом просвечивал
-  // насквозь. Материал фонаря emissive сам по себе даёт яркое жёлтое пятно,
-  // а перекрытие кузовом теперь работает обычным тестом глубины.
+  // GlowLayer для индикаторов: включаем только сами фонари,
+  // интенсивность подбираем так, чтобы свечение было заметно, но не пересвечивало
+  window.indicatorGlowLayer = new BABYLON.GlowLayer("indicatorGlow", scene, { mainTextureFixedSize: 256 });
+  window.indicatorGlowLayer.intensity = 1.2;
+  window.indicatorGlowLayer.customEmissiveColorSelector = (mesh, subMesh, material, result) => {
+    // в салоне (CAR.mode === 1) свечение отключено — не светится сквозь стекло
+    if (typeof CAR !== 'undefined' && CAR.mode === 1) {
+      result.set(0, 0, 0);
+      return;
+    }
+    if (/indicator/i.test(mesh.name) || /indicator/i.test((mesh.parent && mesh.parent.name) || '')) {
+      result.set(1, 0.55, 0.05);  // янтарный цвет свечения
+    } else {
+      result.set(0, 0, 0);
+    }
+  };
+  // Добавляем индикаторы в glow layer
+  for(const m of left.concat(right)){
+    window.indicatorGlowLayer.addIncludedOnlyMesh(m);
+  }
   syncBlinkBtns();applyBlink();
 };
 
