@@ -124,6 +124,13 @@ if(dvView)dvView.addEventListener('click',()=>{
 });
 syncDvView();
 
+// ── Кнопка прозрачности кузова (X-ray) ─────────────────────────
+const dvXray=document.getElementById('dvXray');
+if(dvXray)dvXray.addEventListener('click',()=>{
+  if(!ready)return;
+  if(typeof toggleXray==='function')toggleXray();
+});
+
 // ── Поворотники: состояние, мигание, кнопки ────────────────────
 // Меши фонарей находятся в модели по именам indicator_l*/indicator_r*; у каждой
 // стороны своя копия материала, иначе включённый левый зажигает оба фонаря.

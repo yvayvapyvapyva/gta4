@@ -64,6 +64,7 @@
   #gearBtn.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
   #gearBtn:active { background:#ff6d00; border-color:#ff6d00; color:#12141a; }
   body.edit-mode #gearBtn { display:none; }
+  .win-btns button.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
 
   .win-sec { margin:0 0 16px; }
   .win-sec:last-child { margin-bottom:0; }
@@ -196,6 +197,8 @@
     display:flex;align-items:center;justify-content:center}
   .dv-btn.on,.dv-btn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
   .dv-btn.active{background:#62d0df;color:#1a1200;border-color:#62d0df}
+  .dv-btn.dv-xray.on{background:rgba(255,138,61,.16);border-color:var(--acc);color:var(--acc)}
+  .dv-btn.dv-xray.on:active{background:var(--acc);color:#12141a}
   /* Поворотники и зум стоят в общей строке .dv-aux, размеры им задаёт она;
      здесь остаются только цвет и форма. */
   .dv-blink{pointer-events:auto;
@@ -373,6 +376,7 @@
       <button class="dv-btn" id="dvFwd" aria-label="Вперёд">▲</button>
       <div class="dv-aux">
         <button class="dv-btn dv-view" id="dvView" aria-label="Переключить вид">👁</button>
+        <button class="dv-btn dv-xray" id="dvXray" aria-label="Прозрачность кузова">⛶</button>
         <button class="dv-zoombtn" id="dvZoomIn" aria-label="Приблизить">+</button>
         <button class="dv-zoombtn" id="dvZoomOut" aria-label="Отдалить">−</button>
         <button class="dv-blink" id="dvBlinkL" aria-label="Левый поворотник">◀</button>
@@ -791,6 +795,55 @@ document.getElementById("setEditBtn").addEventListener("click", () => {
   if (typeof openEdit === "function") openEdit(true);
 });
 setCamBtn.addEventListener("click", () => { toggleCam(); syncSettings(); });
+
+// X-ray: прозрачный кузов (кнопка на нижней панели — dvXray)
+let xrayOn = false;
+const xrayBtn = document.getElementById("dvXray");
+const originalMaterials = new Map();
+let xrayMat = null;
+
+function getXrayMaterial() {
+  if (!xrayMat) {
+    xrayMat = new BABYLON.StandardMaterial("xrayMat", scene);
+    xrayMat.diffuseColor = new BABYLON.Color3(1, 1, 1);
+    xrayMat.alpha = 0.1;
+    xrayMat.backFaceCulling = false;
+    xrayMat.forceDepthWrite = false;
+    xrayMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+    xrayMat.separateCullingPass = true;
+    xrayMat.disableLighting = true;
+    xrayMat.emissiveColor = new BABYLON.Color3(0.6, 0.7, 0.9);
+  }
+  return xrayMat;
+}
+
+function toggleXray() {
+  xrayOn = !xrayOn;
+  if (xrayBtn) xrayBtn.classList.toggle("on", xrayOn);
+
+  const mat = getXrayMaterial();
+
+  if (xrayOn) {
+    for (const m of meshes) {
+      if (!m.material) continue;
+      if (!originalMaterials.has(m)) originalMaterials.set(m, m.material);
+      m.material = mat;
+      m.renderingGroupId = 1;
+      m.receiveShadows = false;
+    }
+  } else {
+    for (const m of meshes) {
+      const orig = originalMaterials.get(m);
+      if (orig) {
+        m.material = orig;
+        m.renderingGroupId = 0;
+        m.receiveShadows = true;
+        originalMaterials.delete(m);
+      }
+    }
+  }
+}
+
 setFov.addEventListener("input", () => {
   const deg = +setFov.value;
   setFovV.textContent = deg + "°";
