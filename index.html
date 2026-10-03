@@ -860,10 +860,12 @@ function toggleXray() {
 
   const mat = getXrayMaterial();
   const isIndicator = (m) => /indicator/i.test(m.name) || /indicator/i.test((m.parent && m.parent.name) || '');
+  // зеркала не трогаем: их материал — это MirrorTexture, он должен оставаться
+  const isMirror = (m) => typeof mirrorEntries !== "undefined" && mirrorEntries.some(e => e.mesh === m);
 
   if (xrayOn) {
     for (const m of meshes) {
-      if (!m.material || isIndicator(m)) continue;  // пропускаем поворотники
+      if (!m.material || isIndicator(m) || isMirror(m)) continue;
       if (!originalMaterials.has(m)) originalMaterials.set(m, m.material);
       m.material = mat;
       m.renderingGroupId = 1;
@@ -871,7 +873,7 @@ function toggleXray() {
     }
   } else {
     for (const m of meshes) {
-      if (isIndicator(m)) continue;  // поворотники не трогаем
+      if (isIndicator(m) || isMirror(m)) continue;
       const orig = originalMaterials.get(m);
       if (orig) {
         m.material = orig;
