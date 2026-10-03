@@ -527,9 +527,9 @@ const GROUND_SIZE = 4000;
 const TILE = 8;
 
 // Плоскость земли тянется за горизонт (4000 м >> дальнего плана), а дымка
-// растворяет её в цвет неба раньше, чем достигает края. maxZ держим чуть больше
-// половины плоскости, чтобы камера не обрезала её вдали резким краем.
-cam.maxZ = GROUND_SIZE + 1;
+// растворяет её в цвет неба раньше, чем достигает края. maxZ ограничен 500 м
+// для точности буфера глубины (Z-fighting линий/конусов вдали).
+cam.maxZ = 500;
 
 const ground = BABYLON.MeshBuilder.CreateGround("ground", { width:GROUND_SIZE, height:GROUND_SIZE, subdivisions:1 }, scene);
 const gm = new BABYLON.StandardMaterial("gm", scene);
@@ -925,6 +925,8 @@ function wrapAngle(a) {
 }
 
 const camTarget = new BABYLON.Vector3(0, 0, 0);
+const camTargetTmp = new BABYLON.Vector3();   // для LerpToRef без аллокаций
+const fwdVec = new BABYLON.Vector3();         // forward вектор машины (переиспользуется)
 let cockpit = null;   // камера салона, едет вместе с кузовом
 
 // ── опора под колёсами ───────────────────────────────────────────────
@@ -1070,8 +1072,9 @@ function drive(dt) {
   CAR.yaw += yawRate * dt;
 
   // трансформ кузова
-  const fwd = new BABYLON.Vector3(Math.sin(CAR.yaw), 0, -Math.cos(CAR.yaw));
+  fwdVec.set(Math.sin(CAR.yaw), 0, -Math.cos(CAR.yaw));
   const p = CAR.root.position;
+  const fwd = fwdVec;
 
   // --- горизонтальный шаг с проверкой препятствий
   // Ось поворота — задняя ось (как в первом приложении): задние колёса не
@@ -1157,7 +1160,8 @@ function drive(dt) {
   // камера. target пишем напрямую: setTarget() пересчитывает alpha/beta/radius
   // по текущей позиции и каждый кадр уводил бы камеру в сторону.
   if (CAR.mode === 0) {
-    BABYLON.Vector3.LerpToRef(camTarget, new BABYLON.Vector3(p.x, p.y + 0.75, p.z), 1 - Math.exp(-dt * 9), camTarget);
+    camTargetTmp.set(p.x, p.y + 0.75, p.z);
+    BABYLON.Vector3.LerpToRef(camTarget, camTargetTmp, 1 - Math.exp(-dt * 9), camTarget);
     cam.target.copyFrom(camTarget);
     // возврат камеры за спину по реальному времени, а не по числу кадров.
     // Задержка 3 с (было 1.6): столько ждём после последнего касания, прежде
@@ -1437,7 +1441,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
     cockpit.position.copyFrom(CAR.eye);
     cockpit.rotation.set(COCKPIT_PITCH, Math.PI, 0);
     cockpit.fov = CAR.camFov;   // угол обзора настраивается колесом и щипком
-    cockpit.minZ = 0.04;     // руль и панель приборов в упор
+    cockpit.minZ = 0.1;     // было 0.04 — увеличено для точности буфера глубины
     cockpit.inputs.clear();  // обзором рулит общий обработчик мыши
   }
 
