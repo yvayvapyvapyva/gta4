@@ -215,8 +215,7 @@
   #mapEdit *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   /* Ползунок руля: крупная горизонтальная шкала в строке с кнопкой «Назад».
      Ручку тянут влево-вправо, при отпускании физика (CAR.steer) доводит её
-     к центру. flex:0 1 50% прижимает шкалу к правому краю и держит её
-     в пределах половины панели. */
+     к центру. flex:1 1 65% — растягивается шире верхней группы кнопок. */
   .dv-slider{position:relative;flex:0 1 50%;min-width:0;height:64px;pointer-events:auto;touch-action:none;
     cursor:grab;-webkit-tap-highlight-color:transparent;box-sizing:border-box;overflow:hidden;
     background:linear-gradient(180deg,#16232e,#0b1520);
@@ -239,7 +238,7 @@
     .dv-btn{width:42px;font-size:18px;border-radius:10px}
     .dv-aux{gap:6px;flex:0 0 auto;justify-content:flex-end}
     .dv-aux>*{flex:0 0 40px;max-width:40px;height:40px;font-size:15px}
-    .dv-slider{flex:0 0 220px;height:48px;border-radius:12px}
+    .dv-slider{flex:0 0 270px;height:48px;border-radius:12px}
     .dv-slider-h{width:40px;height:calc(100% - 12px);border-radius:9px}
   }
   @media (pointer:coarse){
