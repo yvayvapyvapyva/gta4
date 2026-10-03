@@ -446,6 +446,33 @@ function bindZoom(el,k){
 bindZoom(zIn,0.9);
 bindZoom(zOut,1.1);
 
+// ── Клавиатура: = / - для зума (как кнопки на панели) ────────────
+let zoomRaf = null, zoomLastT = 0, zoomDir = 0;
+function zoomTick(t) {
+  if (!zoomLastT) zoomLastT = t;
+  const dt = Math.min(0.1, (t - zoomLastT) / 1000);
+  zoomLastT = t;
+  zoomHold(zoomDir, dt);
+  zoomRaf = requestAnimationFrame(zoomTick);
+}
+function zoomStop() {
+  if (zoomRaf) { cancelAnimationFrame(zoomRaf); zoomRaf = null; zoomLastT = 0; }
+}
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.code === 'Equal' || e.code === 'NumpadAdd') { // = / +
+    e.preventDefault(); zoomDir = 0.9; zoomStep(zoomDir); if (!zoomRaf) zoomRaf = requestAnimationFrame(zoomTick);
+  } else if (e.code === 'Minus' || e.code === 'NumpadSubtract') { // - / _
+    e.preventDefault(); zoomDir = 1.1; zoomStep(zoomDir); if (!zoomRaf) zoomRaf = requestAnimationFrame(zoomTick);
+  }
+});
+addEventListener('keyup', e => {
+  if (e.code === 'Equal' || e.code === 'NumpadAdd' || e.code === 'Minus' || e.code === 'NumpadSubtract') {
+    zoomStop();
+  }
+});
+addEventListener('blur', zoomStop);
+
 // ── Защита от контекстного меню / выделения на мобильных ─────────
 document.addEventListener('contextmenu',e=>{
   const t=e.target;
