@@ -5,100 +5,102 @@
  * Классические скрипты делят глобальную лексическую область, поэтому:
  *   — заполняет объявленные в index.html общие состояния сенсорного руля
  *     (touchSteerEnabled/touchSteerAngle) и поворотников (blinkerLeft/Right);
- *   — функции syncDvView/syncBlinkBtns/tickBlink/syncDvWheel становятся
+ *   — функции syncDvView/syncBlinkBtns/tickBlink/syncDvWheel/syncDvThrottle становятся
  *     свойствами window и вызываются из главного скрипта.
  *
  * Знак поворота: в index.html угол CAR.steer положителен при повороте налево,
  * поэтому положение ручки берётся со знаком минус — ручка влево это налево.
+ * Знак газа: pos > 0 — вперёд (KeyW), pos < 0 — назад (KeyS).
  */
 
 // Полный отворот берём у CAR: он считается по диаметру разворота при загрузке
 // модели, иначе панель разошлась бы с физикой на машинах с другой геометрией.
 const DV_LOCK = () => CAR.maxSteer;
 
-// ── Руль-ползунок и кнопки «вперёд/назад» ─────────────────────────
-(function(){
-  const dv=document.getElementById('driveCtrl');if(!dv)return;
-  const fwd=document.getElementById('dvFwd'),back=document.getElementById('dvBack');
-  // Кнопки вперёд/назад: каждый палец запоминается по pointerId, отпускание
-  // ловится глобально на window. Без setPointerCapture, чтобы не блокировать мультитач.
-  const keyState={forward:new Set(),back:new Set()};
-  const codeByKey={forward:'KeyW',back:'KeyS'};
-  const btnByKey={forward:fwd,back:back};
-  const releaseKey=(key,pointerId)=>{
-    const s=keyState[key];if(!s.has(pointerId))return;
-    s.delete(pointerId);
-    if(s.size===0){keys[codeByKey[key]]=false;const b=btnByKey[key];if(b)b.classList.remove('on');}
-  };
-  const pressKey=(key,el,pointerId)=>{keyState[key].add(pointerId);keys[codeByKey[key]]=true;if(el)el.classList.add('on');};
-  fwd.addEventListener('pointerdown',e=>{e.preventDefault();pressKey('forward',fwd,e.pointerId);});
-  back.addEventListener('pointerdown',e=>{e.preventDefault();pressKey('back',back,e.pointerId);});
-  // На iOS touch-action:manipulation на кнопках + отсутствие preventDefault на slider pointerdown
-  // позволяет мультитач: газ/тормоз + руль одновременно
-  window.addEventListener('pointerup',e=>{releaseKey('forward',e.pointerId);releaseKey('back',e.pointerId);});
-  window.addEventListener('pointercancel',e=>{releaseKey('forward',e.pointerId);releaseKey('back',e.pointerId);});
-
-  // Сенсорный руль-ползунок без захвата указателя — движение отслеживается
-  // глобально по pointerId, поэтому в мультитаче остальные кнопки работают.
-  const slider=document.getElementById('dvSlider'),handle=document.getElementById('dvSliderH');
-  if(!slider||!handle)return;
-  // Ход ручки в пикселях: половина разницы между шириной шкалы и ручки, то есть
-  // ровно от центра до края. Кэшируем и пересчитываем только при изменении
-  // размеров: чтение clientWidth каждый кадр заставляло бы браузер пересчитывать
-  // раскладку прямо в цикле рендера.
-  let travel=1;
-  const measure=()=>{travel=Math.max(1,(slider.clientWidth-handle.offsetWidth)/2);};
+// ── Руль-ползунок (горизонтальный) ───────────────────────────────────────
+(function() {
+  const slider = document.getElementById('dvSlider');
+  const handle = document.getElementById('dvSliderH');
+  if (!slider || !handle) return;
+  let travel = 1;
+  const measure = () => { travel = Math.max(1, (slider.clientWidth - handle.offsetWidth) / 2); };
   measure();
-  addEventListener('resize',measure);
-
-  let pos=0,drag=null;   // pos — положение ручки в -1..1, вправо это плюс
-  // Инвариант панели: pos = -steer/DV_LOCK(). Ручка вправо (pos>0) означает
-  // поворот вправо, а CAR.steer положителен при повороте влево, поэтому минус
-  // в обеих формулах. Раньше здесь знак терялся, и при отпускании маркер шкалы
-  // прыгал на противоположную сторону, а сам руль — через сотни градусов.
-  const draw=(p)=>{
-    handle.style.transform='translate(-50%,-50%) translateX('+(p*travel).toFixed(1)+'px)';
-    slider.setAttribute('aria-valuenow',Math.round(p*100));
+  addEventListener('resize', measure);
+  let pos = 0, drag = null;
+  const draw = (p) => {
+    handle.style.transform = 'translate(-50%,-50%) translateX(' + (p * travel).toFixed(1) + 'px)';
+    slider.setAttribute('aria-valuenow', Math.round(p * 100));
   };
-  const setPos=(p)=>{
-    pos=Math.max(-1,Math.min(1,p));
-    touchSteerEnabled=true;touchSteerAngle=-pos*DV_LOCK();
+  const setPos = (p) => {
+    pos = Math.max(-1, Math.min(1, p));
+    touchSteerEnabled = true; touchSteerAngle = -pos * DV_LOCK();
     draw(pos);
   };
-  slider.addEventListener('pointerdown',e=>{
-    // Не preventDefault здесь — позволяет iOS корректно обрабатывать мультитач
-    // (одновременно нажимать газ/тормоз и крутить руль)
+  slider.addEventListener('pointerdown', e => {
     measure();
-    drag={id:e.pointerId,x:e.clientX,start:pos};
+    drag = { id: e.pointerId, startPos: pos, startX: e.clientX };
     slider.classList.add('dragging');
     setPos(pos);
   });
-  window.addEventListener('pointermove',e=>{
-    if(!drag||drag.id!==e.pointerId)return;
-    e.preventDefault(); // preventDefault только при реальном драге
-    setPos(drag.start+(e.clientX-drag.x)/travel);
+  window.addEventListener('pointermove', e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    e.preventDefault();
+    setPos(drag.startPos + (e.clientX - drag.startX) / travel);
   });
-  const endDrag=e=>{
-    if(!drag||drag.id!==e.pointerId)return;
-    drag=null;
+  const endDrag = e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    drag = null;
     slider.classList.remove('dragging');
-    touchSteerEnabled=false;
+    touchSteerEnabled = false;
   };
-  window.addEventListener('pointerup',endDrag);
-  window.addEventListener('pointercancel',endDrag);
-  window.addEventListener('blur',()=>{
-    if(!drag)return;
-    drag=null;slider.classList.remove('dragging');touchSteerEnabled=false;
-  });
-  // Когда руль не держат, ползунок показывает реальный угол колёс, а вместе с
-  // ним и возвращается в центр: CAR.steer стремится к нулю сам (в index.html
-  // want=0, а скорость возврата в 1.6 раза выше обычной). Пружинить ручку через
-  // CSS не нужно — она и так едет по физике, иначе визуал отставал бы от колёс.
-  window.syncDvWheel=()=>{
-    if(drag)return;
-    pos=Math.max(-1,Math.min(1,-CAR.steer/DV_LOCK()));
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+  window.addEventListener('blur', () => { if (drag) { drag = null; slider.classList.remove('dragging'); touchSteerEnabled = false; } });
+  window.syncDvWheel = () => { if (drag) return; pos = Math.max(-1, Math.min(1, -CAR.steer / DV_LOCK())); draw(pos); };
+})();
+
+// ── Газ/тормоз: вертикальный ползунок ────────────────────────────────────
+(function() {
+  let pos = 0, drag = null;
+  const slider = document.getElementById('dvThrottle');
+  const handle = document.getElementById('dvThrottleH');
+  if (!slider || !handle) return;
+  let travel = 1;
+  const measure = () => { travel = Math.max(1, (slider.clientHeight - handle.offsetHeight) / 2); };
+  measure();
+  addEventListener('resize', measure);
+  const draw = (p) => {
+    handle.style.transform = 'translate(-50%,-50%) translateY(' + (-p * travel).toFixed(1) + 'px)';
+    slider.setAttribute('aria-valuenow', Math.round(p * 100));
+  };
+  const setPos = (p) => {
+    pos = Math.max(-1, Math.min(1, p));
+    touchThrottle = pos;  // аналоговое значение -1..1
     draw(pos);
   };
+  slider.addEventListener('pointerdown', e => {
+    measure();
+    drag = { id: e.pointerId, startPos: pos, startY: e.clientY };
+    slider.classList.add('dragging');
+    setPos(pos);
+  });
+  window.addEventListener('pointermove', e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    e.preventDefault();
+    setPos(drag.startPos - (e.clientY - drag.startY) / travel);
+  });
+  const endDrag = e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    drag = null;
+    slider.classList.remove('dragging');
+    touchThrottle = 0;
+    draw(0);
+    pos = 0;
+  };
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+  window.addEventListener('blur', () => { if (drag) { drag = null; slider.classList.remove('dragging'); touchThrottle = 0; draw(0); pos = 0; } });
+  window.syncDvThrottle = () => { if (drag) return; touchThrottle = 0; draw(0); pos = 0; };
 })();
 
 // ── Кнопка переключения вида (следом / салон / свободная) ─────
