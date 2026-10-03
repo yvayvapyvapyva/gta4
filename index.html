@@ -1576,6 +1576,13 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   if (typeof window.setupIndicators === "function") window.setupIndicators(meshes);
   if (typeof window.setupPlateLabels === "function") window.setupPlateLabels(meshes);
 
+  // скрыть двигатель под капотом (он не нужен)
+  for (const m of meshes) {
+    if (/engine|block|motor|intake|exhaust_manifold/i.test(m.name)) {
+      m.isVisible = false;
+    }
+  }
+
   cam.lowerRadiusLimit = CAM_DIST_MIN;
   cam.upperRadiusLimit = CAM_DIST_MAX;
   cam.alpha = CAR.yaw + Math.PI / 2;
