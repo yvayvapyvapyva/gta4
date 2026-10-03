@@ -33,6 +33,8 @@ const DV_LOCK = () => CAR.maxSteer;
   const pressKey=(key,el,pointerId)=>{keyState[key].add(pointerId);keys[codeByKey[key]]=true;if(el)el.classList.add('on');};
   fwd.addEventListener('pointerdown',e=>{e.preventDefault();pressKey('forward',fwd,e.pointerId);});
   back.addEventListener('pointerdown',e=>{e.preventDefault();pressKey('back',back,e.pointerId);});
+  // На iOS touch-action:manipulation на кнопках + отсутствие preventDefault на slider pointerdown
+  // позволяет мультитач: газ/тормоз + руль одновременно
   window.addEventListener('pointerup',e=>{releaseKey('forward',e.pointerId);releaseKey('back',e.pointerId);});
   window.addEventListener('pointercancel',e=>{releaseKey('forward',e.pointerId);releaseKey('back',e.pointerId);});
 
@@ -64,17 +66,16 @@ const DV_LOCK = () => CAR.maxSteer;
     draw(pos);
   };
   slider.addEventListener('pointerdown',e=>{
-    e.preventDefault();
+    // Не preventDefault здесь — позволяет iOS корректно обрабатывать мультитач
+    // (одновременно нажимать газ/тормоз и крутить руль)
     measure();
-    // Запоминаем точку захвата и ведём ручку по смещению пальца: касание сбоку
-    // от центра не должно дёргать руль в ноль.
     drag={id:e.pointerId,x:e.clientX,start:pos};
     slider.classList.add('dragging');
     setPos(pos);
   });
   window.addEventListener('pointermove',e=>{
     if(!drag||drag.id!==e.pointerId)return;
-    e.preventDefault();
+    e.preventDefault(); // preventDefault только при реальном драге
     setPos(drag.start+(e.clientX-drag.x)/travel);
   });
   const endDrag=e=>{
