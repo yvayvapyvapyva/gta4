@@ -1620,6 +1620,7 @@ engine.runRenderLoop(() => {
     if (objectTick) objectTick(dt);
     if (mirrorTick) mirrorTick();
     if (typeof tickBlink === "function") tickBlink(dt);
+    if (typeof tickBlinkSounds === "function") tickBlinkSounds();
     if (typeof syncDvWheel === "function") syncDvWheel();
     // окно открыто — держим его в согласии с тем, что меняли мимо него
     // (клавиша C, стрелки регулировки зеркал в салоне)
@@ -1632,5 +1633,6 @@ engine.runRenderLoop(() => {
 <script src="editor.js"></script>
 <script src="mirror.js"></script>
 <script src="drive-control.js"></script>
+<script src="sounds.js"></script>
 </body>
 </html>

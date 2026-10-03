@@ -181,23 +181,24 @@ function applyBlink(){
   }
 }
 window.tickBlink=function(dt){
-  if(!blinkerLeft&&!blinkerRight)return;
+  if(!blinkerLeft&&!blinkerRight){ syncBlinkBtns(false); return; }
   blinkT+=dt;applyBlink();
+  syncBlinkBtns(blinkOn);
 };
-function syncBlinkBtns(){
+function syncBlinkBtns(blink){
   const blkL=document.getElementById('dvBlinkL'),blkR=document.getElementById('dvBlinkR');
-  if(blkL)blkL.classList.toggle('active',blinkerLeft);
-  if(blkR)blkR.classList.toggle('active',blinkerRight);
+  if(blkL)blkL.classList.toggle('active',blinkerLeft && blink);
+  if(blkR)blkR.classList.toggle('active',blinkerRight && blink);
 }
 function toggleBlinkL(){
   if(!ready)return;
   blinkerLeft=!blinkerLeft;if(blinkerLeft)blinkerRight=false;
-  blinkT=0;applyBlink();syncBlinkBtns();
+  blinkT=0;applyBlink();syncBlinkBtns(true);
 }
 function toggleBlinkR(){
   if(!ready)return;
   blinkerRight=!blinkerRight;if(blinkerRight)blinkerLeft=false;
-  blinkT=0;applyBlink();syncBlinkBtns();
+  blinkT=0;applyBlink();syncBlinkBtns(true);
 }
 const blkL=document.getElementById('dvBlinkL'),blkR=document.getElementById('dvBlinkR');
 if(blkL)blkL.addEventListener('pointerdown',e=>{e.preventDefault();toggleBlinkL();});
