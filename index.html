@@ -713,31 +713,6 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyC" && !editingMap) toggleCam();
   if (e.code === "KeyR") resetCar();
   if (e.code === "KeyX" && typeof toggleXray === "function") toggleXray();
-  // Стрелки: управление камерой (yaw/pitch) во всех режимах
-  if (!mirrorAdjActive?.()) {
-    const step = 0.035; // ~2°
-    if (e.code === "ArrowLeft") {
-      if (CAR.mode === 0) CAR.camYaw -= step;
-      else if (CAR.mode === 1) CAR.lookYawTarget += step; // инвертировано в салоне
-      else cam.alpha -= step;
-      e.preventDefault();
-    } else if (e.code === "ArrowRight") {
-      if (CAR.mode === 0) CAR.camYaw += step;
-      else if (CAR.mode === 1) CAR.lookYawTarget -= step; // инвертировано в салоне
-      else cam.alpha += step;
-      e.preventDefault();
-    } else if (e.code === "ArrowUp") {
-      if (CAR.mode === 0) CAR.camPitch = Math.max(1 * Math.PI / 180, CAR.camPitch - step);
-      else if (CAR.mode === 1) CAR.lookPitchTarget = Math.max(-Math.PI/2, CAR.lookPitchTarget - step);
-      else cam.beta = Math.max(cam.lowerBetaLimit, cam.beta - step);
-      e.preventDefault();
-    } else if (e.code === "ArrowDown") {
-      if (CAR.mode === 0) CAR.camPitch = Math.min(89 * Math.PI / 180, CAR.camPitch + step);
-      else if (CAR.mode === 1) CAR.lookPitchTarget = Math.min(Math.PI/2, CAR.lookPitchTarget + step);
-      else cam.beta = Math.min(cam.upperBetaLimit, cam.beta + step);
-      e.preventDefault();
-    }
-  }
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
@@ -1170,6 +1145,31 @@ function drive(dt) {
   const right = keys.KeyD ? 1 : 0;
   const hand = keys.Space ? 1 : 0;
 
+  // Камера: стрелки в игровом цикле (плавно, не сбиваются другими клавишами)
+  if (!mirrorAdjActive?.()) {
+    const step = 0.00875 * 60 * dt; // ~0.5°/s при 60fps, масштабируется по dt
+    if (keys.ArrowLeft) {
+      if (CAR.mode === 0) { CAR.camYaw -= step; CAR.idle = performance.now(); }
+      else if (CAR.mode === 1) CAR.lookYawTarget += step;
+      else cam.alpha -= step;
+    }
+    if (keys.ArrowRight) {
+      if (CAR.mode === 0) { CAR.camYaw += step; CAR.idle = performance.now(); }
+      else if (CAR.mode === 1) CAR.lookYawTarget -= step;
+      else cam.alpha += step;
+    }
+    if (keys.ArrowUp) {
+      if (CAR.mode === 0) CAR.camPitch = Math.max(1 * Math.PI / 180, CAR.camPitch - step);
+      else if (CAR.mode === 1) CAR.lookPitchTarget = Math.max(-Math.PI/2, CAR.lookPitchTarget - step);
+      else cam.beta = Math.max(cam.lowerBetaLimit, cam.beta - step);
+    }
+    if (keys.ArrowDown) {
+      if (CAR.mode === 0) CAR.camPitch = Math.min(89 * Math.PI / 180, CAR.camPitch + step);
+      else if (CAR.mode === 1) CAR.lookPitchTarget = Math.min(Math.PI/2, CAR.lookPitchTarget + step);
+      else cam.beta = Math.min(cam.upperBetaLimit, cam.beta + step);
+    }
+  }
+
   const steerIn = left - right;
 
   // Ползунок и колёса связаны 1:1: куда ведёт ползунок, там сразу стоят колёса,
@@ -1340,10 +1340,12 @@ function drive(dt) {
     camTargetTmp.set(p.x, p.y + 0.75, p.z);
     BABYLON.Vector3.LerpToRef(camTarget, camTargetTmp, 1 - Math.exp(-dt * 9), camTarget);
     cam.target.copyFrom(camTarget);
-    // возврат камеры за спину по реальному времени, а не по числу кадров.
-    // Задержка 3 с (было 1.6): столько ждём после последнего касания, прежде
-    // чем угол начнёт затухать к нулю.
     const k = 1 - Math.exp(-dt * 5);
+    // автовозврат камеры за спину через 3 с бездействия (только yaw, pitch не трогаем)
+    if (performance.now() - CAR.idle > 3000) {
+      const decay = 1 - Math.exp(-dt * 1.2);
+      CAR.camYaw *= Math.max(0, 1 - decay);
+    }
     // не оборачиваем целевой угол — позволяем camYaw расти бесконечно
     const targetAlpha = CAR.yaw + Math.PI / 2 + CAR.camYaw;
     // кратчайший угловой интерполированный путь
