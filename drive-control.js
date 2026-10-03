@@ -100,6 +100,10 @@ const DV_LOCK = () => CAR.maxSteer;
   window.addEventListener('pointerup', endDrag);
   window.addEventListener('pointercancel', endDrag);
   window.addEventListener('blur', () => { if (drag) { drag = null; slider.classList.remove('dragging'); touchThrottle = 0; draw(0); pos = 0; } });
+  // Блокировка двойного тап-зума на iOS для ползунка газа
+  slider.addEventListener('touchend', e => {
+    if (e.detail > 1) e.preventDefault();
+  }, { passive: false });
   window.syncDvThrottle = () => { if (drag) return; touchThrottle = 0; draw(0); pos = 0; };
 })();
 
@@ -435,7 +439,7 @@ document.addEventListener('selectstart',e=>{
   if(t&&t.closest&&t.closest('#driveCtrl'))e.preventDefault();
 });
 
-// ── Зум страницы двойным тапом (iPad) ───────────────────────────
+// ── Зум страницы двойным тапом (iPad/iPhone) ───────────────────────────
 // CSS тут не помогает: Safari с iOS 10 игнорирует user-scalable=no в meta,
 // а touch-action:none на html,body двойной тап на iPad всё равно пропускает.
 // Ловим жест по касаниям: iOS распознаёт двойной тап через touchend, и его
@@ -443,10 +447,18 @@ document.addEventListener('selectstart',e=>{
 // обработчиков кнопок от зума не спасает — событие другое.
 //
 // Считаем через e.detail (счётчик тапов, в Safari работает): detail>1 — это
-// второй и последующие тапы, их и гасим. Одиночный тап не трогаем, поэтому
+// второй и последующие тапы, их и гашим. Одиночный тап не трогаем, поэтому
 // обычное нажатие на кнопку зума по-прежнему срабатывает.
-document.addEventListener('touchend',e=>{
-  if(e.detail>1)e.preventDefault();
-},{passive:false});
+// Дублируем на touchstart как запасной вариант: на некоторых iOS detail
+// приходит только на touchstart.
+let lastTouchEnd = 0;
+document.addEventListener('touchstart', e => {
+  const now = Date.now();
+  if (now - lastTouchEnd < 300) e.preventDefault(); // двойной тап < 300мс
+}, { passive: false });
+document.addEventListener('touchend', e => {
+  if (e.detail > 1) e.preventDefault();
+  lastTouchEnd = Date.now();
+}, { passive: false });
 // Пинч-зум: на iOS свой жест, гасится отдельно от двойного тапа.
-document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
+document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
