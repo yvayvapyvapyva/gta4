@@ -629,12 +629,11 @@ sky.infiniteDistance = true;
 sky.isPickable = false;
 sky.fogEnabled = false;
 
-const GROUND_SIZE = 4000;
+const GROUND_SIZE = 400;  // было 4000 — уменьшено для производительности теней
 const TILE = 8;
 
-// Плоскость земли тянется за горизонт (4000 м >> дальнего плана), а дымка
-// растворяет её в цвет неба раньше, чем достигает края. maxZ ограничен 500 м
-// для точности буфера глубины (Z-fighting линий/конусов вдали).
+// Плоскость земли (400 м — достаточно за горизонт при maxZ=500, дымка скроет край).
+// Уменьшено с 4000 для производительности shadow map (в 100× меньше площадь).
 cam.maxZ = 500;
 
 const ground = BABYLON.MeshBuilder.CreateGround("ground", { width:GROUND_SIZE, height:GROUND_SIZE, subdivisions:1 }, scene);
