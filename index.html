@@ -659,24 +659,24 @@ groundTex.wrapU = groundTex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
 groundTex.uScale = groundTex.vScale = GROUND_SIZE / 4;
 {
   const g = groundTex.getContext();
-  g.fillStyle = "rgb(34,34,34)";
+  g.fillStyle = "rgb(85,85,85)";
   g.fillRect(0, 0, 256, 256);
   // 1px шум
   for (let i = 0; i < 9000; i++) {
-    const x = Math.random() * 256, y = Math.random() * 256, v = 34 + (Math.random() * 22 - 11);
+    const x = Math.random() * 256, y = Math.random() * 256, v = 85 + (Math.random() * 30 - 15);
     g.fillStyle = "rgb(" + (v | 0) + "," + (v | 0) + "," + (v | 0) + ")";
     g.fillRect(x, y, 1, 1);
   }
-  // круги
+  // круги (пятна) — под новый базовый 70
   for (let i = 0; i < 140; i++) {
-    const x = Math.random() * 256, y = Math.random() * 256, r = 1.5 + Math.random() * 4, v = 36 + (Math.random() * 20 - 10);
+    const x = Math.random() * 256, y = Math.random() * 256, r = 1.5 + Math.random() * 4, v = 70 + (Math.random() * 30 - 15);
     g.fillStyle = "rgba(" + (v | 0) + "," + (v | 0) + "," + (v | 0) + ",0.45)";
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
   }
-  // линии
+  // линии (трещины) — чуть темнее базы
   for (let i = 0; i < 26; i++) {
     const x = Math.random() * 256, y = Math.random() * 256, l = 14 + Math.random() * 40, a = Math.random() * Math.PI;
-    g.strokeStyle = "rgba(20,20,20,0.35)";
+    g.strokeStyle = "rgba(40,40,40,0.35)";
     g.lineWidth = 1;
     g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
   }
