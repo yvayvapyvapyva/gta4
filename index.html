@@ -537,21 +537,33 @@ const CAM_DIST_MAX = 90;                        // м, дальше не отъ�
 const LOOK_DRAG_SCALE = 1;
 
 const canvas = document.getElementById("view");
-// Определение мобильного устройства (как в simulator2)
-const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || 
+// Разделение устройств: iPhone (DPR=3) ≠ iPad (DPR=2)
+const isIPad = /iPad/i.test(navigator.userAgent);
+const isIPhone = /iPhone/i.test(navigator.userAgent);
+const isAndroid = /Android/i.test(navigator.userAgent);
+const isMobile = isIPad || isIPhone || isAndroid || 
   (navigator.maxTouchPoints > 1 && Math.max(screen.width, screen.height) < 1100);
 
 const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, stencil:true }, true);
-// Hardware scaling: на мобильных рендерим в 1.0 CSS px (апскейл браузером), на десктопе — нативный DPR
-engine.setHardwareScalingLevel(isMobile ? 1.0 : 1.0 / (window.devicePixelRatio || 1));
+// Hardware scaling: iPad DPR=2 → 1.0; iPhone DPR=3 → 1.5 (не 1.0!); Android → 1.0; Desktop → native DPR
+let hardwareScale;
+if (isIPhone) hardwareScale = 1.0 / 2.0;  // рендерим в 50% нативного (DPR=3 → 1.5x CSS)
+else if (isIPad) hardwareScale = 1.0;
+else if (isAndroid) hardwareScale = 1.0;
+else hardwareScale = 1.0 / (window.devicePixelRatio || 1);
+engine.setHardwareScalingLevel(hardwareScale);
 
 const scene = new BABYLON.Scene(engine);
 // clearColor = fogColor: за дальней плоскостью (maxZ=500) видно небо, а не черный фон
 const SKY_COLOR = new BABYLON.Color3(0.55, 0.72, 0.94);
 scene.clearColor = new BABYLON.Color4(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1);
 scene.useRightHandedSystem = false;
-// Дымка и tone mapping отключены на мобильных (как в simulator2)
-if (!isMobile) {
+
+// Настройки рендеринга: iPhone — почти как десктоп, iPad/Android — упрощённые
+const isLowEnd = isIPad || isAndroid;  // iPad (DPR=2) и Android — упрощаем
+
+if (!isLowEnd) {
+  // iPhone и десктоп — полные настройки
   scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
   scene.fogDensity = 0.0015;
   scene.fogColor = SKY_COLOR;
@@ -562,6 +574,7 @@ if (!isMobile) {
   ip.exposure = 1.15;
   ip.contrast = 1.08;
 } else {
+  // iPad/Android — упрощённые (как simulator2)
   scene.fogMode = BABYLON.Scene.FOGMODE_NONE;
   const ip = scene.imageProcessingConfiguration;
   ip.toneMappingEnabled = false;
@@ -589,9 +602,9 @@ const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.15, -1, 0
 sun.position = new BABYLON.Vector3(2, 14, -2);
 sun.intensity = 2.6;
 
-const shadow = new BABYLON.ShadowGenerator(isMobile ? 512 : 1024, sun);
+const shadow = new BABYLON.ShadowGenerator(isLowEnd ? 512 : 1024, sun);
 shadow.useBlurExponentialShadowMap = true;
-shadow.blurKernel = isMobile ? 4 : 16;
+shadow.blurKernel = isLowEnd ? 4 : 16;
 shadow.darkness = 0.42;
 
 // мягкий свет внутри салона — включается только в режиме «салон» (см. applyCamMode)
@@ -600,17 +613,17 @@ cabin.diffuse = new BABYLON.Color3(1, 0.96, 0.9);
 cabin.range = 5;
 cabin.intensity = 0;
 
-// environment for PBR reflections (car paint is metallic) — только на десктопе
-if (!isMobile) {
+// environment for PBR reflections (car paint is metallic) — на iPhone и десктопе
+if (!isLowEnd) {
   try {
     scene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(ENV_URL, scene);
     scene.environmentIntensity = 0.85;
   } catch (e) {}
 }
  
- // небо: градиентный купол — только на десктопе (на мобильных не нужен, как в simulator2)
+ // небо: градиентный купол — на iPhone и десктопе
  let sky = null;
- if (!isMobile) {
+ if (!isLowEnd) {
    const skyTex = new BABYLON.DynamicTexture("sky", { width:32, height:512 }, scene, true);
    skyTex.hasAlpha = false;
    {
