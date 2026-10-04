@@ -189,29 +189,25 @@
   .tg-card span { font-size:11.5px; color:var(--fg); }
 </style>
 <style id="drivePanelStyle">
-/* Стили нижней панели управления вынесены сюда (модуль drive-control.js). */
-#driveCtrl{position:fixed;left:0;right:0;bottom:0;z-index:8;display:flex;justify-content:space-between;pointer-events:none;padding:0 12px 8px}
-#driveLeft{display:flex;flex-direction:row;align-items:flex-end;gap:8px;pointer-events:auto}
-#driveRight{display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:auto;justify-content:flex-end}
-.dv-controls{display:flex;flex-direction:column;gap:6px}
-.dv-control-row{display:flex;gap:6px}
-.dv-blink-row{display:flex;gap:8px}
-.dv-slider-v{position:relative;width:64px;height:200px;touch-action:pan-y;cursor:grab;-webkit-tap-highlight-color:transparent;box-sizing:border-box;overflow:hidden;
+/* Стили нижней панели управления — каждый элемент position:fixed отдельно */
+#driveCtrl{position:fixed;left:0;right:0;bottom:0;top:0;z-index:8;pointer-events:none}
+#driveCtrl > *{position:fixed;pointer-events:auto}
+.dv-slider-v{width:64px;height:200px;touch-action:pan-y;cursor:grab;-webkit-tap-highlight-color:transparent;box-sizing:border-box;overflow:hidden;
   background:linear-gradient(0deg,#16232e,#0b1520);border:2px solid #2a4257;border-radius:16px;box-shadow:0 0 0 4px rgba(12,22,32,.6),0 6px 18px rgba(0,0,0,.5)}
 .dv-slider-v.dragging{cursor:grabbing;touch-action:none}
 .dv-slider-v::before{content:'';position:absolute;top:50%;left:16%;right:16%;height:2px;background:#2a4257;border-radius:1px;transform:translateY(-50%)}
-.dv-slider-v-h{position:absolute;top:50%;left:50%;width:64px;height:64px;transform:translate(-50%,-50%);border-radius:12px;background:#ff6d00;border:2px solid #1a1200;box-shadow:0 3px 10px rgba(0,0,0,.55)}
-.dv-btn{width:clamp(44px,10vw,64px);aspect-ratio:1;font-size:clamp(18px,4vw,28px);color:#d8e5ee;background:rgba(12,22,32,.85);border:1px solid #2a4257;border-radius:12px;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center}
+.dv-slider-v-h{position:absolute;top:50%;left:50%;width:54px;height:54px;transform:translate(-50%,-50%);border-radius:12px;background:#ff6d00;border:2px solid #1a1200;box-shadow:0 3px 10px rgba(0,0,0,.55)}
+.dv-btn{width:54px;height:54px;font-size:24px;color:#d8e5ee;background:rgba(12,22,32,.85);border:1px solid #2a4257;border-radius:12px;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center}
 .dv-btn.on,.dv-btn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
 .dv-btn.active{background:#62d0df;color:#1a1200;border-color:#62d0df}
 .dv-btn.dv-xray.on{background:rgba(255,138,61,.16);border-color:var(--acc);color:var(--acc)}
 .dv-btn.dv-xray.on:active{background:var(--acc);color:#12141a}
-.dv-zoombtn{font-size:clamp(20px,5vw,30px);line-height:1;color:#fff}
+.dv-zoombtn{font-size:28px;line-height:1;color:#fff}
 .dv-zoombtn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
 .dv-blink{color:#fff}
 .dv-blink.active{background:#ffd60a;color:#1a1200;border-color:#ffd60a}
-.dv-slider-wrap{width:280px;max-width:50vw;display:flex;justify-content:flex-end}
-.dv-slider{position:relative;width:100%;height:64px;pointer-events:auto;touch-action:pan-x;cursor:grab;-webkit-tap-highlight-color:transparent;box-sizing:border-box;overflow:hidden;
+.dv-slider-wrap{width:280px;height:64px}
+.dv-slider{position:relative;width:100%;height:100%;pointer-events:auto;touch-action:pan-x;cursor:grab;-webkit-tap-highlight-color:transparent;box-sizing:border-box;overflow:hidden;
   background:linear-gradient(180deg,#16232e,#0b1520);border:2px solid #2a4257;border-radius:16px;box-shadow:0 0 0 4px rgba(12,22,32,.6),0 6px 18px rgba(0,0,0,.5)}
 .dv-slider.dragging{cursor:grabbing;touch-action:none}
 .dv-slider::before{content:'';position:absolute;left:50%;top:16%;bottom:16%;width:2px;background:#2a4257;border-radius:1px;transform:translateX(-50%)}
@@ -219,30 +215,7 @@
 #driveCtrl,#driveCtrl *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 #mapEdit *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 body.edit-mode #driveCtrl{display:none}
-  .dv-row-main{gap:8px}
-  .dv-control-row .dv-btn, .dv-blink-row .dv-btn{width:54px;font-size:clamp(18px,4vw,28px)}
-  .dv-slider{height:54px}
-  .dv-slider-v{width:54px;height:200px}
-  .dv-slider-v-h{width:54px;height:54px}
-  .dv-slider-wrap{max-width:280px}
-  .win{max-height:calc(100vh - 140px)}
-  /* в режиме правки площадки панель уступает карточке редактора */
-  body.edit-mode #driveCtrl{display:none}
-
-  /* Playback UI */
-  #playbackUI { position:fixed; left:0; right:0; bottom:0; top:0; z-index:20; pointer-events:none; }
-  .playback-controls { position:fixed; left:50%; bottom:32px; transform:translateX(-50%); display:flex; gap:16px; z-index:21; pointer-events:auto; }
-  .playback-btn { width:64px; height:64px; border-radius:50%; border:none; font-size:28px; color:#fff; background:rgba(18,20,26,.9); box-shadow:0 4px 20px rgba(0,0,0,.6); backdrop-filter:blur(8px); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:transform .1s, background .15s; }
-  .playback-btn:active { transform:scale(.92); }
-  .playback-btn:hover { background:rgba(255,138,61,.3); }
-  #playbackPause { background:rgba(255,138,61,.2); }
-  #playbackStop { background:rgba(220,60,60,.2); }
-  .playback-info { position:fixed; left:50%; bottom:110px; transform:translateX(-50%); z-index:21; pointer-events:none; font-size:14px; color:var(--fg); background:rgba(18,20,26,.8); padding:8px 16px; border-radius:8px; border:1px solid rgba(255,255,255,.1); backdrop-filter:blur(6px); }
-  body.playback-active #driveCtrl,
-  body.playback-active #hud,
-  body.playback-active #mirrorhud,
-  body.playback-active #gearBtn,
-  body.playback-active #recBtn { display:none !important; }
+body.playback-active #driveCtrl{display:none !important}
 </style>
 </head>
 <body>
@@ -380,33 +353,21 @@ body.edit-mode #driveCtrl{display:none}
 <div class="me-len" id="lineLen" hidden>Длина: 0.0 м</div>
 
 <div id="driveCtrl">
-  <!-- Левая панель: газ + кнопки -->
-  <div id="driveLeft" class="dv-panel">
-    <div class="dv-slider-v" id="dvThrottle" role="slider" aria-label="Газ/Тормоз" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0">
-      <div class="dv-slider-v-h" id="dvThrottleH"></div>
-    </div>
-    <div class="dv-controls">
-      <div class="dv-control-row">
-        <button class="dv-btn dv-zoombtn" id="dvZoomIn" aria-label="Приблизить">+</button>
-        <button class="dv-btn dv-view" id="dvView" aria-label="Переключить вид">👁</button>
-      </div>
-      <div class="dv-control-row">
-        <button class="dv-btn dv-zoombtn" id="dvZoomOut" aria-label="Отдалить">−</button>
-        <button class="dv-btn dv-xray" id="dvXray" aria-label="Прозрачность кузова">⛶</button>
-      </div>
-    </div>
+  <!-- Левая сторона -->
+  <div class="dv-slider-v" id="dvThrottle" role="slider" aria-label="Газ/Тормоз" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0" style="left:16px;bottom:16px;">
+    <div class="dv-slider-v-h" id="dvThrottleH"></div>
   </div>
+  <button class="dv-btn dv-zoombtn" id="dvZoomIn" aria-label="Приблизить" style="left:88px;bottom:78px;">+</button>
+  <button class="dv-btn dv-view" id="dvView" aria-label="Переключить вид" style="left:150px;bottom:78px;">👁</button>
+  <button class="dv-btn dv-zoombtn" id="dvZoomOut" aria-label="Отдалить" style="left:88px;bottom:16px;">−</button>
+  <button class="dv-btn dv-xray" id="dvXray" aria-label="Прозрачность кузова" style="left:150px;bottom:16px;">⛶</button>
 
-  <!-- Правая панель: поворотники + руль -->
-  <div id="driveRight" class="dv-panel">
-    <div class="dv-blink-row">
-      <button class="dv-btn dv-blink" id="dvBlinkL" aria-label="Левый поворотник">◀</button>
-      <button class="dv-btn dv-blink" id="dvBlinkR" aria-label="Правый поворотник">▶</button>
-    </div>
-    <div class="dv-slider-wrap">
-      <div class="dv-slider" id="dvSlider" role="slider" aria-label="Руль" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0">
-        <div class="dv-slider-h" id="dvSliderH"></div>
-      </div>
+  <!-- Правая сторона -->
+  <button class="dv-btn dv-blink" id="dvBlinkL" aria-label="Левый поворотник" style="right:78px;bottom:88px;">◀</button>
+  <button class="dv-btn dv-blink" id="dvBlinkR" aria-label="Правый поворотник" style="right:16px;bottom:88px;">▶</button>
+  <div class="dv-slider-wrap" style="right:16px;bottom:16px;">
+    <div class="dv-slider" id="dvSlider" role="slider" aria-label="Руль" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0">
+      <div class="dv-slider-h" id="dvSliderH"></div>
     </div>
   </div>
 </div>
