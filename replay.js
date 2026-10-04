@@ -115,20 +115,75 @@ function startPlayback() {
   if (isRecording) stopRecording();
   if (!replayBuffer.length) { console.warn('[Replay] Buffer empty'); return; }
   isPlaying = true;
+  isPaused = false;
   replayIndex = 0;
   replayTime = 0;
   // Сброс машины в начальное состояние реплея
   const first = replayBuffer[0];
   resetCarToFrame(first);
+  showPlaybackUI();
   console.log('[Replay] Playback started');
 }
 
 // Остановить воспроизведение
 function stopPlayback() {
   isPlaying = false;
+  isPaused = false;
   replayIndex = 0;
   replayTime = 0;
+  hidePlaybackUI();
   console.log('[Replay] Playback stopped');
+}
+
+let isPaused = false;
+
+// Пауза/возобновление
+function togglePlaybackPause() {
+  if (!isPlaying && !isPaused) return;
+  isPaused = !isPaused;
+  updatePauseButton();
+  if (!isPaused) {
+    // возобновляем — сбрасываем replayTime к текущему кадру, чтобы не было скачка
+    const frame = replayBuffer[replayIndex];
+    if (frame) replayTime = frame.t;
+  }
+}
+function updatePauseButton() {
+  const btn = document.getElementById('playbackPause');
+  if (!btn) return;
+  btn.textContent = isPaused ? '▶' : '⏸';
+  btn.setAttribute('aria-label', isPaused ? 'Продолжить' : 'Пауза');
+}
+
+function showPlaybackUI() {
+  const ui = document.getElementById('playbackUI');
+  if (ui) { ui.hidden = false; document.body.classList.add('playback-active'); }
+  updatePauseButton();
+}
+function hidePlaybackUI() {
+  const ui = document.getElementById('playbackUI');
+  if (ui) { ui.hidden = true; document.body.classList.remove('playback-active'); }
+}
+
+// Обёртка над replayTick с учётом паузы
+function replayTickWithPause(dt) {
+  if (!isPlaying && !isPaused) return false;
+  if (isPaused) return true; // просто ждём
+  return replayTick(dt);
+}
+
+// Инициализация кнопок playback UI
+function initPlaybackUI() {
+  const pauseBtn = document.getElementById('playbackPause');
+  const stopBtn = document.getElementById('playbackStop');
+  if (pauseBtn) pauseBtn.addEventListener('click', togglePlaybackPause);
+  if (stopBtn) stopBtn.addEventListener('click', stopPlayback);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPlaybackUI);
+} else {
+  initPlaybackUI();
 }
 
 // Применить кадр реплея к машине (вызывается в drive() вместо чтения keys)
@@ -224,6 +279,7 @@ window.Replay = {
   stopPlayback,
   isRecording: () => isRecording,
   isPlaying: () => isPlaying,
+  isPaused: () => isPaused,
   getBuffer: () => replayBuffer,
   FIXED_DT: REPLAY_FIXED_DT
 };

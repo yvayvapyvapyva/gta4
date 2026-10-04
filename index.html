@@ -283,6 +283,21 @@
   .win{max-height:calc(100vh - 140px)}
   /* в режиме правки площадки панель уступает карточке редактора */
   body.edit-mode #driveCtrl{display:none}
+
+  /* Playback UI */
+  #playbackUI { position:fixed; left:0; right:0; bottom:0; top:0; z-index:20; pointer-events:none; }
+  .playback-controls { position:fixed; left:50%; bottom:32px; transform:translateX(-50%); display:flex; gap:16px; z-index:21; pointer-events:auto; }
+  .playback-btn { width:64px; height:64px; border-radius:50%; border:none; font-size:28px; color:#fff; background:rgba(18,20,26,.9); box-shadow:0 4px 20px rgba(0,0,0,.6); backdrop-filter:blur(8px); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:transform .1s, background .15s; }
+  .playback-btn:active { transform:scale(.92); }
+  .playback-btn:hover { background:rgba(255,138,61,.3); }
+  #playbackPause { background:rgba(255,138,61,.2); }
+  #playbackStop { background:rgba(220,60,60,.2); }
+  .playback-info { position:fixed; left:50%; bottom:110px; transform:translateX(-50%); z-index:21; pointer-events:none; font-size:14px; color:var(--fg); background:rgba(18,20,26,.8); padding:8px 16px; border-radius:8px; border:1px solid rgba(255,255,255,.1); backdrop-filter:blur(6px); }
+  body.playback-active #driveCtrl,
+  body.playback-active #hud,
+  body.playback-active #mirrorhud,
+  body.playback-active #gearBtn,
+  body.playback-active #recBtn { display:none !important; }
 </style>
 </head>
 <body>
@@ -451,6 +466,14 @@
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Playback UI overlay -->
+<div id="playbackUI" hidden>
+  <div class="playback-controls">
+    <button id="playbackPause" class="playback-btn" aria-label="Пауза">⏸</button>
+    <button id="playbackStop" class="playback-btn" aria-label="Остановить">⏹</button>
   </div>
 </div>
 
@@ -1177,9 +1200,12 @@ function applySupport() {
 
 function drive(dt) {
   // === REPLAY: воспроизведение ===
-  if (typeof replayTick === 'function' && window.Replay?.isPlaying?.()) {
-    if (!replayTick(dt)) {
+  if (typeof replayTickWithPause === 'function' && (window.Replay?.isPlaying?.() || window.Replay?.isPaused?.())) {
+    if (!replayTickWithPause(dt)) {
       // реплей закончился или не активен — продолжаем нормальную езду
+    } else if (window.Replay?.isPaused?.()) {
+      // на паузе — пропускаем физику полностью
+      return;
     } else {
       // в режиме воспроизведения входа уже подставлены в applyReplayFrame
       // запрещаем пользовательский ввод
