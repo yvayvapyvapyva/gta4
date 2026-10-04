@@ -1666,11 +1666,34 @@ engine.runRenderLoop(() => {
 <script src="sounds.js"></script>
 <script src="replay.js"></script>
 <script>
-  if (window.Telegram?.WebApp) {
-    Telegram.WebApp.ready();
-    Telegram.WebApp.expand(); // полный экран
-    Telegram.WebApp.lockOrientation(); // фиксируем ориентацию
+  function resizeEngine(){
+    try{
+      if(typeof engine==='undefined'||!engine||!engine.resize)return;
+      engine.resize();
+      requestAnimationFrame(()=>{if(engine&&engine.resize)engine.resize();});
+    }catch(e){}
   }
+  function tgFullscreen(){
+    try{
+      if(!window.Telegram||!Telegram.WebApp)return;
+      Telegram.WebApp.ready();
+      Telegram.WebApp.expand();
+      if(Telegram.WebApp.setHeaderColor)Telegram.WebApp.setHeaderColor('#12141a');
+      if(Telegram.WebApp.setBackgroundColor)Telegram.WebApp.setBackgroundColor('#12141a');
+      if(Telegram.WebApp.disableVerticalSwipes)Telegram.WebApp.disableVerticalSwipes();
+      if(Telegram.WebApp.lockOrientation)Telegram.WebApp.lockOrientation();
+      if(Telegram.WebApp.requestFullscreen)Telegram.WebApp.requestFullscreen();
+      resizeEngine();
+    }catch(e){}
+    requestAnimationFrame(resizeEngine);
+  }
+  window.addEventListener('resize',resizeEngine);
+  document.addEventListener('fullscreenchange',resizeEngine);
+  if(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.onEvent)Telegram.WebApp.onEvent('viewportChanged',resizeEngine);
+  tgFullscreen();
+  document.addEventListener('DOMContentLoaded',tgFullscreen);
+  window.addEventListener('load',tgFullscreen);
+  document.addEventListener('pointerdown',tgFullscreen,{once:true});
 </script>
 </body>
 </html>
