@@ -3,12 +3,12 @@
  *
  * Подключается классическим <script> ПОСЛЕ основного inline-скрипта index.html.
  * Классические скрипты делят глобальную лексическую область, поэтому отсюда видны
- * scene, engine, BABYLON, canvas, cam, shadow, CAR, ground, GROUND_SIZE, meshes,
+ * scene, engine, BABYLON, canvas, cam, CAR, ground, GROUND_SIZE, meshes,
  * clamp, applyCamMode, resetCar.
  *
  * Отличия от исходного приложения, к которым пришлось приспособиться:
  *   — машина это CAR.root, а не меш car; курс и скорость это CAR.yaw и CAR.v;
- *   — камера называется cam, генератор теней — shadow;
+ *   — камера называется cam;
  *   — площадка не имеет фиксированного размера: земля едет за машиной, поэтому
  *     границы ставки считаются от точки, где машина встала при входе в правку;
  *   — высоты под колёсами и наклоны берёт не сам модуль, а хук surfaceProbe:
@@ -69,7 +69,6 @@ function createCone(high) {
     // трогаем — оно только становится устойчивее). Полоса уезжает вдвое выше.
     node.scaling.y = 2;
   }
-  for (const m of [base, body, stripe]) shadow.addShadowCaster(m);
   coneNodes.push(node);
   return node;
 }
@@ -88,7 +87,6 @@ function addConeAt(x, z, high) {
 
 function deleteCone(n) {
   occupied.delete(n.userData.cellKey);
-  n.getChildMeshes().forEach((m) => shadow.removeShadowCaster(m));
   const i = coneNodes.indexOf(n);
   if (i >= 0) coneNodes.splice(i, 1);
   n.dispose();
@@ -201,7 +199,6 @@ function makeFenceSegment(ax, az, dx, dz, L) {
     rail.position.set(cx, rh, cz);
     rail.rotation.y = ry;
     rail.isPickable = true;
-    rail.receiveShadows = true;
     rail.material = matRail;
     rail.metadata = { isLine:true, stype:"fence", group:g };
   }
@@ -212,7 +209,6 @@ function makeFenceSegment(ax, az, dx, dz, L) {
     post.parent = g;
     post.position.set(ax + dx * t, 0.85, az + dz * t);
     post.isPickable = true;
-    post.receiveShadows = true;
     post.material = matPost;
     post.metadata = { isLine:true, stype:"fence", group:g };
   }
@@ -260,7 +256,6 @@ function buildRampCurbs(g, sides, D, L2, h) {
       curb.rotation.x = Math.atan2(-(y2 - y1), z2 - z1);
       curb.material = matCurb;
       curb.isPickable = false;
-      curb.receiveShadows = true;
       curb.metadata = { isLine:true, stype:"estacada", group:g };
     };
     mk(-0.06, D + 0.06, 0, h);
@@ -275,7 +270,6 @@ function makeRampSegment(ax, az, dx, dz, D, h) {
   poly.parent = g;
   poly.material = matRamp;
   poly.isPickable = true;
-  poly.receiveShadows = true;
   poly.metadata = { isLine:true, stype:"estacada", group:g, isSurface:true };
   buildRampCurbs(g, [-EST_W / 2 + 0.12, EST_W / 2 - 0.12], D, EST_L2, h);
   g.position.set(ax, 0, az);
@@ -296,7 +290,6 @@ function makeLineSegment(type, a, b) {
   seg.rotation.y = segRotY(dx, dz);
   seg.material = type === "curb" ? matCurb : matLine;
   seg.isPickable = true;
-  seg.receiveShadows = true;
   seg.metadata = { isLine:true, stype:type };
   return seg;
 }

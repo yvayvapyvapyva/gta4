@@ -575,10 +575,7 @@ const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.15, -1, 0
 sun.position = new BABYLON.Vector3(2, 14, -2);
 sun.intensity = 2.6;
 
-const shadow = new BABYLON.ShadowGenerator(1024, sun);
-shadow.useBlurExponentialShadowMap = true;
-shadow.blurKernel = 16;
-shadow.darkness = 0.42;
+
 
 // мягкий свет внутри салона — включается только в режиме «салон» (см. applyCamMode)
 const cabin = new BABYLON.PointLight("cabin", new BABYLON.Vector3(0, 0, 0), scene);
@@ -619,11 +616,10 @@ sky.infiniteDistance = true;
 sky.isPickable = false;
 sky.fogEnabled = false;
 
-const GROUND_SIZE = 400;  // было 4000 — уменьшено для производительности теней
+const GROUND_SIZE = 400;
 const TILE = 8;
 
 // Плоскость земли (400 м — достаточно за горизонт при maxZ=500, дымка скроет край).
-// Уменьшено с 4000 для производительности shadow map (в 100× меньше площадь).
 cam.maxZ = 500;
 
 const ground = BABYLON.MeshBuilder.CreateGround("ground", { width:GROUND_SIZE, height:GROUND_SIZE, subdivisions:1 }, scene);
@@ -631,7 +627,7 @@ const gm = new BABYLON.StandardMaterial("gm", scene);
 gm.specularColor = new BABYLON.Color3(0.04, 0.04, 0.05);
 gm.diffuseColor = new BABYLON.Color3(0.85, 0.85, 0.88);
 ground.material = gm;
-ground.receiveShadows = true;
+
 
 // асфальт: как в simulator2 — 256x256, простой шум, без анизотропии
 const groundTex = new BABYLON.DynamicTexture("ground", { width:256, height:256 }, scene, true);
@@ -938,7 +934,6 @@ function toggleXray() {
       if (!originalMaterials.has(m)) originalMaterials.set(m, m.material);
       m.material = mat;
       m.renderingGroupId = 1;
-      m.receiveShadows = false;
     }
     // скрыть двигатель в X-ray режиме
     for (const m of CAR.engineMeshes || []) m.isVisible = false;
@@ -949,7 +944,6 @@ function toggleXray() {
       if (orig) {
         m.material = orig;
         m.renderingGroupId = 0;
-        m.receiveShadows = true;
         originalMaterials.delete(m);
       }
     }
@@ -1476,8 +1470,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
       mn = BABYLON.Vector3.Minimize(mn, tmp);
       mx = BABYLON.Vector3.Maximize(mx, tmp);
     }
-    m.receiveShadows = true;
-    shadow.addShadowCaster(m);
+    
   }
 
   const center = BABYLON.Vector3.Center(mn, mx);
