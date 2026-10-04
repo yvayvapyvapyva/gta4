@@ -537,7 +537,25 @@ const CAM_DIST_MAX = 90;                        // м, дальше не отъ�
 const LOOK_DRAG_SCALE = 1;
 
 const canvas = document.getElementById("view");
-const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, stencil:true }, true);
+// Ограничиваем DPR для рендера: на айпадах 2-3х — слишком тяжело для GPU.
+const isIPad = /iPad/.test(navigator.userAgent);
+const MAX_DPR = isIPad ? 1.0 : 1.5;   // iPad рендерит в 1× CSS (апскейл 2× браузером), остальные — 1.5×
+const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+canvas.style.width = "100%";
+canvas.style.height = "100%";
+// Явно задаём drawingBuffer размер с ограниченным DPR
+const resizeCanvas = () => {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+};
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+// Антиализинг отключаем на мобильных — MSAA ест память и батарею на айпадах
+const isMobile = /iPad|iPhone|Android/.test(navigator.userAgent);
+const engine = new BABYLON.Engine(canvas, !isMobile, { preserveDrawingBuffer:true, stencil:true }, true);
+engine.setHardwareScalingLevel(1 / dpr);
 const scene = new BABYLON.Scene(engine);
 // clearColor = fogColor: за дальней плоскостью (maxZ=500) видно небо, а не черный фон
 const SKY_COLOR = new BABYLON.Color3(0.55, 0.72, 0.94);
@@ -577,9 +595,9 @@ const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.15, -1, 0
 sun.position = new BABYLON.Vector3(2, 14, -2);
 sun.intensity = 2.6;
 
-const shadow = new BABYLON.ShadowGenerator(2048, sun);
+const shadow = new BABYLON.ShadowGenerator(isMobile ? 1024 : 2048, sun);
 shadow.useBlurExponentialShadowMap = true;
-shadow.blurKernel = 32;
+shadow.blurKernel = isMobile ? 16 : 32;
 shadow.darkness = 0.42;
 
 // мягкий свет внутри салона — включается только в режиме «салон» (см. applyCamMode)
@@ -1744,8 +1762,6 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   msg.innerHTML = '<span id="err">ошибка загрузки: ' + (e && e.message ? e.message : e) + "</span>";
   fill.style.background = "#ff6b6b";
 });
-
-window.addEventListener("resize", () => engine.resize());
 
 let last = performance.now();
 engine.runRenderLoop(() => {
