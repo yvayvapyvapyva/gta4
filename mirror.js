@@ -16,7 +16,7 @@
 //   mirrorTick()                  — каждый кадр перед scene.render()
 
 const MIRROR_RES = 2048;       // сторона RTT: запас, чтобы зеркало не мылилось
-const MIRROR_LEVEL = 0.92;      // стекло чуть гасит отражение
+const MIRROR_LEVEL = 1.0;       // идеальное зеркало
 const MIRROR_ANISO = 16;        // фильтрация при взгляде на зеркало под углом
 const MIRROR_ADJ_DEG = 0.5;    // шаг регулировки зеркала, градусы за нажатие
 const MIRROR_ADJ = MIRROR_ADJ_DEG * Math.PI / 180;   // то же в радианах
