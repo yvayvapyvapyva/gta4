@@ -538,16 +538,9 @@ const capped = Math.min(dpr, 1.5);
 engine.setHardwareScalingLevel(1.0 / capped);
 
 const scene = new BABYLON.Scene(engine);
-// clearColor = fogColor: за дальней плоскостью (maxZ=500) видно небо, а не черный фон
 const SKY_COLOR = new BABYLON.Color3(0.55, 0.72, 0.94);
 scene.clearColor = new BABYLON.Color4(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1);
 scene.useRightHandedSystem = false;
-
-// Туман и тонмаппинг: дымка убирает край земли, ACES сводит пересветы солнца
-// на кузове и в небе.
-scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
-scene.fogDensity = 0.0015;
-scene.fogColor = SKY_COLOR;
 
 const ip = scene.imageProcessingConfiguration;
 ip.toneMappingEnabled = true;
@@ -621,8 +614,8 @@ sky.fogEnabled = false;
 const GROUND_SIZE = 400;
 const TILE = 8;
 
-// Плоскость земли (400 м — достаточно за горизонт при maxZ=500, дымка скроет край).
-cam.maxZ = 500;
+// Плоскость земли (400 м — достаточно за горизонт, дымка скроет край).
+cam.maxZ = 200;
 
 const ground = BABYLON.MeshBuilder.CreateGround("ground", { width:GROUND_SIZE, height:GROUND_SIZE, subdivisions:1 }, scene);
 const gm = new BABYLON.StandardMaterial("gm", scene);
