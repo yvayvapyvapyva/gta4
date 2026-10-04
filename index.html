@@ -532,10 +532,8 @@ const LOOK_DRAG_SCALE = 1;
 const canvas = document.getElementById("view");
 
 const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, stencil:true }, true);
-// Кап DPR: на мобильных не рендерим выше 1.5× CSS (избегаем 4-9× пикселей)
-const dpr = window.devicePixelRatio || 1;
-const capped = Math.min(dpr, 1.5);
-engine.setHardwareScalingLevel(1.0 / capped);
+// ТЕСТ: жёсткий 1× CSS (макс. производительность, качество ниже на ретине)
+engine.setHardwareScalingLevel(1.0);
 
 const scene = new BABYLON.Scene(engine);
 // clearColor = fogColor: за дальней плоскостью (maxZ=500) видно небо, а не черный фон
