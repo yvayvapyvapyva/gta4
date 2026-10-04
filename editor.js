@@ -988,8 +988,7 @@ function openEdit(o) {
     // площадка неподвижна: земля и сетка перестают ехать за машиной
     ground.position.x = p.x;
     ground.position.z = p.z;
-    groundTex.uOffset = p.x / TILE;
-    groundTex.vOffset = p.z / TILE;
+    // текстура асфальта статична (как в simulator2)
     buildGridAxes();                      // сетка центрируется по месту стоянки
     setGridVisible(true);                 // сетка нужна только при правке
     prevCamMode = CAR.mode;

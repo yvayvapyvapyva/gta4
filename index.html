@@ -550,17 +550,22 @@ const scene = new BABYLON.Scene(engine);
 const SKY_COLOR = new BABYLON.Color3(0.55, 0.72, 0.94);
 scene.clearColor = new BABYLON.Color4(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1);
 scene.useRightHandedSystem = false;
-// Дымка сходится с цветом неба на горизонте: земля не заканчивается краем,
-// а растворяется вдали. Сфера неба затуманивание не трогает — градиент целый.
-scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
-scene.fogDensity = 0.0015;
-scene.fogColor = SKY_COLOR;
-
-const ip = scene.imageProcessingConfiguration;
-ip.toneMappingEnabled = true;
-ip.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
-ip.exposure = 1.15;
-ip.contrast = 1.08;
+// Дымка и tone mapping отключены на мобильных (как в simulator2)
+if (!isMobile) {
+  scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+  scene.fogDensity = 0.0015;
+  scene.fogColor = SKY_COLOR;
+  
+  const ip = scene.imageProcessingConfiguration;
+  ip.toneMappingEnabled = true;
+  ip.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
+  ip.exposure = 1.15;
+  ip.contrast = 1.08;
+} else {
+  scene.fogMode = BABYLON.Scene.FOGMODE_NONE;
+  const ip = scene.imageProcessingConfiguration;
+  ip.toneMappingEnabled = false;
+}
 
 const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2, Math.PI / 2.6, 9, new BABYLON.Vector3(0, 0.7, 0), scene);
 cam.attachControl(canvas, true);
@@ -595,39 +600,43 @@ cabin.diffuse = new BABYLON.Color3(1, 0.96, 0.9);
 cabin.range = 5;
 cabin.intensity = 0;
 
-// environment for PBR reflections (car paint is metallic)
-try {
-  scene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(ENV_URL, scene);
-  scene.environmentIntensity = 0.85;
-} catch (e) {}
-
-// небо: градиентный купол, иначе горизонт не читается
-const skyTex = new BABYLON.DynamicTexture("sky", { width:32, height:512 }, scene, true);
-skyTex.hasAlpha = false;
-{
-  const g = skyTex.getContext();
-  // в CreateSphere v=0 внизу сферы, поэтому зенит — низ канваса
-  const grd = g.createLinearGradient(0, 0, 0, 512);
-  grd.addColorStop(0.00, "#4e565f");   // под горизонтом
-  grd.addColorStop(0.46, "#8fa3b3");
-  grd.addColorStop(0.50, "#cfe4f7");   // горизонт
-  grd.addColorStop(0.56, "#7ba8e4");
-  grd.addColorStop(1.00, "#2f6fca");   // зенит
-  g.fillStyle = grd;
-  g.fillRect(0, 0, 32, 512);
-  skyTex.update();
+// environment for PBR reflections (car paint is metallic) — только на десктопе
+if (!isMobile) {
+  try {
+    scene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(ENV_URL, scene);
+    scene.environmentIntensity = 0.85;
+  } catch (e) {}
 }
-const skyMat = new BABYLON.StandardMaterial("skyMat", scene);
-skyMat.backFaceCulling = false;
-skyMat.disableLighting = true;
-skyMat.diffuseColor = new BABYLON.Color3(0, 0, 0);
-skyMat.specularColor = new BABYLON.Color3(0, 0, 0);
-skyMat.emissiveTexture = skyTex;
-const sky = BABYLON.MeshBuilder.CreateSphere("sky", { diameter:4000, segments:24, sideOrientation:BABYLON.Mesh.BACKSIDE }, scene);
-sky.material = skyMat;
-sky.infiniteDistance = true;
-sky.isPickable = false;
-sky.fogEnabled = false;
+ 
+ // небо: градиентный купол — только на десктопе (на мобильных не нужен, как в simulator2)
+ let sky = null;
+ if (!isMobile) {
+   const skyTex = new BABYLON.DynamicTexture("sky", { width:32, height:512 }, scene, true);
+   skyTex.hasAlpha = false;
+   {
+     const g = skyTex.getContext();
+     const grd = g.createLinearGradient(0, 0, 0, 512);
+     grd.addColorStop(0.00, "#4e565f");
+     grd.addColorStop(0.46, "#8fa3b3");
+     grd.addColorStop(0.50, "#cfe4f7");
+     grd.addColorStop(0.56, "#7ba8e4");
+     grd.addColorStop(1.00, "#2f6fca");
+     g.fillStyle = grd;
+     g.fillRect(0, 0, 32, 512);
+     skyTex.update();
+   }
+   const skyMat = new BABYLON.StandardMaterial("skyMat", scene);
+   skyMat.backFaceCulling = false;
+   skyMat.disableLighting = true;
+   skyMat.diffuseColor = new BABYLON.Color3(0, 0, 0);
+   skyMat.specularColor = new BABYLON.Color3(0, 0, 0);
+   skyMat.emissiveTexture = skyTex;
+   sky = BABYLON.MeshBuilder.CreateSphere("sky", { diameter:4000, segments:24, sideOrientation:BABYLON.Mesh.BACKSIDE }, scene);
+   sky.material = skyMat;
+   sky.infiniteDistance = true;
+   sky.isPickable = false;
+   sky.fogEnabled = false;
+ }
 
 const GROUND_SIZE = 400;  // было 4000 — уменьшено для производительности теней
 const TILE = 8;
@@ -643,32 +652,33 @@ gm.diffuseColor = new BABYLON.Color3(0.85, 0.85, 0.88);
 ground.material = gm;
 ground.receiveShadows = true;
 
-// асфальт: пятна и зерно, без сетки — сетка живёт отдельным слоем (gridMesh)
-const groundTex = new BABYLON.DynamicTexture("ground", { width:512, height:512 }, scene, true);
+// асфальт: как в simulator2 — 256x256, простой шум, без анизотропии
+const groundTex = new BABYLON.DynamicTexture("ground", { width:256, height:256 }, scene, true);
 groundTex.hasAlpha = false;
-// DynamicTexture по умолчанию ставит CLAMP — с uScale=40 текстура зажимается в кашу,
-// поэтому тайлинг включаем явно
 groundTex.wrapU = groundTex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
-groundTex.uScale = groundTex.vScale = GROUND_SIZE / TILE;
-// плоскость смотрится под скользящим углом — без анизотропии мылится вдаль
-groundTex.anisotropicFilteringLevel = engine.getCaps().maxAnisotropy;
+groundTex.uScale = groundTex.vScale = GROUND_SIZE / 4;
 {
   const g = groundTex.getContext();
-  g.fillStyle = "#41454c";            // асфальт
-  g.fillRect(0, 0, 512, 512);
-  // крупные пятна — потёртости и заплаты
-  for (let i = 0; i < 60; i++) {
-    const l = 52 + Math.random() * 26;
-    g.fillStyle = "rgba(" + (l | 0) + "," + ((l * 1.02) | 0) + "," + ((l * 1.07) | 0) + ",0.5)";
-    g.beginPath();
-    g.arc(Math.random() * 512, Math.random() * 512, 14 + Math.random() * 46, 0, Math.PI * 2);
-    g.fill();
+  g.fillStyle = "rgb(34,34,34)";
+  g.fillRect(0, 0, 256, 256);
+  // 1px шум
+  for (let i = 0; i < 9000; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256, v = 34 + (Math.random() * 22 - 11);
+    g.fillStyle = "rgb(" + (v | 0) + "," + (v | 0) + "," + (v | 0) + ")";
+    g.fillRect(x, y, 1, 1);
   }
-  // зерно асфальта крупными блоками: 1px-шум полностью съедается мипмаппингом
-  for (let i = 0; i < 3000; i++) {
-    const l = 38 + Math.random() * 52;
-    g.fillStyle = "rgba(" + (l | 0) + "," + ((l * 1.02) | 0) + "," + ((l * 1.07) | 0) + ",0.5)";
-    g.fillRect(Math.random() * 512, Math.random() * 512, 2 + (Math.random() * 3 | 0), 2);
+  // круги
+  for (let i = 0; i < 140; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256, r = 1.5 + Math.random() * 4, v = 36 + (Math.random() * 20 - 10);
+    g.fillStyle = "rgba(" + (v | 0) + "," + (v | 0) + "," + (v | 0) + ",0.45)";
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  // линии
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256, l = 14 + Math.random() * 40, a = Math.random() * Math.PI;
+    g.strokeStyle = "rgba(20,20,20,0.35)";
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
   }
   groundTex.update();
 }
@@ -1411,12 +1421,6 @@ const maxSteer = CAR.maxSteer;
       BABYLON.Quaternion.RotationAxis(
         CAR.steerWheelAxis, -CAR.steer / CAR.maxSteer * Math.PI * 2 * CAR.steerWheelTurns));
   }
-
-  // земля едет за машиной, текстура асфальта остаётся в мировых координатах
-  ground.position.x = p.x;
-  ground.position.z = p.z;
-  groundTex.uOffset = p.x / TILE;
-  groundTex.vOffset = p.z / TILE;
 
   // спидометр
   const kmh = Math.abs(CAR.v) * 3.6;
