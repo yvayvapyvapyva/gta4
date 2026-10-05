@@ -18,17 +18,13 @@
 
 const GRID_STEP = 0.5;                         // шаг линий сетки, м (как в первом приложении)
 const STEP = 0.25;                             // шаг привязки объектов, м: вдвое мельче линий
-const MAP_HALF = GROUND_SIZE / 2 - 6;           // половина площадки: земля 320 м, отступ от края
-let parkX = 0, parkZ = 0;                       // центр ставки — там, где стоит машина
-const snapX = (v) => clampSnap(v, parkX - MAP_HALF, parkX + MAP_HALF, parkX);
-const snapZ = (v) => clampSnap(v, parkZ - MAP_HALF, parkZ + MAP_HALF, parkZ);
+const MAP_HALF = GROUND_SIZE / 2;              // половина площадки: вся земля 400 м
+const snapX = (v) => clampSnap(v, -MAP_HALF, MAP_HALF, 0);
+const snapZ = (v) => clampSnap(v, -MAP_HALF, MAP_HALF, 0);
 const cellKey = (x, z) => x.toFixed(2) + "," + z.toFixed(2);
 const est = (id) => document.getElementById(id);
-// Привязка считается от центра площадки (parkX/parkZ), а не от мирового нуля:
-// площадка в gta4 привязана к месту стоянки машины, и от нуля сетка уехала бы.
-// Шг привязки 0.25 м — вдвое мельче линий сетки (0.5 м), поэтому объект встаёт
-// в любой из двух промежутков между линиями. Так же и в первом приложении:
-// там сетка через 0.5, а STEP = 0.25, и узлы сетки — не совпадают с шагом.
+// Привязка к мировому центру (0,0). Шг привязки 0.25 м — вдвое мельче линий сетки (0.5 м),
+// поэтому объект встаёт в любой из двух промежутков между линиями.
 const snapAxis = (v, c) => c + Math.round((v - c) / STEP) * STEP;
 const clampSnap = (v, a, b, c) => Math.max(a, Math.min(b, snapAxis(v, c)));
 
@@ -913,23 +909,22 @@ function panApply(dt) {
   f.normalize();
   const right = BABYLON.Vector3.Cross(BABYLON.Axis.Y, f).normalize();
   cam.target.addInPlace(right.scale(-panState.x * PAN_SPEED * dt).add(f.scale(-panState.z * PAN_SPEED * dt)));
-  cam.target.x = clamp(cam.target.x, parkX - MAP_HALF, parkX + MAP_HALF);
-  cam.target.z = clamp(cam.target.z, parkZ - MAP_HALF, parkZ + MAP_HALF);
+  cam.target.x = clamp(cam.target.x, -MAP_HALF, MAP_HALF);
+  cam.target.z = clamp(cam.target.z, -MAP_HALF, MAP_HALF);
 }
 
 // ── сетка и оси внутри площадки (как в первом приложении) ───────────
 // Линии CreateLineSystem с шагом 0.5 м плюс оси через центр. Сетка
-// центрируется там, где машина встала (parkX/parkZ), а не по мировому
-// нулю: площадка привязана к месту стоянки. Живёт в мировых координатах
+// центрируется в мировом нуле (0,0). Живёт в мировых координатах
 // и не едет за машиной, поэтому пересобирается только при входе в правку.
 let gridMesh = null, gridAxes = null;
-function gridLines(step, half, cx, cz, y) {
+function gridLines(step, half, y) {
   const lines = [];
   for (let i = -half; i <= half + 1e-6; i += step) {
-    lines.push([new BABYLON.Vector3(cx + i, y, cz - half), new BABYLON.Vector3(cx + i, y, cz + half)]);
+    lines.push([new BABYLON.Vector3(i, y, -half), new BABYLON.Vector3(i, y, half)]);
   }
   for (let i = -half; i <= half + 1e-6; i += step) {
-    lines.push([new BABYLON.Vector3(cx - half, y, cz + i), new BABYLON.Vector3(cx + half, y, cz + i)]);
+    lines.push([new BABYLON.Vector3(-half, y, i), new BABYLON.Vector3(half, y, i)]);
   }
   return lines;
 }
@@ -938,7 +933,7 @@ function buildGridAxes() {
   if (gridMesh) { gridMesh.dispose(); gridMesh = null; }
   if (gridAxes) { gridAxes.dispose(); gridAxes = null; }
   const h = MAP_HALF;
-  gridMesh = BABYLON.MeshBuilder.CreateLineSystem("grid", { lines: gridLines(GRID_STEP, h, parkX, parkZ, 0.015) }, scene);
+  gridMesh = BABYLON.MeshBuilder.CreateLineSystem("grid", { lines: gridLines(GRID_STEP, h, 0.015) }, scene);
   // Линии в CreateLineSystem красятся emissive-цветом, так что светом их не
   // утащить, но слишком тёмный цвет тонет в ярком от солнца асфальте. Держим
   // заметно светлее асфальта, а оси — почти белые, чтобы «вида сверху» хватало.
@@ -946,8 +941,8 @@ function buildGridAxes() {
   gridMesh.isPickable = false;
   gridMesh.isVisible = vis;
   gridAxes = BABYLON.MeshBuilder.CreateLineSystem("axes", { lines: [
-    [new BABYLON.Vector3(parkX, 0.025, parkZ - h), new BABYLON.Vector3(parkX, 0.025, parkZ + h)],
-    [new BABYLON.Vector3(parkX - h, 0.025, parkZ), new BABYLON.Vector3(parkX + h, 0.025, parkZ)],
+    [new BABYLON.Vector3(0, 0.025, -h), new BABYLON.Vector3(0, 0.025, h)],
+    [new BABYLON.Vector3(-h, 0.025, 0), new BABYLON.Vector3(h, 0.025, 0)],
   ]}, scene);
   gridAxes.color = new BABYLON.Color3(0.70, 0.70, 0.75);
   gridAxes.isPickable = false;
@@ -976,13 +971,12 @@ function openEdit(o) {
   if (o) {
     finishLine();
     const p = CAR.root.position;
-    parkX = p.x; parkZ = p.z;
     CAR.v = 0; CAR.vy = 0;
-    // площадка неподвижна: земля и сетка перестают ехать за машиной
-    ground.position.x = p.x;
-    ground.position.z = p.z;
+    // площадка неподвижна: земля и сетка не едут за машиной
+    ground.position.x = 0;
+    ground.position.z = 0;
     // текстура асфальта статична (как в simulator2)
-    buildGridAxes();                      // сетка центрируется по месту стоянки
+    buildGridAxes();                      // сетка центрируется в мировом нуле
     setGridVisible(true);                 // сетка нужна только при правке
     prevCamMode = CAR.mode;
     CAR.mode = 2;                       // свободная камера: мышь орбитит и зумит
