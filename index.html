@@ -967,10 +967,10 @@ addEventListener("pointermove", (e) => {
   if (!drag || editGrab) return;
 if (CAR.mode === 1) {
     // Захват точки: палец «приклеивается» к месту, где взяли, и тянет картинку
-    // вместе с собой. Для этого поворот камеры должен равняться угловому
+    // вместе с собой. Для поворота камеры должен равняться угловому
     // смещению взятой точки на экране, и оно = dpx * 2*tan(fov/2)/height.
     const k = 2 * Math.tan(CAR.camFov / 2) / Math.max(1, canvas.clientHeight) * LOOK_DRAG_SCALE;
-    CAR.lookYawTarget = wrapAngle(CAR.lookYawTarget + (e.clientX - lastX) * k);
+    CAR.lookYawTarget += (e.clientX - lastX) * k;
     CAR.lookPitchTarget = clamp(CAR.lookPitchTarget - (e.clientY - lastY) * k, -0.45, 0.55);
   } else {
     CAR.camYaw -= (e.clientX - lastX) * 0.006;
