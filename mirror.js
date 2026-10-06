@@ -225,6 +225,21 @@ function findMirrorPlates(root, meshes) {
   return [found["-1"], found["1"]].filter(Boolean);
 }
 
+// Прицепка/отцепка RTT от конвейера. Пустого renderList недостаточно:
+// текстура в scene.customRenderTargets всё равно биндится и чистится каждый
+// кадр (2×2048² вхолостую снаружи). Поэтому в неактиве убираем её из списка
+// целиком — GPU-работы ноль, разрешение 2048 при этом не трогаем.
+function mirrorAttachTex(e) {
+  e.tex.activeCamera = e.cam;
+  e.tex.renderList = mirrorList || MIRROR_NONE;
+  if (scene.customRenderTargets.indexOf(e.tex) < 0) scene.customRenderTargets.push(e.tex);
+}
+function mirrorDetachTex(e) {
+  e.tex.renderList = MIRROR_NONE;
+  const i = scene.customRenderTargets.indexOf(e.tex);
+  if (i >= 0) scene.customRenderTargets.splice(i, 1);
+}
+
 // список мешей для RTT. Пересобираем на месте и только когда сцена изменилась:
 // присваивание нового массива заставляет RTT помечать submesh как
 // загрязнённые, а это лишняя пересборка шейдеров.
@@ -235,7 +250,7 @@ function refreshMirrorList(force) {
   mirrorListed = all.length;
   if (!mirrorList) {
     mirrorList = [];
-    for (const e of mirrorEntries) e.tex.renderList = mirrorList;
+    for (const e of mirrorEntries) if (mirrorActive) e.tex.renderList = mirrorList;
   }
   mirrorList.length = 0;
   for (const m of all) {
@@ -263,11 +278,11 @@ function setMirrorsActive(on) {
         const i = glassOff.indexOf(e.mesh);
         if (i >= 0) glassOff.splice(i, 1);
       }
-      e.tex.renderList = mirrorList;
+      mirrorAttachTex(e);   // обратно в конвейер: список + камера + renderList
     } else {
       e.mesh.material = e.srcMat;
       e.mesh.useVertexColors = e.srcVC;
-      e.tex.renderList = MIRROR_NONE;   // пустой список: RTT только чистит кадр
+      mirrorDetachTex(e);   // из конвейера целиком, а не пустым списком
     }
   }
 }
@@ -478,9 +493,8 @@ function setupMirrors(opts) {
       m4: new BABYLON.Matrix(), fv: new BABYLON.Vector3(),
       yaw: mirrorDefault(side).yaw, pitch: mirrorDefault(side).pitch,
     };
-    // страховка регистрации RTT: если движок сам её не подхватил,
-    // без этого текстура никогда не рендерится
-    if (scene.customRenderTargets.indexOf(tex) < 0) scene.customRenderTargets.push(tex);
+    // RTT в конвейер не кладём: прицепит setMirrorsActive при входе в салон.
+    // Иначе движок чистил бы 2×2048² каждый кадр даже снаружи.
     mirrorEntries.push(entry);
   });
   // Вырезаем ровно те детали, что перекрывают обзор: из номинальной точки
@@ -604,6 +618,8 @@ function setMirrorRes(res) {
   MIRROR_RES = res;
   for (const e of mirrorEntries) {
     const old = e.tex;
+    const oi = scene.customRenderTargets.indexOf(old);
+    if (oi >= 0) scene.customRenderTargets.splice(oi, 1);
     const tex = new BABYLON.RenderTargetTexture(old.name, mirrorRes(), scene, true);
     tex.activeCamera = e.cam;
     tex.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
@@ -611,10 +627,10 @@ function setMirrorRes(res) {
     tex.samplingMode = BABYLON.Texture.TRILINEAR_SAMPLINGMODE;
     tex.anisotropicFilteringLevel = MIRROR_ANISO;
     tex.clearColor = new BABYLON.Color4(0.55, 0.72, 0.94, 1);
-    tex.renderList = mirrorActive ? (mirrorList || MIRROR_NONE) : MIRROR_NONE;
-    if (scene.customRenderTargets.indexOf(tex) < 0) scene.customRenderTargets.push(tex);
+    tex.renderList = MIRROR_NONE;
     e.tex = tex;
     e.mat.setTexture("mirrorSampler", tex);
+    if (mirrorActive) mirrorAttachTex(e);   // снаружи — остаётся отцепленной
     try { old.dispose(); } catch (err) {}
   }
   refreshMirrorList(true);

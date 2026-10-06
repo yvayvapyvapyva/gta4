@@ -671,6 +671,7 @@ function applyCamMode() {
   setTwoSided(m === 1);
   setGlassOff(m === 1);
   if (typeof setMirrorsActive === "function") setMirrorsActive(m === 1);
+  if (typeof syncIndicatorGlow === "function") syncIndicatorGlow();
   CAR.idle = -1e9;
 }
 

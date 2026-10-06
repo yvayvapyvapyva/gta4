@@ -160,6 +160,25 @@ let blinkT=0, blinkOn=false;
 let indSides=null;
 const AMBER=new BABYLON.Color3(2.5, 1.2, 0.1);  // ярче и насыщеннее
 
+// GlowLayer — полноэкранные проходы каждый кадр, даже когда нечего светить.
+// Поэтому слой включён только на время активного поворотника снаружи:
+// при выключенных поворотниках и в салоне он полностью выведен из пайплайна.
+// Переключаем только по смене состояния (кеш), иначе дёргали бы пайплайн каждый кадр.
+let indicatorGlowState=null;
+function syncIndicatorGlow(){
+  const layer=window.indicatorGlowLayer;
+  if(!layer)return;
+  const want=!!indSides&&(blinkerLeft||blinkerRight)&&(typeof CAR==='undefined'||CAR.mode!==1);
+  if(want===indicatorGlowState)return;
+  indicatorGlowState=want;
+  try{
+    if(typeof layer.setEnabled==='function')layer.setEnabled(want);
+    else layer.isEnabled=want;
+  }catch(e){
+    try{layer.isEnabled=want;}catch(e2){}
+  }
+}
+
 function setSide(list,on){
   for(const m of list){
     m.isVisible=on;
@@ -177,9 +196,10 @@ function applyBlink(){
     setSide(indSides.left,blinkerLeft&&blinkOn);
     setSide(indSides.right,blinkerRight&&blinkOn);
   }
+  syncIndicatorGlow();
 }
 window.tickBlink=function(dt){
-  if(!blinkerLeft&&!blinkerRight){ syncBlinkBtns(false); return; }
+  if(!blinkerLeft&&!blinkerRight){ syncBlinkBtns(false); syncIndicatorGlow(); return; }
   blinkT+=dt;applyBlink();
   syncBlinkBtns(blinkOn);
 };
@@ -237,10 +257,13 @@ window.setupIndicators=function(meshes){
     m.isVisible=false;
   }
   indSides={left,right};
-  // GlowLayer для индикаторов: включаем только сами фонари,
-  // интенсивность увеличена для яркого свечения
-  window.indicatorGlowLayer = new BABYLON.GlowLayer("indicatorGlow", scene, { mainTextureFixedSize: 512 });
+  // GlowLayer для индикаторов: включаем только сами фонари.
+  // Создаём выключенным и в низком разрешении 256: полноэкранный блюр 512
+  // грел GPU каждый кадр даже с выключенными поворотниками.
+  // syncIndicatorGlow включает слой только на время мигания снаружи.
+  window.indicatorGlowLayer = new BABYLON.GlowLayer("indicatorGlow", scene, { mainTextureFixedSize: 256 });
   window.indicatorGlowLayer.intensity = 3.5;
+  indicatorGlowState=null;
   window.indicatorGlowLayer.customEmissiveColorSelector = (mesh, subMesh, material, result) => {
     // в салоне (CAR.mode === 1) свечение отключено — не светится сквозь стекло
     if (typeof CAR !== 'undefined' && CAR.mode === 1) {
