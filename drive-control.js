@@ -127,9 +127,7 @@ const DV_LOCK = () => CAR.maxSteer;
 const dvView=document.getElementById('dvView');
 function syncDvView(){
   if(!dvView)return;
-  // Свободной камеры в езде нет: в списке для подписи она ещё есть (ею
-  // пользуется редактор), но кнопка показывает только следующий из двух
-  // ездовых режимов.
+  // Кнопка показывает только следующий из двух ездовых режимов.
   const modes=(typeof CAM_MODES!=='undefined')?CAM_MODES:['следом','салон','свободная'];
   const driveCount=(typeof CAM_DRIVE_MODES!=='undefined')?CAM_DRIVE_MODES:2;
   const name=modes[CAR.mode]||'';
@@ -476,7 +474,7 @@ addEventListener('blur', zoomStop);
 // ── Защита от контекстного меню / выделения на мобильных ─────────
 document.addEventListener('contextmenu',e=>{
   const t=e.target;
-  if(t&&t.closest&&(t.closest('#driveCtrl')||t.closest('#mapEdit')))e.preventDefault();
+  if(t&&t.closest&&t.closest('#driveCtrl'))e.preventDefault();
 });
 document.addEventListener('selectstart',e=>{
   const t=e.target;

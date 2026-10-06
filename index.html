@@ -71,7 +71,6 @@
   #gearBtn:hover { border-color:var(--acc); color:var(--acc); }
   #gearBtn.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
   #gearBtn:active { background:#ff6d00; border-color:#ff6d00; color:#12141a; }
-  body.edit-mode #gearBtn { display:none; }
   #recBtn { position:fixed; right:max(14px,env(safe-area-inset-right,0px));
     top:calc(max(14px,env(safe-area-inset-top,0px)) + 54px + var(--tg-top)); z-index:7; width:40px; height:40px; padding:0;
     display:flex; align-items:center; justify-content:center; border-radius:14px; cursor:pointer;
@@ -84,7 +83,6 @@
   #recBtn.recording svg { animation:blink 1s infinite; }
   @keyframes pulse { 0%,100% { box-shadow:0 0 0 0 rgba(255,59,59,.4); } 50% { box-shadow:0 0 0 8px rgba(255,59,59,0); } }
   @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
-  body.edit-mode #recBtn { display:none; }
   .win-btns button.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
 
   .win-sec { margin:0 0 16px; }
@@ -109,63 +107,6 @@
   .win-btns button { flex:1; min-width:110px; }
   #settingsWin { width:min(340px,94vw); max-height:86vh; overflow-y:auto; }
 
-  /* ── редактор площадки ─────────────────────────────────────────── */
-
-  /* панель редактора: карточка снизу слева, джойстик + выбор типа + режимы */
-  #mapEdit { position:fixed; left:max(14px,env(safe-area-inset-left,0px)); bottom:14px; z-index:8;
-    display:none; align-items:center; gap:14px; max-width:calc(100vw - 28px);
-    background:rgba(18,20,26,.92); border:1px solid rgba(255,255,255,.14); border-radius:14px;
-    box-shadow:0 8px 24px rgba(0,0,0,.45); padding:10px 12px; color:var(--fg); backdrop-filter:blur(6px); }
-  #mapEdit.open { display:flex; }
-  .me-joy { flex:0 0 auto; display:flex; align-items:center; justify-content:center; }
-  #joyBase { position:relative; width:104px; height:104px; border-radius:50%; box-sizing:border-box;
-    background:radial-gradient(circle at 35% 30%,#2a3038,#14171d 72%);
-    border:1px solid rgba(255,255,255,.16); box-shadow:0 4px 14px rgba(0,0,0,.45),inset 0 0 0 5px rgba(18,20,26,.55);
-    touch-action:none; cursor:grab; }
-  #joyBase.on { border-color:var(--acc); }
-  #joyKnob { position:absolute; left:50%; top:50%; width:44px; height:44px; border-radius:50%;
-    background:radial-gradient(circle at 35% 30%,#4a4f58,#2b3038 70%);
-    border:2px solid var(--acc); box-shadow:0 3px 8px rgba(0,0,0,.5);
-    transform:translate(-50%,-50%); pointer-events:none; }
-  .me-main { flex:1 1 auto; min-width:0; font-size:13px; line-height:1.5; }
-  .me-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
-  .me-title { font-weight:600; font-size:13px; color:var(--acc); letter-spacing:.4px; }
-  .me-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; justify-content:flex-end; }
-  .me-body { display:flex; gap:10px; align-items:flex-start; }
-  .me-type { display:flex; flex-direction:column; align-items:center; gap:5px; }
-  .me-type-name { font-size:11px; line-height:1; color:var(--dim); white-space:nowrap; }
-  .t-caret { font-size:11px; color:var(--dim); line-height:1; }
-  #editTypeBtn { display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 8px; }
-  #editTypeBtn .tv-wrap { position:relative; width:78px; height:78px; display:flex;
-    align-items:center; justify-content:center; }
-  #editTypeBtn .ico { width:100%; height:100%; display:grid; place-items:center; }
-  #editTypeBtn .ico svg, #editTypeBtn .ico img { width:72px; height:72px; display:block; border-radius:8px; }
-  .me-modes { display:flex; flex-direction:column; align-items:stretch; gap:6px; width:104px; }
-  .me-modes button { min-height:36px; }
-  .me-hint { font-size:12px; color:var(--dim); margin-top:8px; max-width:280px; }
-  #mapEdit button { font:inherit; font-size:12.5px; color:var(--fg); padding:7px 12px; border-radius:8px;
-    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); cursor:pointer; }
-  #mapEdit button:hover { border-color:rgba(255,255,255,.3); }
-  #mapEdit button.active { background:rgba(255,138,61,.3); border-color:var(--acc); }
-  #finishLineBtn { border-color:var(--acc) !important; color:var(--acc) !important; }
-  #mapDone { width:34px; height:34px; padding:0; border-radius:9px; font-size:15px; line-height:1;
-    flex:0 0 auto; background:var(--acc) !important; color:#1a1200 !important; font-weight:600; }
-  #mapFileStatus { font-size:12px; color:#7fbf8a; margin-top:6px; display:none; }
-  #mapFileStatus.show { display:block; }
-  .map-actions { display:flex; gap:8px; margin-top:10px; }
-  .map-actions button { flex:1; }
-  #mapClearAll { width:100%; margin-top:10px; border-color:rgba(224,138,106,.5); color:#e08a6a; }
-  #mapClearAll:hover { background:rgba(224,138,106,.16); border-color:#e08a6a; }
-  .me-top-hint { position:fixed; top:calc(max(10px,env(safe-area-inset-top,0px)) + var(--tg-top)); left:50%;
-    transform:translateX(-50%); z-index:9; display:none; max-width:calc(100vw - 24px); text-align:center;
-    background:rgba(18,20,26,.9); border:1px solid rgba(255,255,255,.14); border-radius:10px;
-    padding:6px 12px; font-size:12px; line-height:1.4; color:var(--fg); }
-  body.edit-mode .me-top-hint { display:block; }
-  .me-len { position:fixed; top:calc(max(52px,calc(env(safe-area-inset-top,0px) + 42px)) + var(--tg-top)); left:50%;
-    transform:translateX(-50%); z-index:9; background:rgba(18,20,26,.92); border:1px solid rgba(255,255,255,.14);
-    border-radius:8px; padding:3px 10px; font-size:12px; color:var(--acc); font-variant-numeric:tabular-nums; }
-  
-
   .win-backdrop { position:fixed; inset:0; z-index:9; background:rgba(8,9,12,.6); display:none; }
   .win-backdrop.open { display:block; }
   .win { position:fixed; z-index:10; left:50%; top:50%; transform:translate(-50%,-50%) scale(.96);
@@ -181,13 +122,6 @@
   .win button:hover { border-color:rgba(255,255,255,.3); }
   .counts { font-size:12px; color:var(--dim); line-height:1.6; }
   .counts b { color:var(--fg); font-variant-numeric:tabular-nums; }
-  .tg { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
-  .tg-card { width:104px; padding:8px 6px 9px; border-radius:10px; text-align:center; cursor:pointer;
-    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); }
-  .tg-card:hover, .tg-card.active { border-color:var(--acc); background:rgba(255,138,61,.14); }
-  .tg-fallback { width:60px; height:60px; margin:0 auto 6px; display:grid; place-items:center; }
-  .tg-fallback svg, .tg-fallback img { width:52px; height:52px; display:block; }
-  .tg-card span { font-size:11.5px; color:var(--fg); }
 </style>
 <style id="drivePanelStyle">
 /* Стили нижней панели управления — каждый элемент position:fixed отдельно */
@@ -214,8 +148,6 @@
 .dv-slider::before{content:'';position:absolute;left:50%;top:16%;bottom:16%;width:2px;background:#2a4257;border-radius:1px;transform:translateX(-50%)}
 .dv-slider-h{position:absolute;top:50%;left:50%;width:54px;height:54px;transform:translate(-50%,-50%);border-radius:12px;background:#ff6d00;border:2px solid #1a1200;box-shadow:0 3px 10px rgba(0,0,0,.55)}
 #driveCtrl,#driveCtrl *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
-#mapEdit *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
-body.edit-mode #driveCtrl{display:none}
 body.playback-active #driveCtrl{display:none !important}
 </style>
 </head>
@@ -250,14 +182,6 @@ body.playback-active #driveCtrl{display:none !important}
 <div id="settingsBackdrop" class="win-backdrop"></div>
 <div id="settingsWin" class="win">
   <h3>Настройки<button id="settingsClose" aria-label="Закрыть">✕</button></h3>
-
-  <div class="win-sec">
-    <h4>Площадка</h4>
-    <div class="win-btns">
-      <button id="setEditBtn">Редактировать площадку</button>
-    </div>
-    <div class="win-note">Конусы, разметка, бордюры, заборы и эстакады</div>
-  </div>
 
   <div class="win-sec">
     <h4>Реплеи</h4>
@@ -331,38 +255,6 @@ body.playback-active #driveCtrl{display:none !important}
   </div>
 </div>
 
-<div id="mapEdit">
-  <div class="me-joy">
-    <div id="joyBase" aria-label="Перемещение по карте"><div id="joyKnob"></div></div>
-  </div>
-  <div class="me-main">
-    <div class="me-head">
-      <button id="mapCfgBtn">Карта</button>
-      <button id="mapDone" aria-label="Выйти из режима редактирования">✕</button>
-    </div>
-    <div class="me-row">
-      <button id="finishLineBtn" style="display:none">Завершить линию</button>
-    </div>
-    <div class="me-body">
-      <div class="me-type">
-        <button id="editTypeBtn" aria-label="Выбрать объект">
-          <span class="tv-wrap"><span class="ico" id="typeIco"></span></span>
-          <span class="t-caret">▾</span>
-        </button>
-        <div class="me-type-name" id="typeName">Конус</div>
-      </div>
-      <div class="me-modes" id="editModes">
-        <button data-mode="place" class="active">Поставить</button>
-        <button data-mode="move">Переместить</button>
-        <button data-mode="delete">Удалить</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="me-top-hint" id="hintline">Режим редактирования площадки выключен</div>
-<div class="me-len" id="lineLen" hidden>Длина: 0.0 м</div>
-
 <div id="driveCtrl">
   <!-- Левая сторона -->
   <div class="dv-slider-v" id="dvThrottle" role="slider" aria-label="Газ/Тормоз" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0" style="left:16px;bottom:16px;">
@@ -389,42 +281,11 @@ body.playback-active #driveCtrl{display:none !important}
   </div>
 </div>
 
-<input type="file" id="mapFileInput" accept="application/json,.json" hidden>
-
-<div id="mapBackdrop" class="win-backdrop"></div>
-<div id="mapWin" class="win">
-  <h3>Настройки карты<button id="mapCfgClose" aria-label="Закрыть">✕</button></h3>
-  <div class="counts">
-    Конусов: <b id="count">0</b> · Линий: <b id="countLines">0</b> · Бордюров: <b id="countCurb">0</b><br>
-    Заборов: <b id="countFence">0</b> · Эстакад: <b id="countEstacada">0</b>
-  </div>
-  <div class="map-actions">
-    <button id="mapSaveBtn">Сохранить карту</button>
-    <button id="mapLoadBtn">Загрузить карту</button>
-  </div>
-</div>
-
 <div id="replayBackdrop" class="win-backdrop"></div>
 <div id="replayWin" class="win">
   <h3>Сохранённые реплеи<button id="replayClose" aria-label="Закрыть">✕</button></h3>
   <div id="replayList" style="max-height:60vh; overflow-y:auto;"></div>
   <div class="win-note">Клик — воспроизвести. Shift+клик — удалить.</div>
-</div>
-  <div id="mapFileStatus"></div>
-  <button id="mapClearAll">Очистить карту</button>
-</div>
-
-<div id="typeBackdrop" class="win-backdrop"></div>
-<div id="typeWin" class="win">
-  <h3>Объекты площадки<button id="typeClose">✕</button></h3>
-  <div class="tg">
-    <div class="tg-card" data-type="cones"><div class="tg-fallback"></div><span>Конус</span></div>
-    <div class="tg-card" data-type="coneHigh"><div class="tg-fallback"></div><span>Высокий конус</span></div>
-    <div class="tg-card" data-type="lines"><div class="tg-fallback"></div><span>Разметка</span></div>
-    <div class="tg-card" data-type="curb"><div class="tg-fallback"></div><span>Бордюр</span></div>
-    <div class="tg-card" data-type="fence"><div class="tg-fallback"></div><span>Забор</span></div>
-    <div class="tg-card" data-type="estacada"><div class="tg-fallback"></div><span>Эстакада</span></div>
-  </div>
 </div>
 
 <script src="https://cdn.babylonjs.com/babylon.js"></script>
@@ -575,10 +436,8 @@ groundTex.uScale = groundTex.vScale = GROUND_SIZE / 4;
 }
 gm.diffuseTexture = groundTex;
 
-// Сетка площадки в первом приложении — не текстура земли, а линии
-// CreateLineSystem с шагом 0.5 м плюс оси через центр. Здесь она тоже
-// строится в editor.js: она нужна только при правке и центрируется
-// там, где машина встала, а не по мировому нулю.
+// Редактирование карты вынесено в независимое приложение editor.html.
+// Здесь карта только отображается и участвует в физике через map.js.
 
 const fill = document.getElementById("fill");
 const msg = document.getElementById("msg");
@@ -644,9 +503,8 @@ const CAR = {
   idle: performance.now(),
 };
 
-// Полный список индексов: свободная камера нужна редактору карты (мышь
-// орбитит и зумит), поэтому индекс 2 остаётся. В езде она недостижима —
-// переключатель ходит только по первым CAM_DRIVE_MODES режимам.
+// Режимы камеры: «следом» и «салон». Индекс 2 («свободная») оставлен
+// для совместимости и в езде недостижим.
 const CAM_MODES = ["следом", "салон", "свободная"];
 const CAM_DRIVE_MODES = 2;   // в езде доступны только «следом» и «салон»
 const COCKPIT_PITCH = 0.16;   // базовый наклон взгляда вниз, рад
@@ -674,7 +532,7 @@ addEventListener("keydown", (e) => {
     if (e.code === "KeyK") { mirrorAdjReset(); return; }
   } else if (e.code === "KeyM" && typeof mirrorAdjToggle === "function") mirrorAdjToggle();
   keys[e.code] = true;
-  if (e.code === "KeyC" && !editingMap) toggleCam();
+  if (e.code === "KeyC") toggleCam();
   if (e.code === "KeyR") resetCar();
   if (e.code === "KeyX" && typeof toggleXray === "function") toggleXray();
 });
@@ -733,15 +591,13 @@ function applyCamMode() {
 }
 
 function toggleCam() {
-  // Свободная камера в езде убрана: ходим только по «следом» и «салон».
-  // Из режима 2 (он возможен только в редакторе) тоже возвращаемся в езду.
+  // Ходим только по «следом» и «салон».
   CAR.mode = CAR.mode === 1 ? 0 : 1;
   applyCamMode();
 }
 
 // ===================== окно настроек =====================
-// Те же настройки, что в первом приложении: площадка, вид, угол обзора
-// кабины и четыре ползунка зеркал. Зеркала пишем напрямую в mirrorEntries —
+// Настройки вида, угла обзора кабины и четырёх ползунков зеркал. Зеркала пишем напрямую в mirrorEntries —
 // это те же поля, которые двигает регулировка стрелками, так что ползунок
 // и клавиши видят одно и то же значение.
 const setWin = document.getElementById("settingsWin");
@@ -802,10 +658,6 @@ function mirrorSide(side) {
 gearBtn.addEventListener("click", () => openSettings(!setWin.classList.contains("open")));
 document.getElementById("settingsClose").addEventListener("click", () => openSettings(false));
 setBackdrop.addEventListener("click", () => openSettings(false));
-document.getElementById("setEditBtn").addEventListener("click", () => {
-  openSettings(false);
-  if (typeof openEdit === "function") openEdit(true);
-});
 document.getElementById("replayListBtn")?.addEventListener("click", () => {
   openSettings(false);
   if (typeof window.Replay?.openList === "function") window.Replay.openList(true);
@@ -992,7 +844,7 @@ addEventListener("pointermove", (e) => {
     pinch = d;
     return;
   }
-  if (!drag || editGrab) return;
+  if (!drag) return;
 if (CAR.mode === 1) {
     // Захват точки: палец «приклеивается» к месту, где взяли, и тянет картинку
     // вместе с собой. Для поворота камеры должен равняться угловому
@@ -1037,18 +889,15 @@ const fwdVec = new BABYLON.Vector3();         // forward вектор машин
 let cockpit = null;   // камера салона, едет вместе с кузовом
 
 // ── опора под колёсами ───────────────────────────────────────────────
-// Земля — плоскость y=0, поэтому без editor.js машина едет по ровному месту.
-// editor.js подключает surfaceProbe: тот сообщает высоту и нормаль поверхности
+// Земля — плоскость y=0, поэтому без map.js машина едет по ровному месту.
+// map.js подключает surfaceProbe: тот сообщает высоту и нормаль поверхности
 // под точкой (эстакады), а obstacleProbe — где стоят бордюры и заборы.
 // surfaceProbe(x, z, fromY) → {y, nx, ny, nz} | null
 // obstacleProbe(x, z, y) → true, если машину туда не пускать
 let surfaceProbe = null;
 let obstacleProbe = null;
-let editorTick = null;   // editor.js перехватывает кадр, пока включён режим правки
-let objectTick = null;   // editor.js обновляет конусы и при обычной езде
+let objectTick = null;   // map.js обновляет конусы при езде
 let mirrorTick = null;   // mirror.js пересчитывает плоскости зеркал перед кадром
-let editGrab = false;    // editor.js держит конус: мышь не должна одновременно крутить камеру
-let editingMap = false;  // editor.js: открыт режим правки площадки
 
 const MAX_SLOPE = 0.62;   // круче — считаем стеной, ~36°
 const GRAVITY = 9.8;
@@ -1375,7 +1224,7 @@ fill.style.width = "0%";
 fill.style.background = "";
 
 // Геометрию модели берём по снимку сцены ДО загрузки: так в список не попадают
-// ни земля, ни объекты редактора. Если бы мы обошли всю сцену, меши конусов
+// ни земля, ни объекты карты. Если бы мы обошли всю сцену, меши конусов
 // утащили бы свои узлы под корень машины — и конусы ездили бы вместе с ней.
 const preModelMeshes = new Set(scene.meshes);
 // Реальный размер файла модели — 27 597 404 байта. Прогресс считается от него,
@@ -1388,7 +1237,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
     msg.textContent = Math.round(pct) + "%";
   }
 ).then(() => {
-  meshes = scene.meshes.filter(m => !preModelMeshes.has(m) && !editorMeshes.has(m) && m.getTotalVertices() > 0);
+  meshes = scene.meshes.filter(m => !preModelMeshes.has(m) && !mapMeshes.has(m) && m.getTotalVertices() > 0);
   if (!meshes.length) throw new Error("в модели нет геометрии");
 
   let mn = new BABYLON.Vector3(1e9, 1e9, 1e9), mx = new BABYLON.Vector3(-1e9, -1e9, -1e9);
@@ -1416,7 +1265,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   const root = new BABYLON.TransformNode("car", scene);
   CAR.root = root;
   const tops = new Set();
-  for (const m of meshes) { if (editorMeshes.has(m)) continue; let c = m; while (c.parent) c = c.parent; tops.add(c); }
+  for (const m of meshes) { if (mapMeshes.has(m)) continue; let c = m; while (c.parent) c = c.parent; tops.add(c); }
   for (const n of tops) n.parent = root;
 
   // --- колёса. У каждого колеса в сцене есть свой узел (TransformNode wheel_lf и т.п.)
@@ -1669,7 +1518,7 @@ engine.runRenderLoop(() => {
   if (ready) {
     // Во время реплея используем фиксированный dt для детерминированности
     const replayFixedDt = (window.Replay?.isPlaying?.() && window.Replay?.FIXED_DT) ? window.Replay.FIXED_DT : dt;
-    if (editorTick) editorTick(dt); else drive(replayFixedDt);
+    drive(replayFixedDt);
     // конусы проверяем ПОСЛЕ движения машины — как в simulator2: иначе удар
     // считается по позиции прошлого кадра и на большой скорости конус
     // проскакивает между проверками
@@ -1686,7 +1535,7 @@ engine.runRenderLoop(() => {
 });
 </script>
 <script src="default-map.js"></script>
-<script src="editor.js"></script>
+<script src="map.js"></script>
 <script src="mirror.js"></script>
 <script src="drive-control.js"></script>
 <script src="sounds.js"></script>

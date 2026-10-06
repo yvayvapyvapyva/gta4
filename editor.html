@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Редактор карты</title>
+<style>
+  :root { --bg:#12141a; --fg:#e8ebf2; --dim:#98a0b3; --acc:#ff8a3d; }
+  * { box-sizing:border-box; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--fg);
+    font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; touch-action:none; overscroll-behavior:none; }
+  #view { width:100%; height:100%; display:block; touch-action:none; outline:none; }
+  #toolbar { position:fixed; left:max(14px,env(safe-area-inset-left,0px)); bottom:14px; z-index:8;
+    display:flex; align-items:center; gap:14px; max-width:calc(100vw - 28px);
+    background:rgba(18,20,26,.92); border:1px solid rgba(255,255,255,.14); border-radius:14px;
+    box-shadow:0 8px 24px rgba(0,0,0,.45); padding:10px 12px; backdrop-filter:blur(6px); }
+  #toolbar button { font:inherit; font-size:12.5px; color:var(--fg); padding:7px 12px; border-radius:8px;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); cursor:pointer; }
+  #toolbar button:hover { border-color:rgba(255,255,255,.3); }
+  #toolbar button.active { background:rgba(255,138,61,.3); border-color:var(--acc); }
+  #toolbar button.danger { border-color:rgba(224,138,106,.5); color:#e08a6a; }
+  .me-joy { flex:0 0 auto; display:flex; align-items:center; justify-content:center; }
+  #joyBase { position:relative; width:104px; height:104px; border-radius:50%; box-sizing:border-box;
+    background:radial-gradient(circle at 35% 30%,#2a3038,#14171d 72%);
+    border:1px solid rgba(255,255,255,.16); box-shadow:0 4px 14px rgba(0,0,0,.45),inset 0 0 0 5px rgba(18,20,26,.55);
+    touch-action:none; cursor:grab; }
+  #joyBase.on { border-color:var(--acc); }
+  #joyKnob { position:absolute; left:50%; top:50%; width:44px; height:44px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#4a4f58,#2b3038 70%);
+    border:2px solid var(--acc); box-shadow:0 3px 8px rgba(0,0,0,.5);
+    transform:translate(-50%,-50%); pointer-events:none; }
+  .me-main { flex:1 1 auto; min-width:0; }
+  .me-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+  .me-title { font-weight:600; font-size:13px; color:var(--acc); letter-spacing:.4px; }
+  .me-body { display:flex; gap:10px; align-items:flex-start; }
+  .me-type { display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .me-type-name { font-size:11px; line-height:1; color:var(--dim); white-space:nowrap; }
+  #editTypeBtn { display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 8px; }
+  #editTypeBtn .tv-wrap { position:relative; width:78px; height:78px; display:flex; align-items:center; justify-content:center; }
+  #editTypeBtn .ico { width:100%; height:100%; display:grid; place-items:center; }
+  #editTypeBtn .ico svg, #editTypeBtn .ico img { width:72px; height:72px; display:block; border-radius:8px; }
+  .me-modes { display:flex; flex-direction:column; align-items:stretch; gap:6px; width:104px; }
+  .me-modes button { min-height:36px; }
+  #finishLineBtn { border-color:var(--acc) !important; color:var(--acc) !important; }
+  .me-files { display:flex; gap:8px; margin-top:10px; }
+  .me-files button { flex:1; }
+  #mapClearAll { width:100%; margin-top:10px; }
+  #mapFileStatus { font-size:12px; color:#7fbf8a; margin-top:6px; display:none; }
+  #mapFileStatus.show { display:block; }
+  .counts { font-size:12px; color:var(--dim); line-height:1.6; margin-top:10px; }
+  .counts b { color:var(--fg); font-variant-numeric:tabular-nums; }
+  #hint { position:fixed; top:max(10px,env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%);
+    z-index:9; max-width:calc(100vw - 24px); text-align:center;
+    background:rgba(18,20,26,.9); border:1px solid rgba(255,255,255,.14); border-radius:10px;
+    padding:6px 12px; font-size:12px; line-height:1.4; }
+  #lineLen { position:fixed; top:calc(max(52px,calc(env(safe-area-inset-top,0px) + 42px))); left:50%;
+    transform:translateX(-50%); z-index:9; background:rgba(18,20,26,.92); border:1px solid rgba(255,255,255,.14);
+    border-radius:8px; padding:3px 10px; font-size:12px; color:var(--acc); font-variant-numeric:tabular-nums; }
+  #backLink { position:fixed; right:max(14px,env(safe-area-inset-right,0px)); top:max(14px,env(safe-area-inset-top,0px));
+    z-index:9; font:inherit; font-size:12.5px; color:var(--fg); padding:8px 12px; border-radius:8px;
+    background:rgba(18,20,26,.9); border:1px solid rgba(255,255,255,.14); cursor:pointer; text-decoration:none; }
+  #backLink:hover { border-color:var(--acc); color:var(--acc); }
+  .win-backdrop { position:fixed; inset:0; z-index:9; background:rgba(8,9,12,.6); display:none; }
+  .win-backdrop.open { display:block; }
+  .win { position:fixed; z-index:10; left:50%; top:50%; transform:translate(-50%,-50%) scale(.96);
+    background:#181b22; border:1px solid rgba(255,255,255,.14); border-radius:14px; padding:16px;
+    display:none; box-shadow:0 24px 70px rgba(0,0,0,.6); }
+  .win.open { display:block; transform:translate(-50%,-50%) scale(1); }
+  .win h3 { margin:0 0 12px; font-size:13px; font-weight:600; color:var(--dim);
+    display:flex; justify-content:space-between; align-items:center; }
+  .win h3 button { font:inherit; font-size:16px; line-height:1; padding:2px 9px; border-radius:7px;
+    color:var(--fg); background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); cursor:pointer; }
+  .tg { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .tg-card { width:104px; padding:8px 6px 9px; border-radius:10px; text-align:center; cursor:pointer;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); }
+  .tg-card:hover, .tg-card.active { border-color:var(--acc); background:rgba(255,138,61,.14); }
+  .tg-fallback { width:60px; height:60px; margin:0 auto 6px; display:grid; place-items:center; }
+  .tg-fallback svg, .tg-fallback img { width:52px; height:52px; display:block; }
+  .tg-card span { font-size:11.5px; color:var(--fg); }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<a id="backLink" href="index.html">← К игре</a>
+<div id="hint">Клик по площадке — поставить объект (шаг 0,25 м)</div>
+<div id="lineLen" hidden>Длина: 0.0 м</div>
+
+<div id="toolbar">
+  <div class="me-joy">
+    <div id="joyBase" aria-label="Перемещение камеры"><div id="joyKnob"></div></div>
+  </div>
+  <div class="me-main">
+    <div class="me-head">
+      <span class="me-title">РЕДАКТОР КАРТЫ</span>
+      <button id="finishLineBtn" style="display:none">Завершить линию</button>
+    </div>
+    <div class="me-body">
+      <div class="me-type">
+        <button id="editTypeBtn" aria-label="Выбрать объект">
+          <span class="tv-wrap"><span class="ico" id="typeIco"></span></span>
+          <span class="t-caret" style="font-size:11px;color:var(--dim)">▾</span>
+        </button>
+        <div class="me-type-name" id="typeName">Конус</div>
+      </div>
+      <div class="me-modes" id="editModes">
+        <button data-mode="place" class="active">Поставить</button>
+        <button data-mode="move">Переместить</button>
+        <button data-mode="delete">Удалить</button>
+      </div>
+    </div>
+    <div class="me-files">
+      <button id="mapSaveBtn">Сохранить</button>
+      <button id="mapLoadBtn">Загрузить</button>
+    </div>
+    <button id="mapClearAll" class="danger">Очистить карту</button>
+    <div class="counts">
+      Конусов: <b id="count">0</b> · Линий: <b id="countLines">0</b> · Бордюров: <b id="countCurb">0</b><br>
+      Заборов: <b id="countFence">0</b> · Эстакад: <b id="countEstacada">0</b>
+    </div>
+    <div id="mapFileStatus"></div>
+  </div>
+</div>
+
+<input type="file" id="mapFileInput" accept="application/json,.json" hidden>
+
+<div id="typeBackdrop" class="win-backdrop"></div>
+<div id="typeWin" class="win">
+  <h3>Объекты площадки<button id="typeClose">✕</button></h3>
+  <div class="tg">
+    <div class="tg-card" data-type="cones"><div class="tg-fallback"></div><span>Конус</span></div>
+    <div class="tg-card" data-type="coneHigh"><div class="tg-fallback"></div><span>Высокий конус</span></div>
+    <div class="tg-card" data-type="lines"><div class="tg-fallback"></div><span>Разметка</span></div>
+    <div class="tg-card" data-type="curb"><div class="tg-fallback"></div><span>Бордюр</span></div>
+    <div class="tg-card" data-type="fence"><div class="tg-fallback"></div><span>Забор</span></div>
+    <div class="tg-card" data-type="estacada"><div class="tg-fallback"></div><span>Эстакада</span></div>
+  </div>
+</div>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script>
+// ── сцена редактора: свободная камера, земля, свет ──
+const canvas = document.getElementById("view");
+const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, stencil:true }, true);
+const dpr = window.devicePixelRatio || 1;
+engine.setHardwareScalingLevel(1.0 / Math.min(dpr, 1.5));
+const scene = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0.55, 0.72, 0.94, 1);
+const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2, 1.0, 40, new BABYLON.Vector3(0, 0.75, 0), scene);
+cam.attachControl(canvas, true);
+cam.lowerRadiusLimit = 3;
+cam.upperRadiusLimit = 200;
+cam.lowerBetaLimit = 1 * Math.PI / 180;
+cam.upperBetaLimit = 89 * Math.PI / 180;
+cam.wheelDeltaPercentage = 0.02;
+cam.pinchDeltaPercentage = 0.02;
+cam.panningSensibility = 0;
+const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), scene);
+hemi.intensity = 0.6;
+hemi.groundColor = new BABYLON.Color3(0.16, 0.17, 0.2);
+const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.15, -1, 0.13), scene);
+sun.position = new BABYLON.Vector3(2, 14, -2);
+sun.intensity = 1.7;
+const GROUND_SIZE = 400;
+const ground = BABYLON.MeshBuilder.CreateGround("ground", { width:GROUND_SIZE, height:GROUND_SIZE, subdivisions:1 }, scene);
+const gm = new BABYLON.StandardMaterial("gm", scene);
+gm.specularColor = new BABYLON.Color3(0.04, 0.04, 0.05);
+gm.diffuseColor = new BABYLON.Color3(0.85, 0.85, 0.88);
+ground.material = gm;
+
+// асфальт: та же текстура, что в игре — 256x256, шум + пятна + трещины
+const groundTex = new BABYLON.DynamicTexture("ground", { width:256, height:256 }, scene, true);
+groundTex.hasAlpha = false;
+groundTex.wrapU = groundTex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
+groundTex.uScale = groundTex.vScale = GROUND_SIZE / 4;
+{
+  const g = groundTex.getContext();
+  g.fillStyle = "rgb(85,85,85)";
+  g.fillRect(0, 0, 256, 256);
+  // 1px шум
+  for (let i = 0; i < 9000; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256, v = 85 + (Math.random() * 30 - 15);
+    g.fillStyle = "rgb(" + (v | 0) + "," + (v | 0) + "," + (v | 0) + ")";
+    g.fillRect(x, y, 1, 1);
+  }
+  // круги (пятна)
+  for (let i = 0; i < 140; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256, r = 1.5 + Math.random() * 4, v = 70 + (Math.random() * 30 - 15);
+    g.fillStyle = "rgba(" + (v | 0) + "," + (v | 0) + "," + (v | 0) + ",0.45)";
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  // линии (трещины) — чуть темнее базы
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256, l = 14 + Math.random() * 40, a = Math.random() * Math.PI;
+    g.strokeStyle = "rgba(40,40,40,0.35)";
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  groundTex.update();
+}
+gm.diffuseTexture = groundTex;
+
+// Заглушка машины: физики езды тут нет, но map.js использует CAR в пробах.
+const CAR = {
+  root: { position: new BABYLON.Vector3(0, 0, 0) },
+  yaw: 0, v: 0, halfW: 0.98, halfL: 2.22, bodyCx: 0, bodyCz: 0,
+};
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+// Хуки, которые заполняет map.js (в редакторе езда не нужна, нужны только построение и пробы).
+let surfaceProbe = null, obstacleProbe = null, objectTick = null;
+addEventListener("resize", () => engine.resize());
+</script>
+<script src="default-map.js"></script>
+<script src="map.js"></script>
+<script>
+// ── логика редактора (только здесь, в игру не попадает) ──
+const est = (id) => document.getElementById(id);
+const GRID_STEP = 0.5;
+const countEl = est("count");
+const hintline = est("hint");
+const finishLineBtn = est("finishLineBtn");
+const countLinesEl = est("countLines"), countCurbEl = est("countCurb");
+const countFenceEl = est("countFence"), countEstacadaEl = est("countEstacada");
+const lineLenEl = est("lineLen");
+
+const matSegPrev = new BABYLON.StandardMaterial("segPrevMat", scene);
+matSegPrev.diffuseColor = new BABYLON.Color3(1, 1, 1);
+matSegPrev.alpha = 0.55;
+matSegPrev.specularColor = new BABYLON.Color3(0, 0, 0);
+const previewSeg = BABYLON.MeshBuilder.CreateBox("linePrev", { width:1, height:1, depth:1 }, scene);
+previewSeg.material = matSegPrev;
+previewSeg.isVisible = false;
+previewSeg.isPickable = false;
+
+const matRampPrev = new BABYLON.StandardMaterial("rampPrevMat", scene);
+matRampPrev.diffuseColor = new BABYLON.Color3(0.8, 0.9, 1);
+matRampPrev.alpha = 0.5;
+matRampPrev.specularColor = new BABYLON.Color3(0, 0, 0);
+matRampPrev.backFaceCulling = false;
+let rampPreviewGroup = null;
+
+const preview = BABYLON.MeshBuilder.CreateTorus("conePreview",
+  { diameter:0.4, thickness:0.04, tessellation:28 }, scene);
+const matPreview = new BABYLON.StandardMaterial("conePreviewMat", scene);
+matPreview.diffuseColor = new BABYLON.Color3(1, 0.43, 0);
+matPreview.emissiveColor = new BABYLON.Color3(1, 0.43, 0);
+matPreview.alpha = 0.85;
+matPreview.specularColor = new BABYLON.Color3(0, 0, 0);
+preview.material = matPreview;
+preview.isVisible = false;
+preview.isPickable = false;
+
+let mode = "place", dragging = null, dragOldKey = null;
+let openLine = null;
+let editGrab = false;
+
+const HINTS = {
+  place:"Клик по площадке — поставить конус (шаг 0,25 м)",
+  move:"Зажми конус и перетащи в новый узел",
+  delete:"Клик по конусу — удалить",
+};
+const DRAWHINTS = {
+  lines:{ place:"Кликай по площадке: точки соединяются в белую линию. «Завершить линию» — начать новую",
+          move:"Перемещение разметки не поддерживается", delete:"Клик по разметке — удалить" },
+  curb:{ place:"Кликай по площадке: точки соединяются в бетонный бордюр",
+         move:"Перемещение бордюра не поддерживается", delete:"Клик по бордюру — удалить" },
+  fence:{ place:"Кликай по площадке: точки соединяются в забор",
+          move:"Перемещение забора не поддерживается", delete:"Клик по забору — удалить" },
+  estacada:{ place:"Первый клик — начало подъёма, второй — вершина. «Завершить» — поставить эстакаду",
+             move:"Перемещение эстакады не поддерживается", delete:"Клик по эстакаде — удалить" },
+};
+const CURSORS = { place:"crosshair", move:"grab", delete:"pointer" };
+let editType = "cones";
+const typeIco = est("typeIco"), typeName = est("typeName");
+const TYPE_NAMES = { cones:"Конус", coneHigh:"Высокий конус", lines:"Разметка", curb:"Бордюр", fence:"Забор", estacada:"Эстакада" };
+const TYPE_ICONS = {
+  cones:'<svg viewBox="0 0 24 24"><path d="M12 2.6 15.8 21H8.2Z" fill="#ff8c3b" stroke="#1a1200" stroke-width="1.1" stroke-linejoin="round"/><ellipse cx="12" cy="14.4" rx="2.4" ry="1.1" fill="#fff" stroke="#1a1200" stroke-width=".8"/></svg>',
+  coneHigh:'<svg viewBox="0 0 24 24"><path d="M12 1.5 16.4 21H7.6Z" fill="#ff8c3b" stroke="#1a1200" stroke-width="1.1" stroke-linejoin="round"/><ellipse cx="12" cy="17.2" rx="2.2" ry="1" fill="#fff" stroke="#1a1200" stroke-width=".8"/><ellipse cx="12" cy="8.6" rx="2.4" ry="1.05" fill="#fff" stroke="#1a1200" stroke-width=".8"/></svg>',
+  lines:'<svg viewBox="0 0 24 24"><rect x="3" y="10.3" width="4" height="1.7" rx=".85" fill="#fff"/><rect x="10" y="10.3" width="4" height="1.7" rx=".85" fill="#fff"/><rect x="17" y="10.3" width="4" height="1.7" rx=".85" fill="#fff"/></svg>',
+  curb:'<svg viewBox="0 0 24 24"><rect x="2.5" y="8.6" width="19" height="5.6" rx="1.2" fill="#fff" stroke="#22303a" stroke-width="1"/><rect x="2.5" y="14.2" width="19" height="1.8" rx=".9" fill="#e8eaed" stroke="#22303a" stroke-width=".8"/></svg>',
+  fence:'<svg viewBox="0 0 24 24"><rect x="14" y="5" width="2" height="16" rx=".6" fill="#6a7075" stroke="#22303a" stroke-width=".8"/><rect x="18.5" y="5" width="2" height="16" rx=".6" fill="#6a7075" stroke="#22303a" stroke-width=".8"/><rect x="3" y="7" width="17.4" height="1.8" rx=".9" fill="#f2f4f6" stroke="#22303a" stroke-width=".7"/><rect x="3" y="14" width="17.4" height="1.8" rx=".9" fill="#f2f4f6" stroke="#22303a" stroke-width=".7"/></svg>',
+  estacada:'<svg viewBox="0 0 24 24"><path d="M2.8 18.5 7.5 11h9l4.7 7.5" fill="none" stroke="#9db4c4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="2.8" y1="18.5" x2="21.2" y2="18.5" stroke="#7c93a4" stroke-width="1.6"/></svg>',
+};
+const FINISH_LABELS = {
+  lines:"Завершить линию", curb:"Завершить бордюр",
+  fence:"Завершить забор", estacada:"Завершить эстакаду",
+};
+const drawHint = (t) => DRAWHINTS[t] || DRAWHINTS.lines;
+
+function syncFinishBtn() {
+  const show = !CONE_TYPES.includes(editType) && mode === "place" && !!openLine;
+  finishLineBtn.style.display = show ? "" : "none";
+  finishLineBtn.textContent = FINISH_LABELS[editType] || "Завершить";
+}
+function setEditType(t) {
+  if (t !== editType && !CONE_TYPES.includes(editType)) finishLine();
+  editType = t;
+  lineLenEl.hidden = true;
+  typeIco.innerHTML = thumbHtml(t);
+  typeName.textContent = TYPE_NAMES[t] || t;
+  for (const c of document.querySelectorAll("#typeWin .tg-card"))
+    c.classList.toggle("active", c.dataset.type === t);
+  setMode(mode);
+}
+let lastCone = null;
+function setMode(m) {
+  finishLine();
+  lastCone = null;
+  mode = m;
+  for (const b of document.querySelectorAll("#editModes button")) b.classList.toggle("active", b.dataset.mode === m);
+  hintline.textContent = CONE_TYPES.includes(editType) ? HINTS[mode] : drawHint(editType)[mode];
+  canvas.style.cursor = CURSORS[mode];
+  preview.isVisible = false;
+  syncFinishBtn();
+}
+for (const b of document.querySelectorAll("#editModes button")) {
+  b.addEventListener("click", () => setMode(b.dataset.mode));
+}
+est("mapClearAll").addEventListener("click", () => { finishLine(); clearCones(); clearDraw(); });
+
+const pickGround = () => scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === "ground");
+const pickCone = () => scene.pick(scene.pointerX, scene.pointerY, (m) => m.metadata && m.metadata.isCone);
+const pickLine = () => scene.pick(scene.pointerX, scene.pointerY, (m) => m.metadata && m.metadata.isLine);
+
+const polyLen = (pts) => {
+  let s = 0;
+  for (let i = 1; i < pts.length; i++)
+    s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  return s;
+};
+function showLen(previewLen) {
+  if (CONE_TYPES.includes(editType) || !openLine || !openLine.pts || !openLine.pts.length) {
+    lineLenEl.hidden = true; return;
+  }
+  const L = polyLen(openLine.pts) + (previewLen || 0);
+  lineLenEl.textContent = "Длина: " + L.toFixed(2) + " м";
+  lineLenEl.hidden = false;
+}
+function hideLen() { lineLenEl.hidden = true; }
+function showConeDist(sx, sz) {
+  if (!lastCone) { lineLenEl.hidden = true; return; }
+  const d = Math.hypot(sx - lastCone.x, sz - lastCone.z);
+  lineLenEl.textContent = "До конуса: " + d.toFixed(2) + " м";
+  lineLenEl.hidden = false;
+}
+function updateLinePreview() {
+  if (!openLine) return;
+  if (editType === "estacada") { updateRampPreview(); return; }
+  const last = openLine.pts[openLine.pts.length - 1];
+  const p = last ? pickGround() : null;
+  if (!p || !p.hit || !last) { previewSeg.isVisible = false; return; }
+  const sx = snapX(p.pickedPoint.x), sz = snapZ(p.pickedPoint.z);
+  const dx = sx - last[0], dz = sz - last[1];
+  const L = Math.hypot(dx, dz);
+  if (L > 1e-4) {
+    previewSeg.position.set((sx + last[0]) / 2, LINE_Y[editType], (sz + last[1]) / 2);
+    previewSeg.scaling.set(LINE_WIDTH[editType], LINE_H[editType], L);
+    previewSeg.rotation.y = Math.atan2(dx, dz);
+    previewSeg.isVisible = true;
+    showLen(L);
+  } else { previewSeg.isVisible = false; showLen(0); }
+}
+function hideLinePreview() {
+  previewSeg.isVisible = false;
+  hideLen();
+  if (rampPreviewGroup) { const old = rampPreviewGroup; rampPreviewGroup = null; old.dispose(); }
+}
+function updateRampPreview() {
+  if (rampPreviewGroup) { const old = rampPreviewGroup; rampPreviewGroup = null; old.dispose(); }
+  const last = openLine && openLine.pts.length ? openLine.pts[openLine.pts.length - 1] : null;
+  const p = last ? pickGround() : null;
+  if (!p || !p.hit) return;
+  const sx = snapX(p.pickedPoint.x), sz = snapZ(p.pickedPoint.z);
+  const dx = sx - last[0], dz = sz - last[1];
+  const D = Math.hypot(dx, dz);
+  if (D <= 1e-4) return;
+  showLen(D);
+  const h = Math.min(D * EST_SLOPE, 3.2);
+  const g = new BABYLON.TransformNode("rampPrev" + (drawSeq++), scene);
+  const poly = buildRampMesh(D, h, "rampPrevMesh" + (drawSeq++));
+  poly.parent = g;
+  poly.material = matRampPrev;
+  poly.isPickable = false;
+  g.position.set(last[0], 0, last[1]);
+  g.rotation.y = Math.atan2(dx, dz);
+  rampPreviewGroup = g;
+}
+function startOpenLine() { openLine = { pts:[], groups:[] }; syncFinishBtn(); }
+function addLinePoint(x, z) {
+  if (!openLine) startOpenLine();
+  const last = openLine.pts[openLine.pts.length - 1];
+  if (last && last[0] === x && last[1] === z) return;
+  openLine.pts.push([x, z]);
+  if (last) {
+    const s = makeLineSegment(editType, last, [x, z]);
+    if (s) openLine.groups.push(s);
+  }
+  updateLinePreview();
+}
+function finishLine() {
+  if (!openLine) return;
+  if (openLine.pts.length >= 2) {
+    drawStore[editType].polys.push(openLine.pts);
+    drawStore[editType].groups.push(openLine.groups);
+  } else {
+    for (const g of openLine.groups) { try { g.dispose(); } catch (e) {} }
+  }
+  openLine = null;
+  hideLinePreview();
+  syncFinishBtn();
+  updateCounts();
+}
+finishLineBtn.addEventListener("click", finishLine);
+
+scene.onPointerObservable.add((pi) => {
+  const t = pi.type;
+  if (t === BABYLON.PointerEventTypes.POINTERMOVE) {
+    const p = pickGround();
+    if (p.hit) {
+      const sx = snapX(p.pickedPoint.x), sz = snapZ(p.pickedPoint.z);
+      const y = surfaceHeight(sx, sz);
+      preview.position.set(sx, y + 0.05, sz);
+      preview.isVisible = mode === "place" || !!dragging;
+      if (dragging) {
+        dragging.position.set(sx, y, sz);
+        dragging.rotationQuaternion = BABYLON.Quaternion.Identity();
+        dragging.userData.knocked = false;
+      }
+      if (!CONE_TYPES.includes(editType)) {
+        if (mode === "place") updateLinePreview();
+        else hideLinePreview();
+      } else if (mode === "place") showConeDist(sx, sz);
+      else hideLinePreview();
+    } else {
+      preview.isVisible = false;
+      hideLinePreview();
+    }
+  } else if (t === BABYLON.PointerEventTypes.POINTERDOWN) {
+    if (mode !== "move") return;
+    const c = pickCone();
+    if (!c.hit) return;
+    dragging = c.pickedMesh.parent;
+    const ud = dragging.userData;
+    const fi = flying.indexOf(dragging);
+    if (fi >= 0) flying.splice(fi, 1);
+    ud.vel = null;
+    dragging.rotationQuaternion = BABYLON.Quaternion.Identity();
+    ud.knocked = false;
+    dragOldKey = ud.cellKey;
+    occupied.delete(dragOldKey);
+    editGrab = true;
+    cam.detachControl();
+    canvas.style.cursor = "grabbing";
+  } else if (t === BABYLON.PointerEventTypes.POINTERUP) {
+    if (!dragging) { editGrab = false; return; }
+    const x = snapX(dragging.position.x), z = snapZ(dragging.position.z);
+    const k = cellKey(x, z);
+    const ud = dragging.userData;
+    if (occupied.has(k)) {
+      const pr = dragOldKey.split(",").map(Number);
+      dragging.position.set(pr[0], surfaceHeight(pr[0], pr[1]), pr[1]);
+      occupied.add(dragOldKey);
+      ud.cellKey = dragOldKey;
+    } else {
+      dragging.position.set(x, surfaceHeight(x, z), z);
+      occupied.add(k);
+      ud.cellKey = k;
+    }
+    updateCount();
+    dragging = null;
+    dragOldKey = null;
+    editGrab = false;
+    cam.attachControl(canvas, true);
+    canvas.style.cursor = CURSORS[mode];
+  } else if (t === BABYLON.PointerEventTypes.POINTERTAP) {
+    if (dragging) return;
+    if (mode === "delete") {
+      const c = pickCone();
+      if (c.hit) deleteCone(c.pickedMesh.parent);
+      else {
+        const l = pickLine();
+        if (l.hit) deletePolylineFromMesh(l.pickedMesh);
+      }
+    } else if (mode === "place") {
+      const p = pickGround();
+      if (p.hit) {
+        const px = snapX(p.pickedPoint.x), pz = snapZ(p.pickedPoint.z);
+        if (!CONE_TYPES.includes(editType)) addLinePoint(px, pz);
+        else { const cn = addConeAt(px, pz, editType === "coneHigh"); if (cn) lastCone = { x: px, z: pz }; }
+      }
+    }
+  }
+});
+
+// ── джойстик панорамирования камеры ──
+const PAN_SPEED = 5;
+const panState = { x:0, z:0 };
+const joyBase = est("joyBase"), joyKnob = est("joyKnob");
+const JOY_R = 30, JOY_RM = 33;
+let joyActive = false, joyId = -1;
+function joySet(px, py) {
+  const r = joyBase.getBoundingClientRect();
+  let dx = (px - (r.left + r.width / 2)) / JOY_RM;
+  let dy = (py - (r.top + r.height / 2)) / JOY_RM;
+  const L = Math.hypot(dx, dy);
+  if (L > 1) { dx /= L; dy /= L; }
+  panState.x = dx;
+  panState.z = -dy;
+  joyKnob.style.transform = "translate(calc(-50% + " + dx * JOY_R + "px),calc(-50% + " + dy * JOY_R + "px))";
+}
+function joyReset() {
+  panState.x = 0; panState.z = 0;
+  joyActive = false; joyId = -1;
+  joyKnob.style.transform = "translate(-50%,-50%)";
+  joyBase.classList.remove("on");
+}
+joyBase.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  joyBase.setPointerCapture(e.pointerId);
+  joyActive = true; joyId = e.pointerId;
+  joyBase.classList.add("on");
+  joySet(e.clientX, e.clientY);
+});
+joyBase.addEventListener("pointermove", (e) => { if (joyActive && e.pointerId === joyId) joySet(e.clientX, e.clientY); });
+joyBase.addEventListener("pointerup", (e) => { if (e.pointerId === joyId) joyReset(); });
+joyBase.addEventListener("pointercancel", (e) => { if (e.pointerId === joyId) joyReset(); });
+addEventListener("blur", joyReset);
+function panApply(dt) {
+  if (!panState.x && !panState.z) return;
+  const d = cam.position.subtract(cam.target);
+  const f = new BABYLON.Vector3(d.x, 0, d.z);
+  if (f.lengthSquared() < 1e-9) f.set(0, 0, -1);
+  f.normalize();
+  const right = BABYLON.Vector3.Cross(BABYLON.Axis.Y, f).normalize();
+  cam.target.addInPlace(right.scale(-panState.x * PAN_SPEED * dt).add(f.scale(-panState.z * PAN_SPEED * dt)));
+  cam.target.x = clamp(cam.target.x, -MAP_HALF, MAP_HALF);
+  cam.target.z = clamp(cam.target.z, -MAP_HALF, MAP_HALF);
+}
+
+// ── сетка ──
+function gridLines(step, half, y) {
+  const lines = [];
+  for (let i = -half; i <= half + 1e-6; i += step) {
+    lines.push([new BABYLON.Vector3(i, y, -half), new BABYLON.Vector3(i, y, half)]);
+  }
+  for (let i = -half; i <= half + 1e-6; i += step) {
+    lines.push([new BABYLON.Vector3(-half, y, i), new BABYLON.Vector3(half, y, i)]);
+  }
+  return lines;
+}
+{
+  const h = MAP_HALF;
+  const gridMesh = BABYLON.MeshBuilder.CreateLineSystem("grid", { lines: gridLines(GRID_STEP, h, 0.015) }, scene);
+  gridMesh.color = new BABYLON.Color3(0.37, 0.37, 0.41);
+  gridMesh.isPickable = false;
+  const gridAxes = BABYLON.MeshBuilder.CreateLineSystem("axes", { lines: [
+    [new BABYLON.Vector3(0, 0.025, -h), new BABYLON.Vector3(0, 0.025, h)],
+    [new BABYLON.Vector3(-h, 0.025, 0), new BABYLON.Vector3(h, 0.025, 0)],
+  ]}, scene);
+  gridAxes.color = new BABYLON.Color3(0.70, 0.70, 0.75);
+  gridAxes.isPickable = false;
+}
+
+// ── галерея типов ──
+const typeWin = est("typeWin"), typeBackdrop = est("typeBackdrop");
+function openTypeWin(o) {
+  typeWin.classList.toggle("open", o);
+  typeBackdrop.classList.toggle("open", o);
+}
+est("editTypeBtn").addEventListener("click", () => openTypeWin(true));
+est("typeClose").addEventListener("click", () => openTypeWin(false));
+typeBackdrop.addEventListener("click", () => openTypeWin(false));
+for (const c of document.querySelectorAll("#typeWin .tg-card")) {
+  c.querySelector(".tg-fallback").innerHTML = TYPE_ICONS[c.dataset.type] || "";
+  c.addEventListener("click", () => { setEditType(c.dataset.type); openTypeWin(false); });
+}
+
+// ── статичные 3D-превью типов объектов (как были в основном файле) ──
+// Кадр рендерится через CreateScreenshotUsingRenderTargetAsync в отдельном слое:
+// основная камера этот слой не видит, поэтому превью не мелькают в сцене.
+// SVG-иконки выше — только заглушка, пока скриншоты не готовы.
+const THUMBS = { cones:null, coneHigh:null, lines:null, curb:null, fence:null, estacada:null };
+const THUMB_SIZE = 256, THUMB_MASK = 0x20000000, THUMB_K = 2.1;
+const thumbHtml = (t) => THUMBS[t] ? '<img src="' + THUMBS[t] + '" alt="">' : (TYPE_ICONS[t] || "");
+const previewFrame = (type) => ({
+  a: (type === "fence" || type === "curb") ? Math.PI / 2 : Math.PI / 4,
+  b: type === "cones" ? 1.3 : type === "fence" ? 1.42 : type === "lines" ? 1 : 1.15,
+});
+function buildTypedPreview(type, parent) {
+  const n = new BABYLON.TransformNode("thumb" + (++drawSeq), scene);
+  const plain = (name, c) => {
+    const m = new BABYLON.StandardMaterial("tm" + name + type, scene);
+    m.diffuseColor = new BABYLON.Color3(c[0], c[1], c[2]);
+    m.specularColor = new BABYLON.Color3(0.12, 0.12, 0.12);
+    return m;
+  };
+  if (type === "cones" || type === "coneHigh") {
+    const base = BABYLON.MeshBuilder.CreateBox("tb", { width:0.25, depth:0.25, height:0.035 }, scene);
+    base.parent = n; base.position.y = 0.0175; base.material = plain("b", [0.82, 0.24, 0.07]);
+    const body = BABYLON.MeshBuilder.CreateCylinder("tc",
+      { diameterTop:0.04, diameterBottom:0.19, height:0.45, tessellation:24 }, scene);
+    body.parent = n; body.position.y = 0.26; body.material = plain("c", [1, 0.43, 0]);
+    const st = BABYLON.MeshBuilder.CreateCylinder("ts",
+      { diameterTop:0.10, diameterBottom:0.14, height:0.11, tessellation:24 }, scene);
+    st.parent = n; st.position.y = 0.255; st.material = plain("s", [1, 1, 1]);
+    if (type === "coneHigh") n.scaling.set(1, 2, 1);
+  } else if (type === "lines") {
+    const m = BABYLON.MeshBuilder.CreateBox("tl", { width:0.22, height:0.02, depth:0.8 }, scene);
+    m.parent = n; m.position.y = 0.01; m.material = plain("l", [1, 1, 1]);
+  } else if (type === "curb") {
+    const m = BABYLON.MeshBuilder.CreateBox("tcu", { width:0.25, height:0.30, depth:0.9 }, scene);
+    m.parent = n; m.position.y = 0.15; m.material = plain("cu", [1, 1, 1]);
+  } else if (type === "fence") {
+    for (const rh of [0.8, 1.5]) {
+      const rail = BABYLON.MeshBuilder.CreateBox("tfr", { width:1.6, height:0.06, depth:0.06 }, scene);
+      rail.parent = n; rail.position.y = rh; rail.material = plain("fr", [0.88, 0.9, 0.92]);
+    }
+    for (const x of [-0.8, 0.8]) {
+      const post = BABYLON.MeshBuilder.CreateBox("tfp", { width:0.08, height:1.7, depth:0.08 }, scene);
+      post.parent = n; post.position.set(x, 0.85, 0); post.material = plain("fp", [0.42, 0.46, 0.5]);
+    }
+  } else if (type === "estacada") {
+    const p = buildRampMesh(1.4, 0.22, "testacada" + (drawSeq++), 1.2);
+    p.parent = n;
+    p.material = matRamp;
+    buildRampCurbs(n, [-EST_W / 2 + 0.12, EST_W / 2 - 0.12], 1.4, 1.2, 0.22);
+  }
+  n.parent = parent;
+  return n;
+}
+async function captureThumb(type) {
+  const F = previewFrame(type);
+  const root = new BABYLON.TransformNode("thumbRoot" + type, scene);
+  root.position.set(-9999, 0, 0);
+  const gm2 = new BABYLON.StandardMaterial("thumbGround" + type, scene);
+  gm2.diffuseColor = new BABYLON.Color3(0.17, 0.18, 0.21);
+  gm2.specularColor = new BABYLON.Color3(0, 0, 0);
+  const g = BABYLON.MeshBuilder.CreateGround("thumbG" + type, { width:14, height:14 }, scene);
+  g.parent = root;
+  g.material = gm2;
+  buildTypedPreview(type, root);
+  for (const m of root.getChildMeshes()) mapMeshes.add(m);
+  try {
+    const kids = root.getChildMeshes();
+    for (const m of kids) { m.computeWorldMatrix(true); m.layerMask = THUMB_MASK; }
+    const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+    for (const m of kids) {
+      if (/^thumbG/.test(m.name)) continue;
+      m.refreshBoundingInfo();
+      const b = m.getBoundingInfo().boundingBox;
+      const mn = b.minimumWorld, mx = b.maximumWorld;
+      lo[0] = Math.min(lo[0], mn.x); lo[1] = Math.min(lo[1], mn.y); lo[2] = Math.min(lo[2], mn.z);
+      hi[0] = Math.max(hi[0], mx.x); hi[1] = Math.max(hi[1], mx.y); hi[2] = Math.max(hi[2], mx.z);
+    }
+    const size = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+    const thCam = new BABYLON.ArcRotateCamera("thCam" + type, F.a, F.b, Math.max(size * THUMB_K, 0.4),
+      new BABYLON.Vector3((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2), scene);
+    thCam.layerMask = THUMB_MASK;
+    thCam.minZ = 0.01;
+    thCam.maxZ = size * 60 + 100;
+    const png = await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, thCam, THUMB_SIZE, "image/png", 4);
+    THUMBS[type] = png.slice(0, 5) === "data:" ? png : "data:image/png;base64," + png;
+    thCam.dispose();
+  } catch (e) {
+    // превью — украшение: если рендер не удался, остаётся векторная иконка
+  }
+  root.dispose();
+}
+function applyThumbs() {
+  const fill = (el, type) => { if (el && THUMBS[type]) el.innerHTML = '<img src="' + THUMBS[type] + '" alt="">'; };
+  fill(typeIco, editType);
+  for (const c of document.querySelectorAll("#typeWin .tg-card")) fill(c.querySelector(".tg-fallback"), c.dataset.type);
+}
+requestAnimationFrame(() => requestAnimationFrame(async () => {
+  for (const t of ["cones", "coneHigh", "lines", "curb", "fence", "estacada"]) await captureThumb(t);
+  applyThumbs();
+}));
+
+// ── сохранение / загрузка JSON ──
+const mapFileInput = est("mapFileInput"), mapFileStatus = est("mapFileStatus");
+function setMapFileStatus(text, err) {
+  mapFileStatus.textContent = text || "";
+  mapFileStatus.style.color = err ? "#e08a6a" : "#7fbf8a";
+  mapFileStatus.classList.toggle("show", !!text);
+}
+function mapFileName() {
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  return "gta4_map_" + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) +
+    "_" + p(d.getHours()) + p(d.getMinutes()) + ".json";
+}
+function saveMapFile() {
+  finishLine();
+  let blob;
+  try { blob = new Blob([JSON.stringify(collectMapJson(), null, 2)], { type:"application/json" }); }
+  catch (e) { setMapFileStatus("Не удалось сформировать файл", true); return; }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = mapFileName();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  setMapFileStatus("Карта сохранена: " + a.download);
+}
+function loadMapFile(file) {
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      finishLine();
+      applyMapJson(JSON.parse(String(rd.result)));
+      setMapFileStatus("Карта загружена: " + file.name);
+    } catch (e) {
+      setMapFileStatus("Ошибка загрузки: " + (e && e.message || "повреждённый файл"), true);
+    }
+  };
+  rd.onerror = () => setMapFileStatus("Не удалось прочитать файл", true);
+  rd.readAsText(file);
+}
+est("mapSaveBtn").addEventListener("click", saveMapFile);
+est("mapLoadBtn").addEventListener("click", () => {
+  if (!mapFileInput) return;
+  mapFileInput.value = "";
+  mapFileInput.click();
+});
+mapFileInput.addEventListener("change", () => {
+  const f = mapFileInput.files && mapFileInput.files[0];
+  if (f) loadMapFile(f);
+});
+
+// ── горячие клавиши ──
+addEventListener("keydown", (e) => {
+  if (e.target && e.target.tagName === "INPUT") return;
+  if (e.code === "Digit1") { e.preventDefault(); setMode("place"); }
+  else if (e.code === "Digit2") { e.preventDefault(); setMode("move"); }
+  else if (e.code === "Digit3") { e.preventDefault(); setMode("delete"); }
+  else if (e.code === "KeyT") {
+    e.preventDefault();
+    const order = ["cones", "coneHigh", "lines", "curb", "fence", "estacada"];
+    setEditType(order[(order.indexOf(editType) + 1) % order.length]);
+  }
+  else if (e.code === "KeyC" && !e.repeat) { e.preventDefault(); finishLine(); clearCones(); }
+  else if (e.code === "Escape") { openTypeWin(false); }
+  else if (e.code === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finishLine(); }
+});
+
+// ── цикл ──
+setEditType("cones");
+updateCount();
+updateCounts();
+let last = performance.now();
+engine.runRenderLoop(() => {
+  const now = performance.now();
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  panApply(dt);
+  if (typeof updateFlights === "function") updateFlights(dt);
+  scene.render();
+});
+</script>
+</body>
+</html>
