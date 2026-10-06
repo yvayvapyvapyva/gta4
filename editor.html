@@ -140,7 +140,7 @@
 <script>
 // ── сцена редактора: свободная камера, земля, свет ──
 const canvas = document.getElementById("view");
-const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, stencil:true }, true);
+const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:false, stencil:true }, true);
 const dpr = window.devicePixelRatio || 1;
 engine.setHardwareScalingLevel(1.0 / Math.min(dpr, 1.5));
 const scene = new BABYLON.Scene(engine);
