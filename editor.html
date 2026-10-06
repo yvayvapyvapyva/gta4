@@ -140,9 +140,12 @@
 <script>
 // ── сцена редактора: свободная камера, земля, свет ──
 const canvas = document.getElementById("view");
-const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:false, stencil:true }, true);
+const isMobileEd = ((window.Telegram && window.Telegram.WebApp && /ios|android/i.test(window.Telegram.WebApp.platform || ""))) ||
+  (window.matchMedia && window.matchMedia("(pointer:coarse)").matches) ||
+  /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+const engine = new BABYLON.Engine(canvas, !isMobileEd, { preserveDrawingBuffer:false, stencil:false }, true);
 const dpr = window.devicePixelRatio || 1;
-engine.setHardwareScalingLevel(1.0 / Math.min(dpr, 1.5));
+engine.setHardwareScalingLevel(1.0 / Math.min(dpr, isMobileEd ? 1.25 : 1.5));
 const scene = new BABYLON.Scene(engine);
 scene.clearColor = new BABYLON.Color4(0.55, 0.72, 0.94, 1);
 const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2, 1.0, 40, new BABYLON.Vector3(0, 0.75, 0), scene);
@@ -750,8 +753,10 @@ setEditType("cones");
 updateCount();
 updateCounts();
 let last = performance.now();
+const FRAME_MIN_MS = 1000 / 60;   // кап 60fps, как в игре
 engine.runRenderLoop(() => {
   const now = performance.now();
+  if (now - last < FRAME_MIN_MS - 1.5) return;
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
   panApply(dt);

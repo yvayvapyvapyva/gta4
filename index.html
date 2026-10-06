@@ -361,10 +361,14 @@ const LOOK_DRAG_SCALE = 1;
 
 const canvas = document.getElementById("view");
 
-const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:false, stencil:true }, true);
-// Кап DPR: на мобильных не рендерим выше 1.5× CSS (избегаем 4-9× пикселей)
+// Мобила: MSAA и высокий DPR жгут тайловый GPU — режем именно там, десктоп не трогаем.
+const isMobile = ((window.Telegram && window.Telegram.WebApp && /ios|android/i.test(window.Telegram.WebApp.platform || ""))) ||
+  (window.matchMedia && window.matchMedia("(pointer:coarse)").matches) ||
+  /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+const engine = new BABYLON.Engine(canvas, !isMobile, { preserveDrawingBuffer:false, stencil:false }, true);
+// Кап DPR: десктоп до 1.5× CSS, мобила до 1.25× (было 1.5 везде)
 const dpr = window.devicePixelRatio || 1;
-const capped = Math.min(dpr, 1.5);
+const capped = Math.min(dpr, isMobile ? 1.25 : 1.5);
 engine.setHardwareScalingLevel(1.0 / capped);
 
 // ── адаптивное разрешение ──────────────────────────────────────────
@@ -373,7 +377,7 @@ engine.setHardwareScalingLevel(1.0 / capped);
 // Авто-режим раз в 2 с смотрит средний FPS и двигает скейлинг с гистерезисом,
 // чтобы не дёргаться на границе. Ручные режимы фиксируют края диапазона.
 let qualityMode = "auto";   // auto | high | low
-let qualityScale = 1;
+let qualityScale = isMobile ? 2 : 1;   // мобила стартует с холодного минимума, поднимется если тянет
 const qualityMin = capped / dpr;   // 1 на слабом DPR, 0.5 на DPR 3
 function applyQuality() {
   const s = qualityMode === "low" ? 2 : qualityMode === "high" ? qualityMin : qualityScale;
@@ -386,10 +390,11 @@ function setQualityMode(m) {
   syncSettings();
 }
 let qAcc = 0, qN = 0;
+const Q_WINDOW = isMobile ? 1 : 2;   // мобила реагирует за 1 с, а не 2 — не успевает нагреться
 function qualityMeter(rawDt) {
   if (qualityMode !== "auto") return;
   qAcc += rawDt; qN++;
-  if (qAcc < 2) return;           // окно оценки — 2 с
+  if (qAcc < Q_WINDOW) return;           // окно оценки
   const fps = qN / qAcc;
   qAcc = 0; qN = 0;
   if (fps < 45 && qualityScale < 2) {
@@ -400,6 +405,7 @@ function qualityMeter(rawDt) {
     applyQuality();
   }
 }
+applyQuality();   // применить стартовый скейл сразу, а не через первое окно
 
 const scene = new BABYLON.Scene(engine);
 const SKY_COLOR = new BABYLON.Color3(0.55, 0.72, 0.94);
@@ -407,10 +413,12 @@ scene.clearColor = new BABYLON.Color4(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1);
 scene.useRightHandedSystem = false;
 
 const ip = scene.imageProcessingConfiguration;
-ip.toneMappingEnabled = true;
+// ACES на мобиле выключен: лишний fullscreen-проход на каждый пиксель.
+// Без ACES картинка ярче/площе — свет ниже чуть приглушён в компенсацию (см. hemi/sun/env).
+ip.toneMappingEnabled = !isMobile;
 ip.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
 ip.exposure = 1.15;
-ip.contrast = 1.08;
+ip.contrast = isMobile ? 1.0 : 1.08;
 
 const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2, Math.PI / 2.6, 9, new BABYLON.Vector3(0, 0.7, 0), scene);
 cam.attachControl(canvas, true);
@@ -423,7 +431,7 @@ cam.pinchDeltaPercentage = 0.02;
 cam.panningSensibility = 0;
 
 const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), scene);
-hemi.intensity = 0.45;
+hemi.intensity = isMobile ? 0.55 : 0.45;
 hemi.groundColor = new BABYLON.Color3(0.16, 0.17, 0.2);
 
 // Солнце сверху. Направление задаёт ход лучей, поэтому у солнца на высоте 79°
@@ -432,7 +440,7 @@ hemi.groundColor = new BABYLON.Color3(0.16, 0.17, 0.2);
 // а боковой уход даёт теням форму и показывает, где у машины крылья.
 const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.15, -1, 0.13), scene);
 sun.position = new BABYLON.Vector3(2, 14, -2);
-sun.intensity = 2.6;
+sun.intensity = isMobile ? 2.3 : 2.6;
 
 
 
@@ -445,7 +453,7 @@ cabin.intensity = 0;
 // environment for PBR reflections (car paint is metallic)
 try {
   scene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(ENV_URL, scene);
-  scene.environmentIntensity = 0.85;
+  scene.environmentIntensity = isMobile ? 0.7 : 0.85;
 } catch (e) {}
  
  // небо: градиентный купол
@@ -1653,8 +1661,11 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
 });
 
 let last = performance.now();
+const FRAME_MIN_MS = 1000 / 60;   // кап 60fps: на 120Гц-экранах режем работу вдвое
 engine.runRenderLoop(() => {
   const now = performance.now();
+  // пропуск кадра: last не трогаем, следующий dt накроет пропуск целиком
+  if (now - last < FRAME_MIN_MS - 1.5) return;
   const rawDt = (now - last) / 1000;
   const dt = Math.min(rawDt, 0.05);
   last = now;
