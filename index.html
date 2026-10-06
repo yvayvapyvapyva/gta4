@@ -895,9 +895,13 @@ addEventListener("pointerup", () => { setSliderDrag = null; });
 addEventListener("pointercancel", () => { setSliderDrag = null; });
 
 document.getElementById("setMirReset").addEventListener("click", () => {
-  for (const s of mirSliders) {
-    const e = mirrorSide(s.side);
-    if (e) e[s.field] = 0;
+  // сброс — к штатным значениям зеркал, а не к нулям (как по клавише K)
+  for (const s of ["left", "right"]) {
+    const e = mirrorSide(s);
+    if (!e || typeof mirrorDefault !== "function") continue;
+    const d = mirrorDefault(s);
+    e.yaw = d.yaw;
+    e.pitch = d.pitch;
   }
   syncSettings();
 });
