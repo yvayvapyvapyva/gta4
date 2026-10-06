@@ -11,7 +11,11 @@ let replayStartTime = 0;
 let replayIndex = 0;
 let replayTime = 0; // накопленное время воспроизведения
 
-// Сохранение текущих входов в буфер
+// Сохранение текущих входов в буфер.
+// Углы колёс НЕ храним: доворот выводится из steer, прокрут — интеграл
+// скорости (считается при воспроизведении). Числа округлены до тысячных —
+// JSON худеет в разы, на картинке разницы нет.
+const r3 = (v) => Math.round(v * 1000) / 1000;
 function captureFrame(now) {
   const dt = now - lastRecordTime;
   if (dt < REPLAY_TICK * 1000) return; // пишем не чаще 60 Гц
@@ -28,35 +32,26 @@ function captureFrame(now) {
     throttle = gas - back; // -1, 0, 1
   }
 
-  const steer = CAR.steer; // текущий угол руля (рад)
-  const handbrake = keys.Space ? 1 : 0;
-
-  // Углы вращения колёс
-  const wheelAngles = CAR.wheels ? CAR.wheels.map(w => w.angle || 0) : [];
-  const wheelSteers = CAR.wheels ? CAR.wheels.map(w => w.steer?.rotation?.y || 0) : [];
-
   const frame = {
-    t: (now - replayStartTime) / 1000, // секунды от старта
-    throttle,
-    steer,
-    handbrake,
+    t: r3((now - replayStartTime) / 1000), // секунды от старта
+    throttle: r3(throttle),
+    steer: r3(CAR.steer), // текущий угол руля (рад)
+    handbrake: keys.Space ? 1 : 0,
     blinkL: blinkerLeft ? 1 : 0,
     blinkR: blinkerRight ? 1 : 0,
     camMode: CAR.mode,
-    camYaw: CAR.camYaw,
-    camPitch: CAR.camPitch,
-    camDist: CAR.camDist,
-    lookYaw: CAR.lookYaw,
-    lookPitch: CAR.lookPitch,
+    camYaw: r3(CAR.camYaw),
+    camPitch: r3(CAR.camPitch),
+    camDist: r3(CAR.camDist),
+    lookYaw: r3(CAR.lookYaw),
+    lookPitch: r3(CAR.lookPitch),
     // полное состояние физики
-    pos: { x: CAR.root.position.x, z: CAR.root.position.z },
-    groundY: CAR.y,
-    lift: CAR.lift,
-    yaw: CAR.yaw,
-    v: CAR.v,
-    vy: CAR.vy,
-    wheelAngles,
-    wheelSteers,
+    pos: { x: r3(CAR.root.position.x), z: r3(CAR.root.position.z) },
+    groundY: r3(CAR.y),
+    lift: r3(CAR.lift),
+    yaw: r3(CAR.yaw),
+    v: r3(CAR.v),
+    vy: r3(CAR.vy),
     xray: typeof xrayOn !== 'undefined' ? xrayOn : false
   };
   replayBuffer.push(frame);
@@ -231,13 +226,12 @@ function resetCarToFrame(frame) {
   CAR.lift = frame.lift ?? 0;
   CAR.root.rotationQuaternion = CAR.root.rotationQuaternion || new BABYLON.Quaternion();
   CAR.root.rotationQuaternion.copyFrom(BABYLON.Quaternion.RotationYawPitchRoll(CAR.yaw, 0, 0));
-  // колёса — восстанавливаем углы вращения и поворот
-  if (CAR.wheels && frame.wheelAngles) {
-    for (let i = 0; i < CAR.wheels.length; i++) {
-      const w = CAR.wheels[i];
-      w.angle = frame.wheelAngles[i] || 0;
-      if (w.spin) w.spin.rotation.x = w.angle;
-      if (w.steer && frame.wheelSteers) w.steer.rotation.y = frame.wheelSteers[i] || 0;
+  // колёса: доворот — из steer кадра (как в drive()), прокрут продолжает
+  // интегрироваться из скорости сам. Старые файлы с wheelAngles тоже грузятся:
+  // их углы просто игнорируются.
+  if (CAR.wheels) {
+    for (const w of CAR.wheels) {
+      if (w.front && w.steer) w.steer.rotation.y = CAR.steer;
     }
   }
 }
@@ -402,10 +396,18 @@ function renderReplayList() {
     const dur = data?.duration ? data.duration.toFixed(1) + ' с' : '—';
     const frames = data?.frames?.length || 0;
     const date = name.replace('replay_', '').replace(/-/g, ':').replace('T', ' ');
+    // размер записи по весу её JSON
+    let size = '—';
+    try {
+      const bytes = JSON.stringify(data).length;
+      size = bytes < 1024 ? bytes + ' Б' :
+        bytes < 1048576 ? (bytes / 1024).toFixed(1) + ' КБ' :
+        (bytes / 1048576).toFixed(1) + ' МБ';
+    } catch (e) {}
     return `<div class="replay-item" data-name="${name}" style="display:flex;align-items:center;justify-content:space-between;padding:10px;border-bottom:1px solid rgba(255,255,255,.08);cursor:pointer;">
       <div>
         <div style="font-weight:600;font-size:13px;">${name}</div>
-        <div style="font-size:11px;color:var(--dim);">${date} · ${dur} · ${frames} кадров</div>
+        <div style="font-size:11px;color:var(--dim);">${date} · ${dur} · ${frames} кадров · ${size}</div>
       </div>
       <button class="replay-del" data-name="${name}" style="margin-left:8px;padding:4px 10px;font-size:11px;background:rgba(255,59,59,.2);border:1px solid #ff3b3b;border-radius:6px;color:#ff6b6b;cursor:pointer;">Удалить</button>
     </div>`;
