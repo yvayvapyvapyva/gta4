@@ -355,7 +355,8 @@ function stopAndSave() {
 addEventListener('keydown', e => {
   if (e.code === 'KeyR' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
     const settingsWin = document.getElementById('settingsWin');
-    if (settingsWin?.classList.contains('open')) return;
+    const mirrorWin = document.getElementById('mirrorWin');
+    if (settingsWin?.classList.contains('open') || mirrorWin?.classList.contains('open')) return;
     e.preventDefault();
     if (window.Replay.isRecording()) stopAndSave(); else uiStartRecording();
   }

@@ -83,6 +83,17 @@
   #recBtn.recording svg { animation:blink 1s infinite; }
   @keyframes pulse { 0%,100% { box-shadow:0 0 0 0 rgba(255,59,59,.4); } 50% { box-shadow:0 0 0 8px rgba(255,59,59,0); } }
   @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  /* Кнопка окна зеркал: третья в правой колонке под записью реплея */
+  #mirrorBtn { position:fixed; right:max(14px,env(safe-area-inset-right,0px));
+    top:calc(max(14px,env(safe-area-inset-top,0px)) + 108px + var(--tg-top)); z-index:7; width:40px; height:40px; padding:0;
+    display:flex; align-items:center; justify-content:center; border-radius:14px; cursor:pointer;
+    font-size:20px; line-height:1;
+    color:#d8e5ee; background:rgba(12,22,32,.85); border:1px solid #2a4257;
+    backdrop-filter:blur(6px); -webkit-tap-highlight-color:transparent;
+    user-select:none; -webkit-user-select:none; }
+  #mirrorBtn:hover { border-color:var(--acc); color:var(--acc); }
+  #mirrorBtn.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
+  #mirrorBtn:active { background:#ff6d00; border-color:#ff6d00; color:#12141a; }
   .win-btns button.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
 
   .win-sec { margin:0 0 16px; }
@@ -106,6 +117,7 @@
   .win-btns { display:flex; gap:8px; flex-wrap:wrap; }
   .win-btns button { flex:1; min-width:110px; }
   #settingsWin { width:min(340px,94vw); max-height:86vh; overflow-y:auto; }
+  #mirrorWin { width:min(340px,94vw); max-height:86vh; overflow-y:auto; }
 
   .win-backdrop { position:fixed; inset:0; z-index:9; background:rgba(8,9,12,.6); display:none; }
   .win-backdrop.open { display:block; }
@@ -179,6 +191,8 @@ body.playback-active #driveCtrl{display:none !important}
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="#ff3b3b"/></svg>
 </button>
 
+<button id="mirrorBtn" aria-label="Настройки зеркал" title="Настройки зеркал">🪞</button>
+
 <div id="settingsBackdrop" class="win-backdrop"></div>
 <div id="settingsWin" class="win">
   <h3>Настройки<button id="settingsClose" aria-label="Закрыть">✕</button></h3>
@@ -222,9 +236,14 @@ body.playback-active #driveCtrl{display:none !important}
     </div>
     <div class="win-note">Смещение камеры вперёд/назад относительно руля (см)</div>
   </div>
+</div>
+
+<div id="mirrorBackdrop" class="win-backdrop"></div>
+<div id="mirrorWin" class="win">
+  <h3>Зеркала<button id="mirrorClose" aria-label="Закрыть">✕</button></h3>
 
   <div class="win-sec">
-    <h4>Зеркала заднего вида</h4>
+    <h4>Направление</h4>
     <div class="win-row">
       <label>Лев. Г</label>
       <input type="range" id="setMirLY" min="-34" max="34" step="0.5" value="0">
@@ -252,6 +271,36 @@ body.playback-active #driveCtrl{display:none !important}
       Клавиши в салоне: <b>M</b> — режим регулировки, <b>← →</b> по горизонтали,
       <b>↑ ↓</b> по вертикали (шаг 0.5°), <b>L/R</b> — выбор зеркала
     </div>
+  </div>
+
+  <div class="win-sec">
+    <h4>Отражение</h4>
+    <div class="win-row">
+      <label>Качество</label>
+      <input type="range" id="setMirRes" min="256" max="4096" step="256" value="2048">
+      <span class="val" id="setMirResV">2048</span>
+    </div>
+    <div class="win-row">
+      <label>Обзор</label>
+      <input type="range" id="setMirFov" min="60" max="140" step="1" value="100">
+      <span class="val" id="setMirFovV">100°</span>
+    </div>
+    <div class="win-row">
+      <label>Выпукл.</label>
+      <input type="range" id="setMirDist" min="0" max="0.8" step="0.05" value="0.35">
+      <span class="val" id="setMirDistV">0.35</span>
+    </div>
+    <div class="win-row">
+      <label>Разлёт</label>
+      <input type="range" id="setMirSpread" min="1" max="6" step="0.5" value="3">
+      <span class="val" id="setMirSpreadV">3</span>
+    </div>
+    <div class="win-row">
+      <label>Вынос</label>
+      <input type="range" id="setMirCamD" min="0.5" max="3" step="0.1" value="1.3">
+      <span class="val" id="setMirCamDV">1.3 м</span>
+    </div>
+    <div class="win-note">Качество требует перезаписи текстуры (короткий фриз). Остальное применяется сразу</div>
   </div>
 </div>
 
@@ -664,6 +713,67 @@ document.getElementById("replayListBtn")?.addEventListener("click", () => {
 });
 setCamBtn.addEventListener("click", () => { toggleCam(); syncSettings(); });
 
+// ── окно зеркал: отдельная кнопка, все настройки зеркал живут здесь ──
+const mirrorWin = document.getElementById("mirrorWin");
+const mirrorBackdrop = document.getElementById("mirrorBackdrop");
+const mirrorBtn = document.getElementById("mirrorBtn");
+function openMirrorWin(o) {
+  mirrorWin.classList.toggle("open", o);
+  mirrorBackdrop.classList.toggle("open", o);
+  mirrorBtn.classList.toggle("on", o);
+  if (o) { syncSettings(); syncMirrorTunables(); }
+}
+mirrorBtn.addEventListener("click", () => openMirrorWin(!mirrorWin.classList.contains("open")));
+document.getElementById("mirrorClose").addEventListener("click", () => openMirrorWin(false));
+mirrorBackdrop.addEventListener("click", () => openMirrorWin(false));
+
+const setMirRes = document.getElementById("setMirRes");
+const setMirResV = document.getElementById("setMirResV");
+const setMirFov = document.getElementById("setMirFov");
+const setMirFovV = document.getElementById("setMirFovV");
+const setMirDist = document.getElementById("setMirDist");
+const setMirDistV = document.getElementById("setMirDistV");
+const setMirSpread = document.getElementById("setMirSpread");
+const setMirSpreadV = document.getElementById("setMirSpreadV");
+const setMirCamD = document.getElementById("setMirCamD");
+const setMirCamDV = document.getElementById("setMirCamDV");
+
+// подтягиваем крутилки отражения из mirror.js
+function syncMirrorTunables() {
+  if (typeof mirrorTunables !== "function") return;
+  const t = mirrorTunables();
+  if (setMirRes !== setSliderDrag) { setMirRes.value = t.res; setMirResV.textContent = t.res; }
+  if (setMirFov !== setSliderDrag) { setMirFov.value = t.fovDeg; setMirFovV.textContent = t.fovDeg + "°"; }
+  if (setMirDist !== setSliderDrag) { setMirDist.value = t.distortK; setMirDistV.textContent = t.distortK; }
+  if (setMirSpread !== setSliderDrag) { setMirSpread.value = t.spread; setMirSpreadV.textContent = t.spread; }
+  if (setMirCamD !== setSliderDrag) { setMirCamD.value = t.camOffset; setMirCamDV.textContent = (+t.camOffset).toFixed(1) + " м"; }
+}
+setMirRes.addEventListener("input", () => {
+  const v = +setMirRes.value;
+  setMirResV.textContent = v;
+  if (typeof setMirrorRes === "function") setMirrorRes(v);
+});
+setMirFov.addEventListener("input", () => {
+  const v = +setMirFov.value;
+  setMirFovV.textContent = v + "°";
+  if (typeof setMirrorFovDeg === "function") setMirrorFovDeg(v);
+});
+setMirDist.addEventListener("input", () => {
+  const v = +setMirDist.value;
+  setMirDistV.textContent = v;
+  if (typeof setMirrorDistortK === "function") setMirrorDistortK(v);
+});
+setMirSpread.addEventListener("input", () => {
+  const v = +setMirSpread.value;
+  setMirSpreadV.textContent = v;
+  if (typeof setMirrorSpread === "function") setMirrorSpread(v);
+});
+setMirCamD.addEventListener("input", () => {
+  const v = +setMirCamD.value;
+  setMirCamDV.textContent = v.toFixed(1) + " м";
+  if (typeof setMirrorCamOffset === "function") setMirrorCamOffset(v);
+});
+
 // X-ray: прозрачный кузов (кнопка на нижней панели — dvXray)
 let xrayOn = false;
 const xrayBtn = document.getElementById("dvXray");
@@ -754,7 +864,8 @@ for (const s of mirSliders) {
 }
 
 // пока ползунок тянут, syncSettings не должен переписывать его значение
-for (const el of [setFov, setCockpitZ, ...mirSliders.map(s => s.input)]) {
+for (const el of [setFov, setCockpitZ, ...mirSliders.map(s => s.input),
+    setMirRes, setMirFov, setMirDist, setMirSpread, setMirCamD]) {
   el.addEventListener("pointerdown", () => { setSliderDrag = el; });
 }
 addEventListener("pointerup", () => { setSliderDrag = null; });
@@ -773,6 +884,9 @@ addEventListener("keydown", (e) => {
   if (e.code === "Escape" && setWin.classList.contains("open")) {
     e.preventDefault();
     openSettings(false);
+  } else if (e.code === "Escape" && mirrorWin.classList.contains("open")) {
+    e.preventDefault();
+    openMirrorWin(false);
   }
 });
 
@@ -1529,7 +1643,10 @@ engine.runRenderLoop(() => {
     if (typeof syncDvWheel === "function") syncDvWheel();
     // окно открыто — держим его в согласии с тем, что меняли мимо него
     // (клавиша C, стрелки регулировки зеркал в салоне)
-    if (setWin.classList.contains("open")) syncSettings();
+    if (setWin.classList.contains("open") || mirrorWin.classList.contains("open")) {
+      syncSettings();
+      syncMirrorTunables();
+    }
   }
   scene.render();
 });

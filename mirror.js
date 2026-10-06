@@ -15,11 +15,11 @@
 //   setMirrorsActive(on)          — вкл/выкл из applyCamMode
 //   mirrorTick()                  — каждый кадр перед scene.render()
 
-const MIRROR_RES = 2048;         // сторона RTT: баланс чёткости и скорости
-const MIRROR_FOV = 1.75;         // ~100°: широкий угол выпуклого зеркала, рад
-const MIRROR_DISTORT_K = 0.35;   // сила бочкообразной дисторсии (0 = плоское)
-const MIRROR_SPREAD = 3.0;       // во сколько раз шире геометрического следа тянем картинку
-const MIRROR_CAM_OFFSET = 1.3;   // камера — на продолжении отражённого луча за стеклом, м
+let MIRROR_RES = 2048;           // сторона RTT (меняется из окна зеркал)
+let MIRROR_FOV = 1.75;           // ~100°: широкий угол выпуклого зеркала, рад
+let MIRROR_DISTORT_K = 0.35;     // сила бочкообразной дисторсии (0 = плоское)
+let MIRROR_SPREAD = 3.0;         // во сколько раз шире геометрического следа тянем картинку
+let MIRROR_CAM_OFFSET = 1.3;     // камера — на продолжении отражённого луча за стеклом, м
 const MIRROR_GLASS_OUT = 0.05;   // сдвиг точки стекла наружу от центра авто, м
 const MIRROR_ANISO = 16;         // фильтрация при взгляде на зеркало под углом
 const MIRROR_ADJ_DEG = 0.5;    // шаг регулировки зеркала, градусы за нажатие
@@ -348,11 +348,14 @@ const MIRROR_PITCH_MIN = -0.35, MIRROR_PITCH_MAX = 0.35;
 let mirrorHud = null;
 function mirrorHudEl() {
   if (!mirrorHud) {
-    mirrorHud = document.createElement("div");
-    mirrorHud.id = "mirrorhud";
-    mirrorHud.hidden = true;
-    const cam = document.getElementById("cam");
-    if (cam) cam.after(mirrorHud);
+    // в index.html уже есть штатный #mirrorhud — используем его, а не клон
+    mirrorHud = document.getElementById("mirrorhud");
+    if (!mirrorHud) {
+      mirrorHud = document.createElement("div");
+      mirrorHud.id = "mirrorhud";
+      mirrorHud.hidden = true;
+      document.body.appendChild(mirrorHud);
+    }
   }
   return mirrorHud;
 }
@@ -557,6 +560,64 @@ function disposeMirrors() {
   mirrorList = null;
   mirrorListed = -1;
   mirrorActive = false;
+}
+
+// ── крутилки из окна зеркал (index.html) ────────────────────────────────
+// Значения для подписи в окне.
+function mirrorTunables() {
+  return {
+    res: MIRROR_RES,
+    fovDeg: Math.round(MIRROR_FOV * 180 / Math.PI),
+    distortK: MIRROR_DISTORT_K,
+    spread: MIRROR_SPREAD,
+    camOffset: MIRROR_CAM_OFFSET,
+  };
+}
+// Применить FOV/бочку/разлёт/вынос ко всем зеркалам (кадр подхватит сам).
+function applyMirrorTunables() {
+  for (const e of mirrorEntries) {
+    e.cam.fov = MIRROR_FOV;
+    e.mat.setFloat("distortK", MIRROR_DISTORT_K);
+    e.mat.setFloat("spread", MIRROR_SPREAD);
+  }
+}
+function setMirrorFovDeg(deg) {
+  MIRROR_FOV = deg * Math.PI / 180;
+  applyMirrorTunables();
+}
+function setMirrorDistortK(k) {
+  MIRROR_DISTORT_K = k;
+  applyMirrorTunables();
+}
+function setMirrorSpread(s) {
+  MIRROR_SPREAD = s;
+  applyMirrorTunables();
+}
+function setMirrorCamOffset(m) {
+  MIRROR_CAM_OFFSET = m;   // tick читает переменную каждый кадр
+}
+// Разрешение: текстуру проще пересоздать, чем тянуть. Состояние зеркал
+// (вкл/выкл, список мешей) сохраняется.
+function setMirrorRes(res) {
+  res = Math.max(64, Math.round(res));
+  if (res === MIRROR_RES) return;
+  MIRROR_RES = res;
+  for (const e of mirrorEntries) {
+    const old = e.tex;
+    const tex = new BABYLON.RenderTargetTexture(old.name, mirrorRes(), scene, true);
+    tex.activeCamera = e.cam;
+    tex.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
+    tex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+    tex.samplingMode = BABYLON.Texture.TRILINEAR_SAMPLINGMODE;
+    tex.anisotropicFilteringLevel = MIRROR_ANISO;
+    tex.clearColor = new BABYLON.Color4(0.55, 0.72, 0.94, 1);
+    tex.renderList = mirrorActive ? (mirrorList || MIRROR_NONE) : MIRROR_NONE;
+    if (scene.customRenderTargets.indexOf(tex) < 0) scene.customRenderTargets.push(tex);
+    e.tex = tex;
+    e.mat.setTexture("mirrorSampler", tex);
+    try { old.dispose(); } catch (err) {}
+  }
+  refreshMirrorList(true);
 }
 
 mirrorTick = tickMirrors;
