@@ -15,7 +15,7 @@
 //   setMirrorsActive(on)          — вкл/выкл из applyCamMode
 //   mirrorTick()                  — каждый кадр перед scene.render()
 
-const MIRROR_RES = 2048;         // сторона RTT: максимум чёткости
+const MIRROR_RES = 2048;         // сторона RTT: баланс чёткости и скорости
 const MIRROR_FOV = 1.75;         // ~100°: широкий угол выпуклого зеркала, рад
 const MIRROR_DISTORT_K = 0.35;   // сила бочкообразной дисторсии (0 = плоское)
 const MIRROR_SPREAD = 3.0;       // во сколько раз шире геометрического следа тянем картинку
@@ -520,11 +520,10 @@ function setupMirrors(opts) {
         const ver = BABYLON.Vector3.Cross(lat, dout);
         ver.normalize();
         const offs = [[0, 0]];
-        for (const r of [0.04, 0.08])
-          for (let k = 0; k < 8; k++) {
-            const a = k / 8 * Math.PI * 2;
-            offs.push([Math.cos(a) * r, Math.sin(a) * r]);
-          }
+        for (let k = 0; k < 4; k++) {
+          const a = k / 4 * Math.PI * 2;
+          offs.push([Math.cos(a) * 0.03, Math.sin(a) * 0.03]);
+        }
         for (const [oa, ob] of offs) {
           const tgt = gw.add(lat.scale(oa)).add(ver.scale(ob));
           const dir = tgt.subtract(campos);
