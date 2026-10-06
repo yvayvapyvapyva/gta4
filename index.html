@@ -691,7 +691,7 @@ function toggleXray() {
 
   const mat = getXrayMaterial();
   const isIndicator = (m) => /indicator/i.test(m.name) || /indicator/i.test((m.parent && m.parent.name) || '');
-  // зеркала не трогаем: их материал — это MirrorTexture, он должен оставаться
+  // зеркала не трогаем: у них свой шейдер с RTT, он должен оставаться
   const isMirror = (m) => typeof mirrorEntries !== "undefined" && mirrorEntries.some(e => e.mesh === m);
   // колёса не делаем прозрачными (они крутятся/поворачиваются и должны быть видны)
   const isWheel = (m) => {

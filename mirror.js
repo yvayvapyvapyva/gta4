@@ -1,23 +1,26 @@
-// ── боковые зеркала: настоящее отражение сцены ─────────────────────────
-// Схема как в simulator2: у каждого стекла своя MirrorTexture, плоскость
-// зеркала пересчитывается каждый кадр из положения кузова, в список
-// отрисовки идут все меши сцены, кроме самих стёкол.
-//
-// Отличие от референса одно и обязательное: нормаль плоскости смотрит
-// в сторону водителя, а не назад. Babylon при отрисовке зеркала режет
-// сцену плоскостью clipPlane и выкидывает фрагменты, у которых
-// dot(n, p) + d > 0, то есть оставляет ту половину, куда нормаль НЕ
-// смотрит. Отражённая камера видит именно эту половину, поэтому
-// нормаль должна быть развёрнута к водителю — с «назад» зеркало пустое.
+// ── боковые зеркала: выпуклое (сферическое) отражение ───────────────────
+// Схема «камера в точке стекла + дисторсия»: у каждого зеркала свой
+// RenderTargetTexture и своя перспективная камера с широким FOV. Камера
+// стоит почти в точке стекла и смотрит вдоль истинного отражённого луча
+// (водитель→стекло, отражённый от плоскости стекла), поэтому центральный
+// тексель — математически точное отражение, а широкий FOV даёт материал
+// для бочкообразной дисторсии в шейдере (края сжимаются — как у реального
+// выпуклого зеркала). Весь кузов исключён из рендера зеркал, так что
+// никакие плоскости отсечения не нужны: лучи сквозь проём стекла честно
+// долетают до мира позади машины.
+// В список отрисовки идут все меши сцены, кроме стёкол и кузова.
 //
 // Подключается после map.js, работает на глобалах index.html:
 //   setupMirrors({ root, meshes }) — один раз после загрузки модели
 //   setMirrorsActive(on)          — вкл/выкл из applyCamMode
 //   mirrorTick()                  — каждый кадр перед scene.render()
 
-const MIRROR_RES = 2048;       // сторона RTT: запас, чтобы зеркало не мылилось
-const MIRROR_LEVEL = 1.0;       // идеальное зеркало
-const MIRROR_ANISO = 16;        // фильтрация при взгляде на зеркало под углом
+const MIRROR_RES = 2048;         // сторона RTT: максимум чёткости
+const MIRROR_FOV = 1.75;         // ~100°: широкий угол выпуклого зеркала, рад
+const MIRROR_DISTORT_K = 0.35;   // сила бочкообразной дисторсии (0 = плоское)
+const MIRROR_SPREAD = 3.0;       // во сколько раз шире геометрического следа тянем картинку
+const MIRROR_CAM_OFFSET = 1.3;   // камера — на продолжении отражённого луча за стеклом, м
+const MIRROR_ANISO = 16;         // фильтрация при взгляде на зеркало под углом
 const MIRROR_ADJ_DEG = 0.5;    // шаг регулировки зеркала, градусы за нажатие
 const MIRROR_ADJ = MIRROR_ADJ_DEG * Math.PI / 180;   // то же в радианах
 // Регулировка зеркал по умолчанию, градусы: поворот по горизонтали (← →) и
@@ -34,24 +37,71 @@ const mirrorDefault = side => {
   return { yaw: d.yaw * Math.PI / 180, pitch: d.pitch * Math.PI / 180 };
 };
 
-let mirrorEntries = [];   // { mesh, tex, mat, srcMat, srcVC, point, normal, baseNormal, yaw, pitch }
+let mirrorEntries = [];   // { mesh, tex, mat, cam, srcMat, srcVC, side, center, baseNormal, yaw, pitch }
 let mirrorPlates = null;  // Set мешей-стёкол: их нельзя рисовать в самом RTT
+let mirrorNearMeshes = null; // Set деталей, перекрывающих обзор (находится трассировкой)
 let mirrorList = null;    // общий список мешей для RTT
 let mirrorListed = -1;    // сколько мешей было в сцене на прошлой сборке
 let mirrorActive = false;
 let mirrorAdjOn = false;  // режим регулировки направления зеркал
 let mirrorAdjSide = 0;    // выбранное зеркало (индекс в mirrorEntries)
 
+// Шейдер выпуклого зеркала: проекция из широкоуольной камеры + бочка.
+// worldViewProjection подставляет сам движок, reflectionMatrix (= P*V
+// камеры зеркала) обновляем каждый кадр в tickMirrors.
+BABYLON.Effect.ShadersStore["convexMirrorVertexShader"] = `
+precision highp float;
+attribute vec3 position;
+attribute vec2 uv;
+uniform mat4 world;
+uniform mat4 worldViewProjection;
+varying vec3 vWorldPos;
+varying vec2 vUv;
+void main() {
+  vec4 wp = worldViewProjection * vec4(position, 1.0);
+  vWorldPos = (world * vec4(position, 1.0)).xyz;
+  vUv = uv;
+  gl_Position = wp;
+}
+`;
+BABYLON.Effect.ShadersStore["convexMirrorFragmentShader"] = `
+precision highp float;
+varying vec3 vWorldPos;
+varying vec2 vUv;
+uniform mat4 reflectionMatrix;
+uniform sampler2D mirrorSampler;
+uniform float distortK;
+uniform float spread;
+uniform vec3 foot;
+uniform vec3 edgeColor;
+void main() {
+  vec4 rp = reflectionMatrix * vec4(vWorldPos, 1.0);
+  if (rp.w <= 0.0) { gl_FragColor = vec4(edgeColor, 1.0); return; }
+  vec2 ndc = rp.xy / rp.w;
+  // выпуклость: тянем выборку шире геометрического следа (spread) и давим
+  // бочкой вокруг следа — в мелкое стекло влезает широкий угол
+  vec2 rel = (ndc - foot.xy) * spread;
+  float r2 = dot(rel, rel);
+  vec2 uv = (foot.xy + rel * (1.0 + distortK * r2)) * 0.5 + 0.5;
+  // клемп вместо отбрасывания: даже при неточном следе зеркало покажет
+  // растянутое изображение, а не чёрный провал
+  uv = clamp(uv, vec2(0.0), vec2(1.0));
+  gl_FragColor = vec4(texture2D(mirrorSampler, uv).rgb, 1.0);
+}
+`;
+
 const MIRROR_BACK = new BABYLON.Vector3(0, 0, 1);   // локально назад
 const MIRROR_FWD = new BABYLON.Vector3(0, 0, -1);   // локально вперёд
 const MIRROR_NONE = [];
 const _mA = BABYLON.Matrix.Identity();
 const _mB = BABYLON.Matrix.Identity();
+const _refl = BABYLON.Matrix.Identity();
 const _v0 = new BABYLON.Vector3();
 const _v1 = new BABYLON.Vector3();
 const _v2 = new BABYLON.Vector3();
 const _cr = new BABYLON.Vector3();
 const _pt = new BABYLON.Vector3();
+const _fuv = new BABYLON.Vector3();
 const _nm = new BABYLON.Vector3();
 
 function mirrorRes() {
@@ -189,6 +239,7 @@ function refreshMirrorList(force) {
   mirrorList.length = 0;
   for (const m of all) {
     if (mirrorPlates.has(m)) continue;   // стекло в своё отражение не рисуем
+    if (mirrorNearMeshes && mirrorNearMeshes.has(m)) continue;  // корпус зеркала
     mirrorList.push(m);
   }
 }
@@ -222,15 +273,22 @@ function setMirrorsActive(on) {
 
 function tickMirrors() {
   if (!mirrorActive || !mirrorEntries.length) return;
+  const cock = (typeof cockpit !== "undefined") ? cockpit : null;
+  if (!cock) return;
   const root = CAR.root;
   // матрица корня пересчитывается при отрисовке, а мы читаем её до scene.render()
   root.computeWorldMatrix(true);
   const wm = root.getWorldMatrix();
+  // позиция и взгляд водителя в мире: камера салона смотрит вдоль локальной
+  // +Z (поворот на π разворачивает её на нос кузова — см. drive())
+  cock.computeWorldMatrix(true);
+  const cwm = cock.getWorldMatrix();
+  BABYLON.Vector3.TransformCoordinatesToRef(BABYLON.Vector3.Zero(), cwm, _v0);
   for (const e of mirrorEntries) {
     BABYLON.Vector3.TransformCoordinatesToRef(e.center, wm, _pt);
     // базовую нормаль доворачиваем в системе кузова напрямую: yaw — вокруг
-    // вертикали, pitch — вокруг поперечной оси зеркала (TransformNormalToRef
-    // с кватернионом в Babylon 9 падает — крутим вручную)
+    // вертикали, pitch — вокруг поперечной оси зеркала. Та же математика,
+    // что была у плоского зеркала, — регулировка стрелками ведёт себя так же.
     const y = e.yaw, p = e.pitch;
     const b = e.baseNormal;
     const cosY = Math.cos(y), sinY = Math.sin(y);
@@ -243,7 +301,35 @@ function tickMirrors() {
     _nm.normalize();
     BABYLON.Vector3.TransformNormalToRef(_nm, wm, _nm);
     _nm.normalize();
-    BABYLON.Plane.FromPositionAndNormalToRef(_pt, _nm, e.tex.mirrorPlane);
+    // падающий луч: водитель → стекло; отражённый — от стекла в мир.
+    // Камера стоит на продолжении отражённого луча ЗА стеклом (со стороны
+    // водителя, кузов из рендера исключён) и смотрит точно в центр стекла:
+    // след стекла всегда в центре кадра, вырождения проекции нет, а лучи
+    // сквозь проём стекла честно долетают до мира позади машины.
+    // Центральный тексель — точное отражение, остальное давит бочка.
+    _v1.copyFrom(_pt);
+    _v1.subtractInPlace(_v0);
+    _v1.normalize();
+    _v2.copyFrom(_v1);
+    _v2.addInPlace(_nm.scale(-2 * BABYLON.Vector3.Dot(_v1, _nm)));
+    e.cam.position.copyFrom(_pt);
+    e.cam.position.addInPlace(_v2.scale(-MIRROR_CAM_OFFSET));
+    // обзор — напрямую через rotation, как у камеры салона: setTarget здесь
+    // не даёт верной матрицы вида. _v2 — направление взгляда (единичное).
+    e.cam.rotation.set(
+      Math.atan2(-_v2.y, Math.hypot(_v2.x, _v2.z)),
+      Math.atan2(_v2.x, _v2.z), 0);
+    // матрица проекции для шейдера — ровно та, которой отрендерится RTT,
+    // поэтому рассинхрона между текстурой и развёрткой нет по построению.
+    // Порядок как у движка (view.multiply(projection)): A.multiply(B) в
+    // Babylon даёт применение B после A.
+    e.cam.getViewMatrix().multiplyToRef(e.cam.getProjectionMatrix(), _refl);
+    e.m4.copyFrom(_refl);
+    e.mat.setMatrix("reflectionMatrix", e.m4);
+    // след центра стекла в NDC — центр бочки
+    BABYLON.Vector3.TransformCoordinatesToRef(_pt, _refl, _fuv);
+    e.fv.copyFrom(_fuv);
+    e.mat.setVector3("foot", e.fv);
   }
   refreshMirrorList(false);
 }
@@ -328,46 +414,127 @@ function setupMirrors(opts) {
     return;
   }
   mirrorPlates = new Set();
-  const res = mirrorRes();
   const sides = ["left", "right"];
   plates.forEach((p, i) => {
-    const tex = new BABYLON.MirrorTexture("mirrorTex_" + sides[i], res, scene, true);
-    // RenderTargetTexture по умолчанию PROJECTION_MODE: в шейдере координаты
-    // фрагмента считаются как reflectionMatrix * (view * worldPos), то есть
-    // ровно тот texel, куда этот фрагмент попал в отражённую камеру.
-    tex.coordinatesMode = BABYLON.Texture.PROJECTION_MODE;
-    tex.level = MIRROR_LEVEL;
-    tex.anisotropicFilteringLevel = MIRROR_ANISO;
+    // широкоугольная камера зеркала: почти в точке стекла, смотрит вдоль
+    // отражённого луча (цель уточняется каждый кадр в tickMirrors)
+    const cam = new BABYLON.UniversalCamera("mirrorCam_" + sides[i], BABYLON.Vector3.Zero(), scene);
+    cam.fov = MIRROR_FOV;
+    cam.minZ = 0.1;
+    cam.maxZ = 300;
+
+    const tex = new BABYLON.RenderTargetTexture("mirrorTex_" + sides[i], mirrorRes(), scene, true);
+    tex.activeCamera = cam;
     tex.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
     tex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
     tex.samplingMode = BABYLON.Texture.TRILINEAR_SAMPLINGMODE;
-    tex.clearColor = new BABYLON.Color4(0.02, 0.02, 0.03, 1);
+    tex.anisotropicFilteringLevel = MIRROR_ANISO;
+    tex.clearColor = new BABYLON.Color4(0.55, 0.72, 0.94, 1);
     tex.renderList = MIRROR_NONE;
-    // плоскость сразу с нормалью к водителю: так она и будет жить дальше
+    // нормаль обязана смотреть НА водителя (в глаза): разворачиваем знаковый
+    // результат геометрического поиска по направлению на камеру салона.
+    // Положение камеры салона — локальное (ребёнок корня), как и центр стекла.
     const n = p.normal.scale(-1);
-    if (BABYLON.Vector3.Dot(n, MIRROR_FWD) < 0) n.scaleInPlace(-1);
-    tex.mirrorPlane = BABYLON.Plane.FromPositionAndNormal(p.center, n);
+    const eyeLocal = (typeof cockpit !== "undefined" && cockpit) ? cockpit.position : null;
+    if (eyeLocal) {
+      _v0.copyFrom(eyeLocal);
+      _v0.subtractInPlace(p.center);
+      if (BABYLON.Vector3.Dot(n, _v0) < 0) n.scaleInPlace(-1);
+    } else if (BABYLON.Vector3.Dot(n, MIRROR_FWD) < 0) n.scaleInPlace(-1);
 
-    const mat = new BABYLON.StandardMaterial("mirrorMat_" + sides[i], scene);
-    mat.reflectionTexture = tex;
-    mat.diffuseColor = new BABYLON.Color3(0, 0, 0);
-    mat.specularColor = new BABYLON.Color3(0, 0, 0);
-    mat.emissiveColor = new BABYLON.Color3(0.01, 0.01, 0.012);
-    mat.disableLighting = true;
+    const mat = new BABYLON.ShaderMaterial("mirrorMat_" + sides[i], scene,
+      { vertex: "convexMirror", fragment: "convexMirror" },
+      {
+        attributes: ["position", "uv"],
+        uniforms: ["world", "worldViewProjection", "reflectionMatrix", "distortK", "spread", "foot", "edgeColor"],
+        samplers: ["mirrorSampler"],
+      });
+    mat.setTexture("mirrorSampler", tex);
+    mat.setFloat("distortK", MIRROR_DISTORT_K);
+    mat.setFloat("spread", MIRROR_SPREAD);
+    mat.setVector3("foot", BABYLON.Vector3.Zero());
+    mat.setColor3("edgeColor", new BABYLON.Color3(0.02, 0.02, 0.03));
     // стекло модели одностороннее и смотрит назад, поэтому в салоне мы видим
-    // его изнанку — без двусторонности зеркала просто не было бы видно
+    // его изнанку — шейдер обязан рисоваться с обеих сторон
     mat.backFaceCulling = false;
 
     mirrorPlates.add(p.mesh);
     const side = p.center.x < 0 ? "right" : "left";
-    mirrorEntries.push({
-      mesh: p.mesh, tex, mat,
+    const entry = {
+      mesh: p.mesh, tex, mat, cam,
       srcMat: p.mesh.material, srcVC: p.mesh.useVertexColors,
       side,
       center: p.center.clone(), baseNormal: n.clone(),
+      // свои объекты под uniform-ы: общие темпы на всех записях приводили к
+      // тому, что оба зеркала семплировали по матрице последнего (левого)
+      m4: new BABYLON.Matrix(), fv: new BABYLON.Vector3(),
       yaw: mirrorDefault(side).yaw, pitch: mirrorDefault(side).pitch,
-    });
+    };
+    // страховка регистрации RTT: если движок сам её не подхватил,
+    // без этого текстура никогда не рендерится
+    if (scene.customRenderTargets.indexOf(tex) < 0) scene.customRenderTargets.push(tex);
+    mirrorEntries.push(entry);
   });
+  // Вырезаем ровно те детали, что перекрывают обзор: из номинальной точки
+  // камеры трассируем сетку лучей через зону стекла; всё своё, во что упёрлись
+  // в пределах полметра за стеклом, — из отражений вон (корпус зеркала,
+  // кромка двери вокруг стекла). Остальное железо и мир остаются видимыми.
+  mirrorNearMeshes = new Set();
+  {
+    const carSet = new Set(opts.meshes);
+    const cock2 = (typeof cockpit !== "undefined" && cockpit) ? cockpit : null;
+    if (cock2) {
+      root.computeWorldMatrix(true);
+      const rwm = root.getWorldMatrix();
+      cock2.computeWorldMatrix(true);
+      const cwm2 = cock2.getWorldMatrix();
+      for (const m of carSet) m.computeWorldMatrix(true);
+      const eyeW = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Zero(), cwm2);
+      const upW = new BABYLON.Vector3(0, 1, 0);
+      for (const e of mirrorEntries) {
+        const gw = BABYLON.Vector3.TransformCoordinates(e.center, rwm);
+        // та же математика, что в tickMirrors: нормаль с доворотом,
+        // отражённый луч, точка камеры
+        const y = e.yaw, p = e.pitch, b = e.baseNormal;
+        const cosY = Math.cos(y), sinY = Math.sin(y);
+        let nx = b.x * cosY + b.z * sinY, nz = -b.x * sinY + b.z * cosY;
+        const cosP = Math.cos(p), sinP = Math.sin(p);
+        const nw = new BABYLON.Vector3(nx, b.y * cosP - nz * sinP, b.y * sinP + nz * cosP);
+        nw.normalize();
+        BABYLON.Vector3.TransformNormalToRef(nw, rwm, nw);
+        nw.normalize();
+        const din = gw.subtract(eyeW);
+        din.normalize();
+        const dout = din.add(nw.scale(-2 * BABYLON.Vector3.Dot(din, nw)));
+        const campos = gw.add(dout.scale(-MIRROR_CAM_OFFSET));
+        const cg = BABYLON.Vector3.Distance(campos, gw);
+        // базис в плоскости стекла для сетки лучей
+        const lat = BABYLON.Vector3.Cross(dout, upW);
+        if (lat.lengthSquared() < 1e-6) lat.set(1, 0, 0);
+        lat.normalize();
+        const ver = BABYLON.Vector3.Cross(lat, dout);
+        ver.normalize();
+        const offs = [[0, 0]];
+        for (const r of [0.04, 0.08])
+          for (let k = 0; k < 8; k++) {
+            const a = k / 8 * Math.PI * 2;
+            offs.push([Math.cos(a) * r, Math.sin(a) * r]);
+          }
+        for (const [oa, ob] of offs) {
+          const tgt = gw.add(lat.scale(oa)).add(ver.scale(ob));
+          const dir = tgt.subtract(campos);
+          dir.normalize();
+          const ray = new BABYLON.Ray(campos.clone(), dir.clone(), cg + 0.6);
+          const hits = scene.multiPickWithRay(ray, () => true) || [];
+          for (const h of hits) {
+            const m = h.pickedMesh;
+            if (m && carSet.has(m) && !mirrorPlates.has(m) && h.distance < cg + 0.6)
+              mirrorNearMeshes.add(m);
+          }
+        }
+      }
+    }
+  }
   refreshMirrorList(true);
   setMirrorsActive(CAR.mode === 1);
 }
@@ -378,9 +545,11 @@ function disposeMirrors() {
     e.mesh.useVertexColors = e.srcVC;
     e.mat.dispose();
     e.tex.dispose();
+    e.cam.dispose();
   }
   mirrorEntries = [];
   mirrorPlates = null;
+  mirrorNearMeshes = null;
   mirrorList = null;
   mirrorListed = -1;
   mirrorActive = false;
