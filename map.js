@@ -547,7 +547,7 @@ function notifyConeHit() {
   if (now - lastConeHitAt < CONE_HIT_COOLDOWN) return;
   lastConeHitAt = now;
   if (typeof window.playConeHit === 'function') window.playConeHit();
-  if (typeof window.showToast === 'function') window.showToast('СБИТ КОНУС!(3 балла)');
+  if (typeof window.showToast === 'function') window.showToast('НАЕЗД НА КОНУС!(3 балла)');
 }
 // Совместимость: раньше подбрасывала конус, теперь только сигнал.
 function knockCone(node, carPos) {

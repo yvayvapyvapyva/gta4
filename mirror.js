@@ -21,7 +21,9 @@ let MIRROR_DISTORT_K = 0.35;     // сила бочкообразной дист
 let MIRROR_SPREAD = 3.0;         // во сколько раз шире геометрического следа тянем картинку
 let MIRROR_CAM_OFFSET = 1.3;     // камера — на продолжении отражённого луча за стеклом, м
 const MIRROR_GLASS_OUT = 0.05;   // сдвиг точки стекла наружу от центра авто, м
-const MIRROR_ANISO = 16;         // фильтрация при взгляде на зеркало под углом
+// На мобиле 4: 16 выборок на пиксель под углом жгут тайловый GPU,
+// а зеркала мелкие и картинка в них и так давится бочкой шейдера.
+const MIRROR_ANISO = (typeof isMobile !== "undefined" && isMobile) ? 4 : 16;
 const MIRROR_ADJ_DEG = 0.5;    // шаг регулировки зеркала, градусы за нажатие
 const MIRROR_ADJ = MIRROR_ADJ_DEG * Math.PI / 180;   // то же в радианах
 // Регулировка зеркал по умолчанию, градусы: поворот по горизонтали (← →) и
@@ -446,11 +448,14 @@ function setupMirrors(opts) {
     cam.minZ = 0.1;
     cam.maxZ = 300;
 
-    const tex = new BABYLON.RenderTargetTexture("mirrorTex_" + sides[i], mirrorRes(), scene, true);
+    // Без мипмапов: их генерация каждый кадр в 2048 (×2 зеркала) — чистая
+    // пропускная способность в тепло. Трилинейный без мипов невозможен,
+    // поэтому пара — билинейный фильтр (зеркала мелкие, бочка всё равно давит).
+    const tex = new BABYLON.RenderTargetTexture("mirrorTex_" + sides[i], mirrorRes(), scene, false);
     tex.activeCamera = cam;
     tex.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
     tex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
-    tex.samplingMode = BABYLON.Texture.TRILINEAR_SAMPLINGMODE;
+    tex.samplingMode = BABYLON.Texture.BILINEAR_SAMPLINGMODE;
     tex.anisotropicFilteringLevel = MIRROR_ANISO;
     tex.clearColor = new BABYLON.Color4(0.55, 0.72, 0.94, 1);
     tex.renderList = MIRROR_NONE;
@@ -620,11 +625,12 @@ function setMirrorRes(res) {
     const old = e.tex;
     const oi = scene.customRenderTargets.indexOf(old);
     if (oi >= 0) scene.customRenderTargets.splice(oi, 1);
-    const tex = new BABYLON.RenderTargetTexture(old.name, mirrorRes(), scene, true);
+    // Без мипмапов, как в setupMirrors: генерация мип-цепи каждый кадр в 2048 — в тепло.
+    const tex = new BABYLON.RenderTargetTexture(old.name, mirrorRes(), scene, false);
     tex.activeCamera = e.cam;
     tex.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
     tex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
-    tex.samplingMode = BABYLON.Texture.TRILINEAR_SAMPLINGMODE;
+    tex.samplingMode = BABYLON.Texture.BILINEAR_SAMPLINGMODE;
     tex.anisotropicFilteringLevel = MIRROR_ANISO;
     tex.clearColor = new BABYLON.Color4(0.55, 0.72, 0.94, 1);
     tex.renderList = MIRROR_NONE;
