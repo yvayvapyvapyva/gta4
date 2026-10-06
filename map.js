@@ -141,6 +141,18 @@ const drawStore = {};
 for (const t of DRAW_TYPES) drawStore[t] = { polys:[], groups:[] };
 const segRotY = (dx, dz) => Math.atan2(dx, dz);
 
+// Статика навсегда: земля, разметка, бордюры, заборы и эстакады после
+// построения не двигаются — замораживаем мировые матрицы и баундинги,
+// движок пропускает их пересчёт каждый кадр. Конусы НЕ морозим (летают
+// при сбивании и таскаются в редакторе), детей кузова — тоже (едут за ним).
+function freezeStatic(m) {
+  m.computeWorldMatrix(true);
+  m.refreshBoundingInfo();
+  m.freezeWorldMatrix();
+  m.doNotSyncBoundingInfo = true;
+  return m;
+}
+
 function makeFenceSegment(ax, az, dx, dz, L) {
   const n = Math.max(1, Math.round(L / FENCE_STEP));
   const g = new BABYLON.TransformNode("fenceSeg" + (drawSeq++), scene);
@@ -167,6 +179,7 @@ function makeFenceSegment(ax, az, dx, dz, L) {
     post.metadata = { isLine:true, stype:"fence", group:g };
   }
   g.position.set(0, 0, 0);
+  for (const m of g.getChildMeshes(false)) freezeStatic(m);
   return g;
 }
 
@@ -227,6 +240,7 @@ function makeRampSegment(ax, az, dx, dz, D, h) {
   buildRampCurbs(g, [-EST_W / 2 + 0.12, EST_W / 2 - 0.12], D, EST_L2, h);
   g.position.set(ax, 0, az);
   g.rotation.y = segRotY(dx, dz);
+  for (const m of g.getChildMeshes(false)) freezeStatic(m);
   return g;
 }
 
@@ -244,6 +258,7 @@ function makeLineSegment(type, a, b) {
   seg.material = type === "curb" ? matCurb : matLine;
   seg.isPickable = true;
   seg.metadata = { isLine:true, stype:type };
+  freezeStatic(seg);
   return seg;
 }
 
@@ -591,6 +606,9 @@ if (typeof objectTick !== "undefined") objectTick = tickWorld;
 if (typeof DEFAULT_MAP === "object") {
   try { applyMapJson(DEFAULT_MAP); } catch (e) {}
 }
+// Земля статична в обоих приложениях — тоже замораживаем.
+// Небо (sky.infiniteDistance) трогать нельзя: оно едет за камерой.
+if (typeof ground !== "undefined" && ground) freezeStatic(ground);
 updateCount();
 updateCounts();
 for (const m of scene.meshes) mapMeshes.add(m);
