@@ -210,10 +210,17 @@ body.playback-active #driveCtrl{display:none !important}
     <div class="win-btns">
       <button id="setCamBtn">Камера: следом</button>
     </div>
+    <div class="win-btns" style="margin-top:8px">
+      <button id="setQAuto" class="on">Качество: авто</button>
+      <button id="setQHigh">Высокое</button>
+      <button id="setQLow">Низкое</button>
+    </div>
     <div class="win-note">
       Езда: <b>W/A/S/D</b> · <b>Space</b> — ручник · <b>C</b> — камера<br>
       <b>R</b> — сброс · <b>M</b> — зеркала · <b>Q/E</b> — поворотники<br>
-      <b>Стрелки</b> — вращение камеры (в режимах «Следом» и «Свободная»)
+      <b>Стрелки</b> — вращение камеры (в режимах «Следом» и «Свободная»)<br>
+      Авто-качество само роняет разрешение при просадке FPS
+      и поднимает до нативного на мощном железе
     </div>
   </div>
 
@@ -365,6 +372,40 @@ const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:false, s
 const dpr = window.devicePixelRatio || 1;
 const capped = Math.min(dpr, 1.5);
 engine.setHardwareScalingLevel(1.0 / capped);
+
+// ── адаптивное разрешение ──────────────────────────────────────────
+// Скейлинг множит базовый уровень: 1 = как было (кап 1.5× CSS), 2 = вдвое
+// меньше пикселей, qualityMin = нативный DPR (резче капа, если тянет).
+// Авто-режим раз в 2 с смотрит средний FPS и двигает скейлинг с гистерезисом,
+// чтобы не дёргаться на границе. Ручные режимы фиксируют края диапазона.
+let qualityMode = "auto";   // auto | high | low
+let qualityScale = 1;
+const qualityMin = capped / dpr;   // 1 на слабом DPR, 0.5 на DPR 3
+function applyQuality() {
+  const s = qualityMode === "low" ? 2 : qualityMode === "high" ? qualityMin : qualityScale;
+  engine.setHardwareScalingLevel(1.0 / capped * s);
+}
+function setQualityMode(m) {
+  qualityMode = m;
+  if (m === "high") qualityScale = qualityMin;
+  applyQuality();
+  syncSettings();
+}
+let qAcc = 0, qN = 0;
+function qualityMeter(rawDt) {
+  if (qualityMode !== "auto") return;
+  qAcc += rawDt; qN++;
+  if (qAcc < 2) return;           // окно оценки — 2 с
+  const fps = qN / qAcc;
+  qAcc = 0; qN = 0;
+  if (fps < 45 && qualityScale < 2) {
+    qualityScale = Math.min(2, qualityScale + 0.25);
+    applyQuality();
+  } else if (fps > 57 && qualityScale > qualityMin) {
+    qualityScale = Math.max(qualityMin, qualityScale - 0.25);
+    applyQuality();
+  }
+}
 
 const scene = new BABYLON.Scene(engine);
 const SKY_COLOR = new BABYLON.Color3(0.55, 0.72, 0.94);
@@ -679,6 +720,9 @@ function openSettings(o) {
 // подтягиваем значения из состояния приложения в окно
 function syncSettings() {
   setCamBtn.textContent = "Камера: " + CAM_MODES[CAR.mode];
+  document.getElementById("setQAuto").classList.toggle("on", qualityMode === "auto");
+  document.getElementById("setQHigh").classList.toggle("on", qualityMode === "high");
+  document.getElementById("setQLow").classList.toggle("on", qualityMode === "low");
   // FOV в окне показан в градусах по вертикали, как в первом приложении
   const fovDeg = Math.round(CAR.camFov * 180 / Math.PI);
   if (setFov !== setSliderDrag) { setFov.value = fovDeg; setFovV.textContent = fovDeg + "°"; }
@@ -712,6 +756,9 @@ document.getElementById("replayListBtn")?.addEventListener("click", () => {
   if (typeof window.Replay?.openList === "function") window.Replay.openList(true);
 });
 setCamBtn.addEventListener("click", () => { toggleCam(); syncSettings(); });
+document.getElementById("setQAuto").addEventListener("click", () => setQualityMode("auto"));
+document.getElementById("setQHigh").addEventListener("click", () => setQualityMode("high"));
+document.getElementById("setQLow").addEventListener("click", () => setQualityMode("low"));
 
 // ── окно зеркал: отдельная кнопка, все настройки зеркал живут здесь ──
 const mirrorWin = document.getElementById("mirrorWin");
@@ -1627,8 +1674,10 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
 let last = performance.now();
 engine.runRenderLoop(() => {
   const now = performance.now();
-  const dt = Math.min((now - last) / 1000, 0.05);
+  const rawDt = (now - last) / 1000;
+  const dt = Math.min(rawDt, 0.05);
   last = now;
+  qualityMeter(rawDt);   // сырой dt, без клампа: иначе на лагах FPS всегда 20
   if (ready) {
     // Во время реплея используем фиксированный dt для детерминированности
     const replayFixedDt = (window.Replay?.isPlaying?.() && window.Replay?.FIXED_DT) ? window.Replay.FIXED_DT : dt;
