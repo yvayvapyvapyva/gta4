@@ -229,16 +229,6 @@ body.playback-active #driveCtrl{display:none !important}
   </div>
 
   <div class="win-sec">
-    <h4>Угол обзора из кабины</h4>
-    <div class="win-row">
-      <label>FOV</label>
-      <input type="range" id="setFov" min="40" max="130" step="1" value="83">
-      <span class="val" id="setFovV">83°</span>
-    </div>
-    <div class="win-note">Ширина поля зрения водителя</div>
-  </div>
-
-  <div class="win-sec">
     <h4>Позиция камеры салона (Z)</h4>
     <div class="win-row">
       <label>Смещ. Z</label>
@@ -697,8 +687,6 @@ function toggleCam() {
 const setWin = document.getElementById("settingsWin");
 const setBackdrop = document.getElementById("settingsBackdrop");
 const gearBtn = document.getElementById("gearBtn");
-const setFov = document.getElementById("setFov");
-const setFovV = document.getElementById("setFovV");
 const setCockpitZ = document.getElementById("setCockpitZ");
 const setCockpitZV = document.getElementById("setCockpitZV");
 
@@ -723,9 +711,6 @@ function openSettings(o) {
 // подтягиваем значения из состояния приложения в окно
 function syncSettings() {
   document.getElementById("setQuality").value = qualityMode;
-  // FOV в окне показан в градусах по вертикали, как в первом приложении
-  const fovDeg = Math.round(CAR.camFov * 180 / Math.PI);
-  if (setFov !== setSliderDrag) { setFov.value = fovDeg; setFovV.textContent = fovDeg + "°"; }
   // Cockpit Z offset
   if (setCockpitZ !== setSliderDrag) {
     const cm = Math.round((CAR.cockpitZOffset || 0) * 100);
@@ -881,12 +866,6 @@ function toggleXray() {
   }
 }
 
-setFov.addEventListener("input", () => {
-  const deg = +setFov.value;
-  setFovV.textContent = deg + "°";
-  setCamFov(deg * Math.PI / 180);
-});
-
 setCockpitZ.addEventListener("input", () => {
   const cm = +setCockpitZ.value;
   setCockpitZV.textContent = cm + " см";
@@ -908,7 +887,7 @@ for (const s of mirSliders) {
 }
 
 // пока ползунок тянут, syncSettings не должен переписывать его значение
-for (const el of [setFov, setCockpitZ, ...mirSliders.map(s => s.input),
+for (const el of [setCockpitZ, ...mirSliders.map(s => s.input),
     setMirRes, setMirFov, setMirDist, setMirSpread, setMirCamD]) {
   el.addEventListener("pointerdown", () => { setSliderDrag = el; });
 }
