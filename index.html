@@ -290,6 +290,16 @@ body.playback-active #driveCtrl{display:none !important}
   </div>
 
   <div class="win-sec">
+    <h4>Позиция камеры салона (Z)</h4>
+    <div class="win-row">
+      <label>Смещ. Z</label>
+      <input type="range" id="setCockpitZ" min="0" max="20" step="1" value="0">
+      <span class="val" id="setCockpitZV">0 см</span>
+    </div>
+    <div class="win-note">Смещение камеры вперёд/назад относительно руля (см)</div>
+  </div>
+
+  <div class="win-sec">
     <h4>Зеркала заднего вида</h4>
     <div class="win-row">
       <label>Лев. Г</label>
@@ -626,6 +636,7 @@ const CAR = {
   steerLockToLock: 1,   // секунд на поворот руля от края до края (замедление)
   camYaw: 0, camPitch: 1.13, camDist: 20,
   camFov: 1.45,    // угол обзора салона, рад (~83° по вертикали)
+  cockpitZOffset: 0, // смещение камеры салона по Z (м), настраивается в настройках
   mode: 0,           // 0 следом · 1 салон · 2 свободная
   eye: null,         // точка обзора в локальной системе кузова (заполняется по модели)
   lookYaw: 0, lookPitch: 0,       // текущее смещение взгляда в салоне
@@ -739,6 +750,8 @@ const gearBtn = document.getElementById("gearBtn");
 const setCamBtn = document.getElementById("setCamBtn");
 const setFov = document.getElementById("setFov");
 const setFovV = document.getElementById("setFovV");
+const setCockpitZ = document.getElementById("setCockpitZ");
+const setCockpitZV = document.getElementById("setCockpitZV");
 
 // ползунки зеркал: [input, подпись, сторона, поле]
 let setSliderDrag = null;   // ползунок под пальцем: его не переписываем из syncSettings
@@ -764,6 +777,12 @@ function syncSettings() {
   // FOV в окне показан в градусах по вертикали, как в первом приложении
   const fovDeg = Math.round(CAR.camFov * 180 / Math.PI);
   if (setFov !== setSliderDrag) { setFov.value = fovDeg; setFovV.textContent = fovDeg + "°"; }
+  // Cockpit Z offset
+  if (setCockpitZ !== setSliderDrag) {
+    const cm = Math.round((CAR.cockpitZOffset || 0) * 100);
+    setCockpitZ.value = cm;
+    setCockpitZV.textContent = cm + " см";
+  }
   for (const s of mirSliders) {
     if (s.input === setSliderDrag) continue;   // не дёргаем ползунок из-под пальца
     const e = mirrorSide(s.side);
@@ -862,6 +881,15 @@ setFov.addEventListener("input", () => {
   setCamFov(deg * Math.PI / 180);
 });
 
+setCockpitZ.addEventListener("input", () => {
+  const cm = +setCockpitZ.value;
+  setCockpitZV.textContent = cm + " см";
+  CAR.cockpitZOffset = cm / 100; // см -> метры
+  if (cockpit) {
+    cockpit.position.z = (CAR.eye ? CAR.eye.z : 0) + CAR.cockpitZOffset;
+  }
+});
+
 for (const s of mirSliders) {
   s.input.addEventListener("input", () => {
     const deg = +s.input.value;
@@ -874,7 +902,7 @@ for (const s of mirSliders) {
 }
 
 // пока ползунок тянут, syncSettings не должен переписывать его значение
-for (const el of [setFov, ...mirSliders.map(s => s.input)]) {
+for (const el of [setFov, setCockpitZ, ...mirSliders.map(s => s.input)]) {
   el.addEventListener("pointerdown", () => { setSliderDrag = el; });
 }
 addEventListener("pointerup", () => { setSliderDrag = null; });
@@ -1598,7 +1626,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
     // с машиной сама, а поворот задаётся локально (rotation.y = PI — это вперёд)
     cockpit = new BABYLON.UniversalCamera("cockpit", BABYLON.Vector3.Zero(), scene);
     cockpit.parent = root;
-    cockpit.position.copyFrom(CAR.eye);
+    cockpit.position.set(CAR.eye.x, CAR.eye.y, CAR.eye.z + (CAR.cockpitZOffset || 0));
     cockpit.rotation.set(COCKPIT_PITCH, Math.PI, 0);
     cockpit.fov = CAR.camFov;   // угол обзора настраивается колесом и щипком
     cockpit.minZ = 0.1;     // было 0.04 — увеличено для точности буфера глубины
