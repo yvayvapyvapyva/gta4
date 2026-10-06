@@ -217,8 +217,8 @@ body.playback-active #driveCtrl{display:none !important}
     <h4>Позиция камеры салона (Z)</h4>
     <div class="win-row">
       <label>Смещ. Z</label>
-      <input type="range" id="setCockpitZ" min="0" max="20" step="1" value="0">
-      <span class="val" id="setCockpitZV">0 см</span>
+      <input type="range" id="setCockpitZ" min="0" max="20" step="1" value="5">
+      <span class="val" id="setCockpitZV">5 см</span>
     </div>
     <div class="win-note">Смещение камеры вперёд/назад относительно руля (см)</div>
   </div>
@@ -495,7 +495,7 @@ const CAR = {
   steerLockToLock: 1,   // секунд на поворот руля от края до края (замедление)
   camYaw: 0, camPitch: 1.13, camDist: 20,
   camFov: 1.45,    // угол обзора салона, рад (~83° по вертикали)
-  cockpitZOffset: 0, // смещение камеры салона по Z (м), настраивается в настройках
+  cockpitZOffset: 0.05, // смещение камеры салона по Z (м), настраивается в настройках
   mode: 0,           // 0 следом · 1 салон · 2 свободная
   eye: null,         // точка обзора в локальной системе кузова (заполняется по модели)
   lookYaw: 0, lookPitch: 0,       // текущее смещение взгляда в салоне

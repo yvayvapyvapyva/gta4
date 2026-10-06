@@ -20,6 +20,7 @@ const MIRROR_FOV = 1.75;         // ~100°: широкий угол выпукл
 const MIRROR_DISTORT_K = 0.35;   // сила бочкообразной дисторсии (0 = плоское)
 const MIRROR_SPREAD = 3.0;       // во сколько раз шире геометрического следа тянем картинку
 const MIRROR_CAM_OFFSET = 1.3;   // камера — на продолжении отражённого луча за стеклом, м
+const MIRROR_GLASS_OUT = 0.05;   // сдвиг точки стекла наружу от центра авто, м
 const MIRROR_ANISO = 16;         // фильтрация при взгляде на зеркало под углом
 const MIRROR_ADJ_DEG = 0.5;    // шаг регулировки зеркала, градусы за нажатие
 const MIRROR_ADJ = MIRROR_ADJ_DEG * Math.PI / 180;   // то же в радианах
@@ -285,7 +286,11 @@ function tickMirrors() {
   const cwm = cock.getWorldMatrix();
   BABYLON.Vector3.TransformCoordinatesToRef(BABYLON.Vector3.Zero(), cwm, _v0);
   for (const e of mirrorEntries) {
-    BABYLON.Vector3.TransformCoordinatesToRef(e.center, wm, _pt);
+    // точка стекла со сдвигом наружу от центра авто (в системе кузова +X —
+    // левый борт): так захват шире и рамка меньше лезет в кадр
+    _cr.copyFrom(e.center);
+    _cr.x += (e.center.x < 0 ? MIRROR_GLASS_OUT : -MIRROR_GLASS_OUT);
+    BABYLON.Vector3.TransformCoordinatesToRef(_cr, wm, _pt);
     // базовую нормаль доворачиваем в системе кузова напрямую: yaw — вокруг
     // вертикали, pitch — вокруг поперечной оси зеркала. Та же математика,
     // что была у плоского зеркала, — регулировка стрелками ведёт себя так же.
