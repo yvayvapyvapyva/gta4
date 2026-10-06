@@ -6,7 +6,8 @@
  * scene, BABYLON, ground, GROUND_SIZE, CAR, clamp.
  *
  * Здесь только: построение конусов/линий/бордюров/заборов/эстакад,
- * опора и препятствия для машины, сбивание конусов, сериализация карты
+ * опора и препятствия для машины, касание конусов (звук+тост без сбивания),
+ * сериализация карты
  * (collectMapJson / applyMapJson) и загрузка DEFAULT_MAP.
  * Никакого UI редактирования, сетки, превью и сохранения в файл тут нет —
  * всё это живёт в независимом приложении editor.html.
@@ -60,6 +61,7 @@ function addConeAt(x, z, high) {
   // конус стоит на опоре: если под ним эстакада, поднимаем на её высоту
   n.position.set(x, surfaceHeight(x, z), z);
   n.userData = { cellKey:k, knocked:false, high:!!high };
+  freezeCone(n);   // статика: матрицы и баундинги больше не пересчитываются
   updateCount();
   return n;
 }
@@ -69,6 +71,7 @@ function deleteCone(n) {
   occupied.delete(n.userData.cellKey);
   const i = coneNodes.indexOf(n);
   if (i >= 0) coneNodes.splice(i, 1);
+  unfreezeCone(n);
   n.dispose();
   updateCount();
 }
@@ -141,16 +144,36 @@ const drawStore = {};
 for (const t of DRAW_TYPES) drawStore[t] = { polys:[], groups:[] };
 const segRotY = (dx, dz) => Math.atan2(dx, dz);
 
-// Статика навсегда: земля, разметка, бордюры, заборы и эстакады после
+// Статика навсегда: земля, разметка, бордюры, заборы, эстакады и конусы после
 // построения не двигаются — замораживаем мировые матрицы и баундинги,
-// движок пропускает их пересчёт каждый кадр. Конусы НЕ морозим (летают
-// при сбивании и таскаются в редакторе), детей кузова — тоже (едут за ним).
+// движок пропускает их пересчёт каждый кадр. Детей кузова — не морозим (едут за ним).
+// В редакторе конус на время перетаскивания размораживается (unfreezeCone),
+// по отпусканию — замораживается обратно (см. editor.html).
 function freezeStatic(m) {
   m.computeWorldMatrix(true);
   m.refreshBoundingInfo();
   m.freezeWorldMatrix();
   m.doNotSyncBoundingInfo = true;
   return m;
+}
+function unfreezeStatic(m) {
+  m.unfreezeWorldMatrix();
+  m.doNotSyncBoundingInfo = false;
+  return m;
+}
+// Конус — узел с тремя Mesh-детьми: морозим именно меши, как у заборов.
+function freezeCone(node) {
+  if (!node) return node;
+  node.computeWorldMatrix(true);
+  for (const m of node.getChildMeshes(false)) freezeStatic(m);
+  return node;
+}
+function unfreezeCone(node) {
+  if (!node) return node;
+  for (const m of node.getChildMeshes(false)) {
+    try { unfreezeStatic(m); } catch (e) {}
+  }
+  return node;
 }
 
 function makeFenceSegment(ax, az, dx, dz, L) {
@@ -456,86 +479,99 @@ function obstacleBlocked(x, z, y) {
     const wz = z + p[0] * s + p[1] * c;
     if (carPointInBands(wx, wz, y, skipEst)) return true;
   }
+  // Конусы — твёрдые: прямоугольник кузова в точке (x,z) против круга конуса.
+  // Важно: проверяем КАНДИДАТ (будущую позицию), а звук пищит по ФАКТУ.
+  // Если кандидат упёрся, движение отменяется и факт никогда не войдёт
+  // в прямоугольник — поэтому здесь только взводим флаг, а пищит tickWorld.
+  // Если факт уже внутри (проскочили на прошлом кадре) — выпускаем:
+  // блокируем только движение вглубь, а выход наружу и скольжение разрешаем.
+  // Иначе любое малое движение остаётся внутри и машина «приклеивается».
+  try {
+    const cx = CAR.root.position.x, cz = CAR.root.position.z;
+    for (const node of coneNodes) {
+      if (!coneLevelMatches(node, y)) continue;
+      const cand = coneDepthAt(x, z, node.position.x, node.position.z);
+      if (cand <= 0) continue;
+      const cur = coneDepthAt(cx, cz, node.position.x, node.position.z);
+      if (cur > 0 && cand <= cur + 1e-9) continue;   // наружу/вдоль — выпускаем
+      coneHitPending = true;
+      return true;
+    }
+  } catch (e) {}
   return false;
 }
 
-// ── конусы: удар и падение ───────────────────────────────────────────
-const flying = [];
-const LYING_Y = 0.12;
-const CONE_R = 0;
+// ── конусы: твёрдые несбиваемые препятствия ──────────────────────────
+// Конусы больше не сбиваются и не летают: это статичные столбики,
+// сквозь которые машина не проходит. При касании — только звук и тост,
+// без изменения позиции конуса.
+const flying = [];   // совместимость с editor.html (раньше тут летели сбитые)
+const CONE_Y_TOL = 0.6;     // перепад высот, выше которого конус не задевает (эстакада)
+let lastConeHitAt = 0;
+let coneHitPending = false;   // взводится в obstacleBlocked (кандидат упёрся), гасится в tickWorld
+const CONE_HIT_COOLDOWN = 1500;   // мс между повторами звука/тоста при упоре в конус
 const carHits = (px, pz) => {
   if (typeof CAR === "undefined" || !CAR || !CAR.root) return false;
-  const dx = px - CAR.root.position.x, dz = pz - CAR.root.position.z;
-  const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);
-  const lx = dx * c + dz * s, lz = -dx * s + dz * c;
-  return Math.abs(lx - CAR.bodyCx) <= CAR.halfW + CONE_R
-      && Math.abs(lz - CAR.bodyCz) <= CAR.halfL + CONE_R;
+  return coneBlockedAt(CAR.root.position.x, CAR.root.position.z, px, pz, CAR.y);
 };
-function knockCone(node, carPos) {
-  const ud = node.userData;
-  ud.knocked = true;
-  const d = node.position.subtract(carPos);
-  d.y = 0;
-  const dl = d.length();
-  const dir = dl < 1e-6 ? new BABYLON.Vector3(Math.sin(CAR.yaw), 0, Math.cos(CAR.yaw)) : d.scale(1 / dl);
-  const sign = Math.sign(CAR.v) || 1;
-  const mv = new BABYLON.Vector3(Math.sin(CAR.yaw), 0, Math.cos(CAR.yaw));
-  const lat = new BABYLON.Vector3(Math.cos(CAR.yaw), 0, -Math.sin(CAR.yaw));
-  const power = 1.6 + Math.abs(CAR.v) * 0.9;
-  ud.vel = mv.scale(power * 0.75 * sign)
-    .add(lat.scale(BABYLON.Vector3.Dot(lat, dir) * power))
-    .add(new BABYLON.Vector3(0, power * 0.6 + Math.random() * 0.3, 0));
-  ud.ang = Math.random() * Math.PI * 2;
-  ud.spin = (Math.random() * 8 + 5) * (Math.random() < 0.5 ? 1 : -1);
-  node.position.y = surfaceHeight(node.position.x, node.position.z) + 0.4;
-  flying.push(node);
+// Как было при сбивании: срабатывает, когда ось конуса (его центр px,pz)
+// входит в прямоугольник кузова. Без радиуса/зазора — блокировка ровно
+// в тот момент, когда раньше был подброс.
+function coneBlockedAt(x, z, px, pz, y) {
+  return coneDepthAt(x, z, px, pz) > 0;
+}
+// Глубина проникновения оси конуса в габарит: 0 — снаружи, >0 — внутри
+// (расстояние до ближайшего края). Нужна, чтобы выпустить машину:
+// внутрь пускаем только наружу, а не запираем её там навсегда.
+function coneDepthAt(x, z, px, pz) {
+  if (typeof CAR === "undefined" || !CAR) return 0;
+  const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);
+  const dx = px - x, dz = pz - z;
+  const lx = dx * c + dz * s, lz = -dx * s + dz * c;
+  const ex = CAR.halfW - Math.abs(lx - CAR.bodyCx);
+  const ez = CAR.halfL - Math.abs(lz - CAR.bodyCz);
+  if (ex <= 0 || ez <= 0) return 0;
+  return Math.min(ex, ez);
+}
+// Звук/тост — в тот же момент, что и блокировка (по оси, без упреждения).
+function coneTouchedAt(x, z, px, pz) {
+  return coneBlockedAt(x, z, px, pz);
+}
+function coneLevelMatches(node, y) {
+  if (y === undefined || y === null) return true;
+  try { if (Math.abs(node.position.y - y) > CONE_Y_TOL) return false; } catch (e) {}
+  return true;
+}
+function notifyConeHit() {
+  const now = (typeof performance !== "undefined") ? performance.now() : 0;
+  if (now - lastConeHitAt < CONE_HIT_COOLDOWN) return;
+  lastConeHitAt = now;
   if (typeof window.playConeHit === 'function') window.playConeHit();
   if (typeof window.showToast === 'function') window.showToast('СБИТ КОНУС!(3 балла)');
 }
-function landCone(n) {
-  n.userData.vel = null;
-  const ra = Math.random() * Math.PI * 2;
-  n.rotationQuaternion = BABYLON.Quaternion.RotationAxis(
-    new BABYLON.Vector3(Math.cos(ra), 0, Math.sin(ra)), Math.PI / 2 * (0.9 + Math.random() * 0.2));
-  n.position.y = surfaceHeight(n.position.x, n.position.z) + LYING_Y;
+// Совместимость: раньше подбрасывала конус, теперь только сигнал.
+function knockCone(node, carPos) {
+  notifyConeHit();
 }
-function updateFlights(dt) {
-  for (let i = flying.length - 1; i >= 0; i--) {
-    const n = flying[i], ud = n.userData;
-    if (!ud || !ud.vel) continue;
-    const v = ud.vel;
-    const drag = Math.max(0, 1 - 0.9 * dt);
-    v.x *= drag; v.z *= drag;
-    v.y -= 9.8 * dt;
-    ud.ang += ud.spin * dt;
-    n.position.addInPlace(v.scale(dt));
-    const hl = Math.sqrt(v.x * v.x + v.z * v.z);
-    const axis = hl > 0.1 ? new BABYLON.Vector3(-v.z / hl, 0, v.x / hl) : new BABYLON.Vector3(1, 0, 0);
-    n.rotationQuaternion = BABYLON.Quaternion.RotationAxis(axis, ud.ang)
-      .multiply(BABYLON.Quaternion.RotationAxis(BABYLON.Axis.Y, ud.ang * 0.35));
-    const floor = surfaceHeight(n.position.x, n.position.z) + 0.1;
-    if (n.position.y <= floor && v.y <= 0) {
-      n.position.y = floor;
-      if (v.y < -0.4) { v.y = -v.y * 0.35; v.x *= 0.55; v.z *= 0.55; }
-      else { v.y = 0; v.x *= 0.7; v.z *= 0.7; }
-      if (Math.abs(v.x) < 0.12 && Math.abs(v.z) < 0.12 && Math.abs(v.y) < 0.15) {
-        landCone(n);
-        flying.splice(i, 1);
-      }
+function landCone(n) {}
+function updateFlights(dt) {}
+function checkCollisions() {
+  if (typeof CAR === "undefined" || !CAR || !CAR.root) { coneHitPending = false; return; }
+  // Упор в конус: движение уже отменено, факт снаружи — пищим по флагу.
+  if (coneHitPending) {
+    coneHitPending = false;
+    notifyConeHit();
+    return;
+  }
+  const p = CAR.root.position;
+  for (const node of coneNodes) {
+    if (coneLevelMatches(node, CAR.y) && coneTouchedAt(p.x, p.z, node.position.x, node.position.z)) {
+      notifyConeHit();
+      break;
     }
   }
 }
-function checkCollisions() {
-  if (typeof CAR === "undefined" || !CAR || !CAR.root) return;
-  const p = CAR.root.position;
-  for (const node of coneNodes) {
-    const ud = node.userData;
-    if (!ud || ud.knocked) continue;
-    if (carHits(node.position.x, node.position.z)) knockCone(node, p);
-  }
-}
 function tickWorld(dt) {
-  updateFlights(dt);
   checkCollisions();
 }
 

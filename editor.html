@@ -439,6 +439,7 @@ scene.onPointerObservable.add((pi) => {
     const c = pickCone();
     if (!c.hit) return;
     dragging = c.pickedMesh.parent;
+    if (typeof unfreezeCone === "function") unfreezeCone(dragging);
     const ud = dragging.userData;
     const fi = flying.indexOf(dragging);
     if (fi >= 0) flying.splice(fi, 1);
@@ -465,6 +466,7 @@ scene.onPointerObservable.add((pi) => {
       occupied.add(k);
       ud.cellKey = k;
     }
+    if (typeof freezeCone === "function") freezeCone(dragging);
     updateCount();
     dragging = null;
     dragOldKey = null;
