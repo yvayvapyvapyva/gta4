@@ -12,7 +12,7 @@
 //   setMirrorsActive(on)          — вкл/выкл из applyCamMode
 //   mirrorTick()                  — каждый кадр перед scene.render()
 
-let MIRROR_RES = 2048;           // сторона RTT (меняется из окна зеркал)
+let MIRROR_RES = 1024;           // сторона RTT (меняется из окна зеркал)
 // Видимый угол зеркала, градусы: FOV камеры = угол × запас.
 // Крутилка «Обзор» задаёт угол напрямую.
 let MIRROR_VIEW_DEG = 24;
@@ -27,6 +27,12 @@ const MIRROR_CAM_OFFSET = 0.3;
 // Выключена (1): зеркала мелкие, разницу с 4/16 надо высматривать,
 // а выборки на пиксель жгут bandwidth.
 const MIRROR_ANISO = 1;
+// MSAA рендер-таргетов: края геометрии в зеркалах без него лесенкой
+// (MSAA основного канваса на RTT не распространяется). WebGL2, движок сам
+// делает resolve; цена — память/полоса ×N на два таргета.
+// Только степени двойки; меняется из окна зеркал (ползунок).
+const MIRROR_SAMPLE_STEPS = [1, 2, 4, 8];
+let MIRROR_SAMPLES = 4;
 const MIRROR_ADJ_DEG = 0.5;    // шаг регулировки зеркала, градусы за нажатие
 const MIRROR_ADJ = MIRROR_ADJ_DEG * Math.PI / 180;   // то же в радианах
 // Регулировка зеркал по умолчанию, градусы: левое смотрит чуть влево-назад,
@@ -537,13 +543,7 @@ function setupMirrors(opts) {
     // Без мипмапов: их генерация каждый кадр в 2048 (×2 зеркала) — чистая
     // пропускная способность в тепло. Трилинейный без мипов невозможен,
     // поэтому пара — билинейный фильтр (зеркала мелкие, всё равно давит).
-    const tex = new BABYLON.RenderTargetTexture("mirrorTex_" + sides[i], mirrorRes(), scene, false);
-    tex.activeCamera = cam;
-    tex.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
-    tex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
-    tex.samplingMode = BABYLON.Texture.BILINEAR_SAMPLINGMODE;
-    tex.anisotropicFilteringLevel = MIRROR_ANISO;
-    tex.clearColor = new BABYLON.Color4(0.55, 0.72, 0.94, 1);
+    const tex = makeMirrorTex("mirrorTex_" + sides[i], cam);
     tex.renderList = MIRROR_NONE;
 
     const mat = new BABYLON.ShaderMaterial("mirrorMat_" + sides[i], scene,
@@ -662,7 +662,37 @@ function mirrorTunables() {
   return {
     res: MIRROR_RES,
     fovDeg: Math.round(MIRROR_VIEW_DEG),
+    msaa: MIRROR_SAMPLES,
   };
+}
+// Общая заготовка RTT зеркала: без мипмапов, билинейка, MSAA по MIRROR_SAMPLES.
+function makeMirrorTex(name, cam) {
+  const tex = new BABYLON.RenderTargetTexture(name, mirrorRes(), scene, false);
+  tex.activeCamera = cam;
+  tex.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
+  tex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+  tex.samplingMode = BABYLON.Texture.BILINEAR_SAMPLINGMODE;
+  tex.anisotropicFilteringLevel = MIRROR_ANISO;
+  tex.samples = MIRROR_SAMPLES;
+  tex.clearColor = new BABYLON.Color4(0.55, 0.72, 0.94, 1);
+  tex.renderList = MIRROR_NONE;
+  return tex;
+}
+// Пересоздание текстур с текущими RES+SAMPLES (смена разрешения или сглаживания).
+// Короткий фриз: таргеты 1024–4096² ×2 пересоздаются целиком.
+function recreateMirrorTex() {
+  for (const e of mirrorEntries) {
+    const old = e.tex;
+    const oi = scene.customRenderTargets.indexOf(old);
+    if (oi >= 0) scene.customRenderTargets.splice(oi, 1);
+    const tex = makeMirrorTex(old.name, e.cam);
+    e.tex = tex;
+    e.mat.setTexture("mirrorSampler", tex);
+    // снаружи и при выключенном рендере — остаётся отцепленной
+    if (mirrorActive && mirrorRenderEnabled) mirrorAttachTex(e);
+    try { old.dispose(); } catch (err) {}
+  }
+  refreshMirrorList(true);
 }
 // Видимый угол V задаёт spread (угол = spread × угловой размер стекла),
 // а FOV лишь подгоняется под конус выборки, чтобы тексели не тратились
@@ -692,25 +722,20 @@ function setMirrorRes(res) {
   res = Math.max(64, Math.round(res));
   if (res === MIRROR_RES) return;
   MIRROR_RES = res;
-  for (const e of mirrorEntries) {
-    const old = e.tex;
-    const oi = scene.customRenderTargets.indexOf(old);
-    if (oi >= 0) scene.customRenderTargets.splice(oi, 1);
-    // Без мипмапов, как в setupMirrors: генерация мип-цепи каждый кадр в 2048 — в тепло.
-    const tex = new BABYLON.RenderTargetTexture(old.name, mirrorRes(), scene, false);
-    tex.activeCamera = e.cam;
-    tex.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
-    tex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
-    tex.samplingMode = BABYLON.Texture.BILINEAR_SAMPLINGMODE;
-    tex.anisotropicFilteringLevel = MIRROR_ANISO;
-    tex.clearColor = new BABYLON.Color4(0.55, 0.72, 0.94, 1);
-    tex.renderList = MIRROR_NONE;
-    e.tex = tex;
-    e.mat.setTexture("mirrorSampler", tex);
-    if (mirrorActive) mirrorAttachTex(e);   // снаружи — остаётся отцепленной
-    try { old.dispose(); } catch (err) {}
+  recreateMirrorTex();
+}
+// Сглаживание: только степени двойки (1 = выкл). Ползунок шлёт индекс,
+// но принимаем и сэмплы напрямую — чужие значения снапим к ближайшим.
+function setMirrorSamples(s) {
+  s = Math.round(s);
+  if (!MIRROR_SAMPLE_STEPS.includes(s)) {
+    let best = MIRROR_SAMPLE_STEPS[0];
+    for (const v of MIRROR_SAMPLE_STEPS) if (Math.abs(v - s) < Math.abs(best - s)) best = v;
+    s = best;
   }
-  refreshMirrorList(true);
+  if (s === MIRROR_SAMPLES) return;
+  MIRROR_SAMPLES = s;
+  recreateMirrorTex();
 }
 
 mirrorTick = tickMirrors;

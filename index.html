@@ -320,15 +320,20 @@ body.edit-active #driveCtrl{display:none !important}
     <h4>Отражение</h4>
     <div class="win-row">
       <label>Качество</label>
-      <input type="range" id="setMirRes" min="256" max="4096" step="256" value="2048">
-      <span class="val" id="setMirResV">2048</span>
+      <input type="range" id="setMirRes" min="256" max="4096" step="256" value="1024">
+      <span class="val" id="setMirResV">1024</span>
     </div>
     <div class="win-row">
       <label>Обзор</label>
       <input type="range" id="setMirFov" min="12" max="60" step="1" value="24">
       <span class="val" id="setMirFovV">24°</span>
     </div>
-    <div class="win-note">Качество требует перезаписи текстуры (короткий фриз). Остальное применяется сразу</div>
+    <div class="win-row">
+      <label>Сглажив.</label>
+      <input type="range" id="setMirMsaa" min="0" max="3" step="1" value="2">
+      <span class="val" id="setMirMsaaV">4×</span>
+    </div>
+    <div class="win-note">Качество и сглаживание требуют перезаписи текстуры (короткий фриз). Остальное применяется сразу</div>
   </div>
 </div>
 
@@ -812,6 +817,11 @@ const setMirRes = document.getElementById("setMirRes");
 const setMirResV = document.getElementById("setMirResV");
 const setMirFov = document.getElementById("setMirFov");
 const setMirFovV = document.getElementById("setMirFovV");
+const setMirMsaa = document.getElementById("setMirMsaa");
+const setMirMsaaV = document.getElementById("setMirMsaaV");
+// Ползунок шлёт индекс, реальные сэмплы — степени двойки (0 = выкл).
+const MIR_MSAA_STEPS = [1, 2, 4, 8];
+const mirMsaaLabel = (s) => s <= 1 ? "Выкл" : s + "×";
 
 // подтягиваем крутилки отражения из mirror.js
 function syncMirrorTunables() {
@@ -819,6 +829,11 @@ function syncMirrorTunables() {
   const t = mirrorTunables();
   if (setMirRes !== setSliderDrag) { setMirRes.value = t.res; setMirResV.textContent = t.res; }
   if (setMirFov !== setSliderDrag) { setMirFov.value = t.fovDeg; setMirFovV.textContent = t.fovDeg + "°"; }
+  if (setMirMsaa && setMirMsaa !== setSliderDrag) {
+    const i = Math.max(0, MIR_MSAA_STEPS.indexOf(t.msaa));
+    setMirMsaa.value = i;
+    setMirMsaaV.textContent = mirMsaaLabel(MIR_MSAA_STEPS[i]);
+  }
 }
 setMirRes.addEventListener("input", () => {
   const v = +setMirRes.value;
@@ -829,6 +844,11 @@ setMirFov.addEventListener("input", () => {
   const v = +setMirFov.value;
   setMirFovV.textContent = v + "°";
   if (typeof setMirrorFovDeg === "function") setMirrorFovDeg(v);
+});
+setMirMsaa.addEventListener("input", () => {
+  const s = MIR_MSAA_STEPS[+setMirMsaa.value] || 1;
+  setMirMsaaV.textContent = mirMsaaLabel(s);
+  if (typeof setMirrorSamples === "function") setMirrorSamples(s);
 });
 
 // X-ray: прозрачный кузов (кнопка на нижней панели — dvXray)
@@ -917,7 +937,7 @@ for (const s of mirSliders) {
 
 // пока ползунок тянут, syncSettings не должен переписывать его значение
 for (const el of [setCockpitZ, ...mirSliders.map(s => s.input),
-    setMirRes, setMirFov]) {
+    setMirRes, setMirFov, setMirMsaa]) {
   el.addEventListener("pointerdown", () => { setSliderDrag = el; });
 }
 addEventListener("pointerup", () => { setSliderDrag = null; });
