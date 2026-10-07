@@ -165,6 +165,50 @@
 .dv-slider-h{position:absolute;top:50%;left:50%;width:54px;height:54px;transform:translate(-50%,-50%);border-radius:12px;background:#ff6d00;border:2px solid #1a1200;box-shadow:0 3px 10px rgba(0,0,0,.55)}
 #driveCtrl,#driveCtrl *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 body.playback-active #driveCtrl{display:none !important}
+body.edit-active #driveCtrl{display:none !important}
+/* Оверлей текстовых сообщений реплея (и воспроизведение, и предпросмотр в редакторе) */
+#replayMsg{position:fixed;left:50%;top:calc(70px + var(--tg-top));transform:translateX(-50%);z-index:6;pointer-events:none;
+  max-width:min(640px,92vw);text-align:center;font-size:18px;font-weight:600;line-height:1.4;color:#fff;
+  background:rgba(10,14,20,.78);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:10px 18px;
+  box-shadow:0 8px 28px rgba(0,0,0,.5);text-shadow:0 1px 6px rgba(0,0,0,.7);white-space:pre-wrap;}
+/* Контролы воспроизведения */
+#playbackUI{position:fixed;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:8;
+  display:flex;justify-content:center;pointer-events:none;}
+#playbackUI[hidden]{display:none;}
+.playback-controls{display:flex;gap:10px;pointer-events:auto;background:rgba(12,22,32,.85);
+  border:1px solid #2a4257;border-radius:14px;padding:8px;backdrop-filter:blur(6px);}
+.playback-btn{width:54px;height:54px;font-size:24px;color:#d8e5ee;background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.14);border-radius:12px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;}
+.playback-btn:hover{border-color:var(--acc);color:var(--acc);}
+/* Редактор реплея — панель в самом низу экрана, просмотру не мешает */
+#replayEditBackdrop{display:none !important;}
+#replayEditWin{left:0;right:0;top:auto;bottom:0;transform:none;width:100%;max-width:none;
+  max-height:32vh;margin:0;border-radius:14px 14px 0 0;border-left:none;border-right:none;border-bottom:none;
+  padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));overflow-y:auto;
+  display:none;flex-direction:column;}
+#replayEditWin.open{display:flex;transform:none;}
+/* Компактность: ужимаем стандартные отступы .win только внутри панели редактора */
+#replayEditWin h3{margin:0 0 6px;}
+#replayEditWin .win-sec{margin:0 0 8px;}
+#replayEditWin .win-sec:last-child{margin-bottom:0;}
+#replayEditWin .win-sec h4{margin:0 0 4px;}
+#replayEditWin button{padding:6px 10px;}
+#replayEditWin .win-row{margin-bottom:6px;}
+#replayEditWin .win-row:last-of-type{margin-bottom:0;}
+#replayEditWin .replay-edit-msg{padding:5px 6px;margin-bottom:6px;}
+#replayEditScrub{width:100%;-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;
+  background:rgba(255,255,255,.16);outline:none;}
+#replayEditScrub::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;
+  background:var(--acc);cursor:pointer;border:2px solid #181b22;}
+#replayEditScrub::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--acc);cursor:pointer;border:2px solid #181b22;}
+.replay-edit-msg{display:flex;gap:8px;align-items:center;padding:8px;border:1px solid rgba(255,255,255,.1);
+  border-radius:8px;margin-bottom:8px;background:rgba(255,255,255,.04);}
+.replay-edit-msg input[type=text]{flex:1;min-width:0;font:inherit;font-size:12.5px;color:var(--fg);
+  padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;}
+.replay-edit-msg input[type=number]{width:64px;font:inherit;font-size:12.5px;color:var(--fg);
+  padding:7px 8px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;}
+.replay-edit-msg button{flex:0 0 auto;}
 </style>
 </head>
 <body>
@@ -307,6 +351,7 @@ body.playback-active #driveCtrl{display:none !important}
 </div>
 
 <!-- Playback UI overlay -->
+<div id="replayMsg" hidden></div>
 <div id="playbackUI" hidden>
   <div class="playback-controls">
     <button id="playbackPause" class="playback-btn" aria-label="Пауза">⏸</button>
@@ -318,7 +363,40 @@ body.playback-active #driveCtrl{display:none !important}
 <div id="replayWin" class="win">
   <h3>Сохранённые реплеи<button id="replayClose" aria-label="Закрыть">✕</button></h3>
   <div id="replayList" style="max-height:60vh; overflow-y:auto;"></div>
-  <div class="win-note">Клик — воспроизвести. Shift+клик — удалить.</div>
+  <div class="win-note">Клик — воспроизвести. Кнопка ✎ — редактировать.</div>
+</div>
+
+<div id="replayEditBackdrop" class="win-backdrop"></div>
+<div id="replayEditWin" class="win">
+  <h3><span id="replayEditTitle">Редактор записи</span><button id="replayEditClose" aria-label="Закрыть">✕</button></h3>
+  <div class="win-sec">
+    <h4>Кадр <span id="replayEditTime" style="color:var(--fg)">0.0 / 0.0 с</span></h4>
+    <div class="win-row" style="gap:8px">
+      <button id="replayEditPlay" title="Предпросмотр">▶</button>
+      <input type="range" id="replayEditScrub" min="0" max="0" step="1" value="0" style="flex:1">
+    </div>
+  </div>
+  <div class="win-sec">
+    <h4>Новое сообщение в текущем моменте</h4>
+    <div class="win-row" style="gap:8px">
+      <input type="text" id="replayEditText" placeholder="Текст сообщения…" maxlength="200" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
+    </div>
+    <div class="win-row" style="margin-top:8px">
+      <label style="flex:0 0 auto">Показ, с</label>
+      <input type="number" id="replayEditDur" min="0.5" max="60" step="0.5" value="3" style="width:70px;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 8px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
+      <button id="replayEditAdd" style="flex:1">＋ Вставить здесь</button>
+    </div>
+  </div>
+  <div class="win-sec">
+    <h4>Сообщения (<span id="replayEditCount">0</span>)</h4>
+    <div id="replayEditMsgs" style="max-height:10vh;overflow-y:auto;"></div>
+  </div>
+  <div class="win-sec">
+    <div class="win-btns">
+      <button id="replayEditSave">Сохранить</button>
+      <button id="replayEditExit">Закрыть</button>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.babylonjs.com/babylon.js"></script>
@@ -560,6 +638,10 @@ let blinkerLeft = false, blinkerRight = false;
 
 const CONTROL_KEYS = new Set(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space","KeyC","KeyR","KeyX"]);
 addEventListener("keydown", (e) => {
+  // Ввод в поля (текст сообщения редактора и т.п.) — не перехватываем:
+  // иначе preventDefault ниже съедает пробел/WASD/стрелки при наборе текста.
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
   if (CONTROL_KEYS.has(e.code)) e.preventDefault();
   // режим регулировки зеркал перехватывает стрелки, чтобы они не управляли машиной
   if (typeof mirrorAdjActive === "function" && mirrorAdjActive()) {
@@ -1060,6 +1142,12 @@ function applySupport() {
 }
 
 function drive(dt) {
+  // === REPLAY EDITOR: предпросмотр кадра — физика заморожена, только камера ===
+  if (typeof isEditing !== 'undefined' && isEditing) {
+    if (typeof editCameraTick === 'function') editCameraTick(dt);
+    else if (typeof window.Replay?.editTick === 'function') window.Replay.editTick(dt);
+    return;
+  }
   // === REPLAY: воспроизведение ===
   if (typeof replayTickWithPause === 'function' && (window.Replay?.isPlaying?.() || window.Replay?.isPaused?.())) {
     if (!replayTickWithPause(dt)) {
