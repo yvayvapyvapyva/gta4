@@ -143,7 +143,7 @@ const canvas = document.getElementById("view");
 const isMobileEd = ((window.Telegram && window.Telegram.WebApp && /ios|android/i.test(window.Telegram.WebApp.platform || ""))) ||
   (window.matchMedia && window.matchMedia("(pointer:coarse)").matches) ||
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
-const engine = new BABYLON.Engine(canvas, !isMobileEd, { preserveDrawingBuffer:false, stencil:false }, true);
+const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:false, stencil:false }, true);
 const dpr = window.devicePixelRatio || 1;
 engine.setHardwareScalingLevel(1.0 / Math.min(dpr, isMobileEd ? 1.25 : 1.5));
 const scene = new BABYLON.Scene(engine);

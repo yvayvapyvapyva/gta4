@@ -266,6 +266,8 @@ function setMirrorsActive(on) {
   const want = !!on && mirrorEntries.length > 0;
   if (want === mirrorActive) return;
   mirrorActive = want;
+  // смена режима — это всегда движение: сбрасываем паузу простоя
+  mirrorIdlePaused = false; mirrorIdleSig = null; mirrorIdleFrames = 0;
   if (!mirrorActive) { mirrorAdjOn = false; mirrorHudShow(); }
   if (mirrorActive) refreshMirrorList(true);
   for (const e of mirrorEntries) {
@@ -289,8 +291,49 @@ function setMirrorsActive(on) {
   }
 }
 
+// ── пауза зеркал на простое ─────────────────────────────────────────
+// Стоящая машина + неподвижная камера + тихие поворотники = картинка
+// в зеркалах пиксель в пиксель та же. Тогда отцепляем RTT из конвейера:
+// ни математики, ни двух рендеров сцены — ноль ватт. Первое же изменение
+// (кузов, взгляд, фаза мигания, регулировка, крутилки, X-ray) будит обратно.
+// Два кадра грейса после пробуждения — чтобы картинка успела обновиться.
+let mirrorIdlePaused = false;
+let mirrorIdleSig = null;
+let mirrorIdleFrames = 0;
+function mirrorStateSig() {
+  const p = CAR.root.position;
+  let s = p.x.toFixed(4) + "," + p.y.toFixed(4) + "," + p.z.toFixed(4)
+    + "|" + CAR.yaw.toFixed(5) + "|" + CAR.lookYaw.toFixed(4) + "," + CAR.lookPitch.toFixed(4)
+    + "|" + (blinkerLeft ? 1 : 0) + (blinkerRight ? 1 : 0) + (blinkOn ? 1 : 0)
+    + "|" + MIRROR_RES + "," + MIRROR_FOV.toFixed(4) + "," + MIRROR_DISTORT_K + "," + MIRROR_SPREAD + "," + MIRROR_CAM_OFFSET;
+  try { s += "|" + (CAR.cockpitZOffset || 0); } catch (e) {}
+  try { s += "|" + ((typeof xrayOn !== "undefined" && xrayOn) ? 1 : 0); } catch (e) {}
+  s += "|" + scene.meshes.length;
+  for (const e of mirrorEntries) s += "|" + e.yaw.toFixed(4) + "," + e.pitch.toFixed(4);
+  return s;
+}
+
 function tickMirrors() {
   if (!mirrorActive || !mirrorEntries.length) return;
+  const sig = mirrorStateSig();
+  if (sig === mirrorIdleSig) {
+    mirrorIdleFrames++;
+    if (mirrorIdleFrames >= 2) {
+      if (!mirrorIdlePaused) {
+        for (const e of mirrorEntries) mirrorDetachTex(e);
+        mirrorIdlePaused = true;
+      }
+      return;   // простой: и математику, и рендеры RTT пропускаем
+    }
+  } else {
+    mirrorIdleSig = sig;
+    mirrorIdleFrames = 0;
+    if (mirrorIdlePaused) {
+      for (const e of mirrorEntries) mirrorAttachTex(e);
+      refreshMirrorList(true);
+      mirrorIdlePaused = false;
+    }
+  }
   const cock = (typeof cockpit !== "undefined") ? cockpit : null;
   if (!cock) return;
   const root = CAR.root;

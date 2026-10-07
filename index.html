@@ -361,11 +361,12 @@ const LOOK_DRAG_SCALE = 1;
 
 const canvas = document.getElementById("view");
 
-// Мобила: MSAA и высокий DPR жгут тайловый GPU — режем именно там, десктоп не трогаем.
+// Мобила: высокий DPR жжёт тайловый GPU — режем кап именно там, десктоп не трогаем.
+// Сглаживание оставлено включённым везде: без MSAA картинка сыплется лесенками.
 const isMobile = ((window.Telegram && window.Telegram.WebApp && /ios|android/i.test(window.Telegram.WebApp.platform || ""))) ||
   (window.matchMedia && window.matchMedia("(pointer:coarse)").matches) ||
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
-const engine = new BABYLON.Engine(canvas, !isMobile, { preserveDrawingBuffer:false, stencil:false }, true);
+const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:false, stencil:false }, true);
 // Кап DPR: десктоп до 1.5× CSS, мобила до 1.25× (было 1.5 везде)
 const dpr = window.devicePixelRatio || 1;
 const capped = Math.min(dpr, isMobile ? 1.25 : 1.5);
@@ -1682,6 +1683,7 @@ function debugTick(rawDt) {
   dbgFrames = 0; dbgAcc = 0;
   let mir = "?";
   try { mir = (typeof mirrorActive !== "undefined" && mirrorActive) ? "on" : "off"; } catch (e) {}
+  try { if (typeof mirrorIdlePaused !== "undefined" && mirrorIdlePaused) mir += "(пауза)"; } catch (e) {}
   dbgEl.textContent =
     "fps " + dbgFps.toFixed(0) +
     " | meshes " + scene.meshes.length +
