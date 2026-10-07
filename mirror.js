@@ -45,6 +45,8 @@ let mirrorListed = -1;    // сколько мешей было в сцене н
 let mirrorActive = false;
 let mirrorAdjOn = false;  // режим регулировки направления зеркал
 let mirrorAdjSide = 0;    // выбранное зеркало (индекс в mirrorEntries)
+let mirrorCarMeshes = null; // Set всего железа машины (из setupMirrors)
+let mirrorDoorKeep = null;  // Set дверных мешей: единственное железо, видимое в зеркалах
 
 // Шейдер выпуклого зеркала: проекция из широкоуольной камеры + бочка.
 // worldViewProjection подставляет сам движок, reflectionMatrix (= P*V
@@ -253,6 +255,10 @@ function refreshMirrorList(force) {
   for (const m of all) {
     if (mirrorPlates.has(m)) continue;   // стекло в своё отражение не рисуем
     if (mirrorNearMeshes && mirrorNearMeshes.has(m)) continue;  // корпус зеркала
+    // из кузова — только двери (правдоподобный край своей машины),
+    // остальное железо (~90% вершин) в зеркалах не считаем вовсе
+    if (mirrorCarMeshes && mirrorCarMeshes.has(m) &&
+        !(mirrorDoorKeep && mirrorDoorKeep.has(m))) continue;
     mirrorList.push(m);
   }
 }
@@ -291,7 +297,7 @@ function setMirrorsActive(on) {
 // Стоящая машина + неподвижная камера + тихие поворотники = картинка
 // в зеркалах пиксель в пиксель та же. Тогда отцепляем RTT из конвейера:
 // ни математики, ни двух рендеров сцены — ноль ватт. Первое же изменение
-// (кузов, взгляд, фаза мигания, регулировка, крутилки, X-ray) будит обратно.
+// (кузов, регулировка, крутилки, X-ray) будит обратно.
 // Два кадра грейса после пробуждения — чтобы картинка успела обновиться.
 let mirrorIdlePaused = false;
 let mirrorIdleSig = null;
@@ -317,7 +323,8 @@ function mirrorStateSig() {
   const p = CAR.root.position;
   let s = p.x.toFixed(4) + "," + p.y.toFixed(4) + "," + p.z.toFixed(4)
     + "|" + CAR.yaw.toFixed(5)
-    + "|" + (blinkerLeft ? 1 : 0) + (blinkerRight ? 1 : 0) + (blinkOn ? 1 : 0)
+    // поворотники в зеркалах не рисуются (кузов вырезан, кроме дверей),
+    // поэтому их фаза пробуждение не триггерит
     + "|" + MIRROR_RES + "," + MIRROR_FOV.toFixed(4) + "," + MIRROR_DISTORT_K + "," + MIRROR_SPREAD + "," + MIRROR_CAM_OFFSET;
   try { s += "|" + ((typeof xrayOn !== "undefined" && xrayOn) ? 1 : 0); } catch (e) {}
   s += "|" + scene.meshes.length;
@@ -482,6 +489,19 @@ function setupMirrors(opts) {
     return;
   }
   mirrorPlates = new Set();
+  // Разбираем кузов: в зеркалах оставляем только двери (door_* по имени
+  // меша или любого родителя — лоадер режет геометрию на примитивы).
+  // Внутренняя обшивка дверей тоже попадёт, но она отвернута от камер
+  // (односторонние материалы) и в отражениях не видна.
+  mirrorCarMeshes = new Set(opts.meshes);
+  mirrorDoorKeep = new Set();
+  for (const m of opts.meshes) {
+    let c = m;
+    while (c) {
+      if (/door_/i.test(c.name || "")) { mirrorDoorKeep.add(m); break; }
+      c = c.parent;
+    }
+  }
   const sides = ["left", "right"];
   plates.forEach((p, i) => {
     // широкоугольная камера зеркала: направление считается один раз
