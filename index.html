@@ -281,18 +281,13 @@ body.playback-active #driveCtrl{display:none !important}
     </div>
     <div class="win-row">
       <label>Обзор</label>
-      <input type="range" id="setMirFov" min="60" max="140" step="1" value="100">
-      <span class="val" id="setMirFovV">100°</span>
+      <input type="range" id="setMirFov" min="12" max="60" step="1" value="24">
+      <span class="val" id="setMirFovV">24°</span>
     </div>
     <div class="win-row">
       <label>Выпукл.</label>
       <input type="range" id="setMirDist" min="0" max="0.8" step="0.05" value="0.35">
       <span class="val" id="setMirDistV">0.35</span>
-    </div>
-    <div class="win-row">
-      <label>Разлёт</label>
-      <input type="range" id="setMirSpread" min="1" max="6" step="0.5" value="3">
-      <span class="val" id="setMirSpreadV">3</span>
     </div>
     <div class="win-row">
       <label>Вынос</label>
@@ -747,8 +742,6 @@ const setMirFov = document.getElementById("setMirFov");
 const setMirFovV = document.getElementById("setMirFovV");
 const setMirDist = document.getElementById("setMirDist");
 const setMirDistV = document.getElementById("setMirDistV");
-const setMirSpread = document.getElementById("setMirSpread");
-const setMirSpreadV = document.getElementById("setMirSpreadV");
 const setMirCamD = document.getElementById("setMirCamD");
 const setMirCamDV = document.getElementById("setMirCamDV");
 
@@ -759,7 +752,6 @@ function syncMirrorTunables() {
   if (setMirRes !== setSliderDrag) { setMirRes.value = t.res; setMirResV.textContent = t.res; }
   if (setMirFov !== setSliderDrag) { setMirFov.value = t.fovDeg; setMirFovV.textContent = t.fovDeg + "°"; }
   if (setMirDist !== setSliderDrag) { setMirDist.value = t.distortK; setMirDistV.textContent = t.distortK; }
-  if (setMirSpread !== setSliderDrag) { setMirSpread.value = t.spread; setMirSpreadV.textContent = t.spread; }
   if (setMirCamD !== setSliderDrag) { setMirCamD.value = t.camOffset; setMirCamDV.textContent = (+t.camOffset).toFixed(1) + " м"; }
 }
 setMirRes.addEventListener("input", () => {
@@ -776,11 +768,6 @@ setMirDist.addEventListener("input", () => {
   const v = +setMirDist.value;
   setMirDistV.textContent = v;
   if (typeof setMirrorDistortK === "function") setMirrorDistortK(v);
-});
-setMirSpread.addEventListener("input", () => {
-  const v = +setMirSpread.value;
-  setMirSpreadV.textContent = v;
-  if (typeof setMirrorSpread === "function") setMirrorSpread(v);
 });
 setMirCamD.addEventListener("input", () => {
   const v = +setMirCamD.value;
@@ -874,7 +861,7 @@ for (const s of mirSliders) {
 
 // пока ползунок тянут, syncSettings не должен переписывать его значение
 for (const el of [setCockpitZ, ...mirSliders.map(s => s.input),
-    setMirRes, setMirFov, setMirDist, setMirSpread, setMirCamD]) {
+    setMirRes, setMirFov, setMirDist, setMirCamD]) {
   el.addEventListener("pointerdown", () => { setSliderDrag = el; });
 }
 addEventListener("pointerup", () => { setSliderDrag = null; });
