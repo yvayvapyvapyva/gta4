@@ -211,20 +211,10 @@ body.playback-active #driveCtrl{display:none !important}
 
   <div class="win-sec">
     <h4>Вид</h4>
-    <div class="win-row">
-      <label>Качество</label>
-      <select id="setQuality">
-        <option value="auto">Авто</option>
-        <option value="high">Высокое</option>
-        <option value="low">Низкое</option>
-      </select>
-    </div>
     <div class="win-note">
       Езда: <b>W/A/S/D</b> · <b>Space</b> — ручник · <b>C</b> — камера<br>
       <b>R</b> — сброс · <b>M</b> — зеркала · <b>Q/E</b> — поворотники<br>
-      <b>Стрелки</b> — вращение камеры (в режимах «Следом» и «Свободная»)<br>
-      Авто-качество само роняет разрешение при просадке FPS
-      и поднимает до нативного на мощном железе
+      <b>Стрелки</b> — вращение камеры (в режимах «Следом» и «Свободная»)
     </div>
   </div>
 
@@ -380,43 +370,9 @@ const dpr = window.devicePixelRatio || 1;
 const capped = Math.min(dpr, isMobile ? 1.25 : 1.5);
 engine.setHardwareScalingLevel(1.0 / capped);
 
-// ── адаптивное разрешение ──────────────────────────────────────────
-// Скейлинг множит базовый уровень: 1 = как было (кап 1.5× CSS), 2 = вдвое
-// меньше пикселей, qualityMin = нативный DPR (резче капа, если тянет).
-// Авто-режим раз в 2 с смотрит средний FPS и двигает скейлинг с гистерезисом,
-// чтобы не дёргаться на границе. Ручные режимы фиксируют края диапазона.
-let qualityMode = "auto";   // auto | high | low
-let qualityScale = isMobile ? 2 : 1;   // мобила стартует с холодного минимума, поднимется если тянет
-const qualityMin = capped / dpr;   // 1 на слабом DPR, 0.5 на DPR 3
-function applyQuality() {
-  const s = qualityMode === "low" ? 2 : qualityMode === "high" ? qualityMin : qualityScale;
-  engine.setHardwareScalingLevel(1.0 / capped * s);
-}
-function setQualityMode(m) {
-  qualityMode = m;
-  if (m === "high") qualityScale = qualityMin;
-  applyQuality();
-  syncSettings();
-}
-let qAcc = 0, qN = 0;
-const Q_WINDOW = isMobile ? 1 : 2;   // мобила реагирует за 1 с, а не 2 — не успевает нагреться
-function qualityMeter(rawDt) {
-  if (qualityMode !== "auto") return;
-  qAcc += rawDt; qN++;
-  if (qAcc < Q_WINDOW) return;           // окно оценки
-  const fps = qN / qAcc;
-  qAcc = 0; qN = 0;
-  if (fps < 45 && qualityScale < 2) {
-    qualityScale = Math.min(2, qualityScale + 0.25);
-    applyQuality();
-  } else if (fps > 57 && qualityScale > 1) {
-    // Вверх — только до 1: ниже (суперсемплинг к нативному DPR) греет,
-    // туда пускаем лишь вручную через «Высокое» (qualityMin).
-    qualityScale = Math.max(1, qualityScale - 0.25);
-    applyQuality();
-  }
-}
-applyQuality();   // применить стартовый скейл сразу, а не через первое окно
+// ── разрешение фиксировано ─────────────────────────────────────────
+// Никакого авто-качества: скейлинг всегда 1 (базовый кап DPR выше).
+// engine.setHardwareScalingLevel(1.0 / capped) строкой выше — это и есть фикс.
 
 const scene = new BABYLON.Scene(engine);
 const SKY_COLOR = new BABYLON.Color3(0.55, 0.72, 0.94);
@@ -730,7 +686,6 @@ function openSettings(o) {
 
 // подтягиваем значения из состояния приложения в окно
 function syncSettings() {
-  document.getElementById("setQuality").value = qualityMode;
   // Cockpit Z offset
   if (setCockpitZ !== setSliderDrag) {
     const cm = Math.round((CAR.cockpitZOffset || 0) * 100);
@@ -760,7 +715,6 @@ document.getElementById("replayListBtn")?.addEventListener("click", () => {
   openSettings(false);
   if (typeof window.Replay?.openList === "function") window.Replay.openList(true);
 });
-document.getElementById("setQuality").addEventListener("change", (e) => setQualityMode(e.target.value));
 
 // ── окно зеркал: отдельная кнопка, все настройки зеркал живут здесь ──
 const mirrorWin = document.getElementById("mirrorWin");
@@ -1713,7 +1667,7 @@ function debugTick(rawDt) {
     " | active " + scene.getActiveMeshes().length +
     " | rtt " + scene.customRenderTargets.length +
     " | tex " + scene.textures.length +
-    "\nmirror " + mir + " | mode " + CAR.mode + " | q " + qualityScale.toFixed(2);
+    "\nmirror " + mir + " | mode " + CAR.mode;
 }
 const FRAME_MIN_MS = 1000 / 60;   // кап 60fps: на 120Гц-экранах режем работу вдвое
 engine.runRenderLoop(() => {
@@ -1723,7 +1677,6 @@ engine.runRenderLoop(() => {
   const rawDt = (now - last) / 1000;
   const dt = Math.min(rawDt, 0.05);
   last = now;
-  qualityMeter(rawDt);   // сырой dt, без клампа: иначе на лагах FPS всегда 20
   if (ready) {
     // Во время реплея используем фиксированный dt для детерминированности
     const replayFixedDt = (window.Replay?.isPlaying?.() && window.Replay?.FIXED_DT) ? window.Replay.FIXED_DT : dt;
