@@ -1,45 +1,40 @@
-// ── боковые зеркала: выпуклое (сферическое) отражение ───────────────────
-// Схема «камера в точке стекла + дисторсия»: у каждого зеркала свой
-// RenderTargetTexture и своя перспективная камера с широким FOV. Камеры
-// смотрят строго назад вдоль кузова (+ доворот регулировки): глаз и наклон
-// стекла не учитываются, в нулях регулировки — ровно назад. Поэтому
-// центральный тексель — вид вдоль кузова, а широкий FOV даёт материал
-// для бочкообразной дисторсии в шейдере (края сжимаются — как у реального
-// выпуклого зеркала). Весь кузов исключён из рендера зеркал, так что
-// никакие плоскости отсечения не нужны: лучи сквозь проём стекла честно
-// долетают до мира позади машины.
-// В список отрисовки идут все меши сцены, кроме стёкол и кузова.
-//
+// ── боковые зеркала: плоское отражение ───────────────────
+// Камера каждого зеркала стоит почти в стекле (0.3 м впереди по взгляду,
+// со стороны водителя) и смотрит назад вдоль кузова (+ доворот регулировки).
+// Стекло проектируется в небольшое пятно в центре кадра, шейдер тянет выборку
+// шире пятна (spread) — в мелкое стекло влезает широкий угол. Зеркало плоское:
+// без бочки, геометрия честная. Вынос зафиксирован: ползунка нет, ровно
+// в стекле камеру ставить нельзя — вершины стекла оказываются на нулевой
+// дистанции (w≈0) и проекция расползается в полосы.
+// Весь кузов, кроме дверей, исключён из рендера зеркал.
 // Подключается после map.js, работает на глобалах index.html:
 //   setupMirrors({ root, meshes }) — один раз после загрузки модели
 //   setMirrorsActive(on)          — вкл/выкл из applyCamMode
 //   mirrorTick()                  — каждый кадр перед scene.render()
 
 let MIRROR_RES = 2048;           // сторона RTT (меняется из окна зеркал)
-let MIRROR_DISTORT_K = 0.35;     // сила бочкообразной дисторсии (0 = плоское)
-// Видимый угол зеркала, градусы: ЕДИНСТВЕННАЯ честная крутилка обзора.
-// В этом шейдере угол задаёт spread (развёртка следа стекла), а FOV камеры —
-// лишь плотность текселей: видимое = spread × угловой размер стекла,
-// FOV сокращается (P и P⁻¹). Поэтому FOV считается сам под угол (см.
-// applyMirrorView), а крутить его напрямую было бесполезно: угол стоял,
-// менялась только резкость.
+// Видимый угол зеркала, градусы: FOV камеры = угол × запас.
+// Крутилка «Обзор» задаёт угол напрямую.
 let MIRROR_VIEW_DEG = 24;
 // Запас FOV поверх видимого угла: горизонталь камеры жмётся аспектом
 // канваса (RTT делит аспект с окном), добирается в tickMirrors под текущий
 // аспект — см. там. База 2.0 держит аспекты до ~0.5 без адаптации.
 const MIRROR_FOV_MARGIN = 2.0;
-let MIRROR_CAM_OFFSET = 1.3;     // камера — на продолжении отражённого луча за стеклом, м
-const MIRROR_GLASS_OUT = 0.05;   // сдвиг точки стекла наружу от центра авто, м
-// Выключена (1): зеркала мелкие, картинка давится бочкой шейдера —
-// разницу с 4/16 надо высматривать, а выборки на пиксель жгут bandwidth.
+// Фиксированный вынос камеры впереди стекла по взгляду, м (ползунка нет).
+// 0.3 вместо прежних 1.3: стекло занимает большую часть RTT — резче и меньше
+// впустую. В ноль ставить нельзя: проекция стекла вырождается (w≈0).
+const MIRROR_CAM_OFFSET = 0.3;
+// Выключена (1): зеркала мелкие, разницу с 4/16 надо высматривать,
+// а выборки на пиксель жгут bandwidth.
 const MIRROR_ANISO = 1;
 const MIRROR_ADJ_DEG = 0.5;    // шаг регулировки зеркала, градусы за нажатие
 const MIRROR_ADJ = MIRROR_ADJ_DEG * Math.PI / 180;   // то же в радианах
-// Регулировка зеркал по умолчанию, градусы: ровно назад вдоль кузова,
-// чуть вниз на дорогу. Значения кратны шагу MIRROR_ADJ_DEG.
+// Регулировка зеркал по умолчанию, градусы: левое смотрит чуть влево-назад,
+// правое — чуть вправо-назад, оба чуть вниз на дорогу.
+// Значения кратны шагу MIRROR_ADJ_DEG.
 const MIRROR_DEFAULT_DEG = {
-  left:  { yaw: 0, pitch: -7 },
-  right: { yaw: 0, pitch: -7 },
+  left:  { yaw: 7, pitch: -7 },
+  right: { yaw: -7, pitch: -7 },
 };
 const mirrorDefault = side => {
   const d = MIRROR_DEFAULT_DEG[side] || { yaw: 0, pitch: 0 };
@@ -48,7 +43,7 @@ const mirrorDefault = side => {
 
 let mirrorEntries = [];   // { mesh, tex, mat, cam, srcMat, srcVC, side, center, gptLocal, dirLocal, yaw, pitch }
 let mirrorPlates = null;  // Set мешей-стёкол: их нельзя рисовать в самом RTT
-let mirrorNearMeshes = null; // Set деталей, перекрывающих обзор (находится трассировкой)
+let mirrorNearMeshes = null; // Set деталей у стекла (корпус зеркала): не рисуем в RTT
 let mirrorList = null;    // общий список мешей для RTT
 let mirrorListed = -1;    // сколько мешей было в сцене на прошлой сборке
 let mirrorActive = false;
@@ -57,10 +52,11 @@ let mirrorAdjSide = 0;    // выбранное зеркало (индекс в 
 let mirrorCarMeshes = null; // Set всего железа машины (из setupMirrors)
 let mirrorDoorKeep = null;  // Set дверных мешей: единственное железо, видимое в зеркалах
 
-// Шейдер выпуклого зеркала: проекция из широкоуольной камеры + бочка.
+// Шейдер плоского зеркала: проекция из камеры в стекле, линейная выборка
+// вокруг пятна стекла (spread) — без дисторсии.
 // worldViewProjection подставляет сам движок, reflectionMatrix (= P*V
 // камеры зеркала) обновляем каждый кадр в tickMirrors.
-BABYLON.Effect.ShadersStore["convexMirrorVertexShader"] = `
+BABYLON.Effect.ShadersStore["flatMirrorVertexShader"] = `
 precision highp float;
 attribute vec3 position;
 attribute vec2 uv;
@@ -75,13 +71,12 @@ void main() {
   gl_Position = wp;
 }
 `;
-BABYLON.Effect.ShadersStore["convexMirrorFragmentShader"] = `
+BABYLON.Effect.ShadersStore["flatMirrorFragmentShader"] = `
 precision highp float;
 varying vec3 vWorldPos;
 varying vec2 vUv;
 uniform mat4 reflectionMatrix;
 uniform sampler2D mirrorSampler;
-uniform float distortK;
 uniform float spread;
 uniform vec3 foot;
 uniform vec3 edgeColor;
@@ -89,11 +84,8 @@ void main() {
   vec4 rp = reflectionMatrix * vec4(vWorldPos, 1.0);
   if (rp.w <= 0.0) { gl_FragColor = vec4(edgeColor, 1.0); return; }
   vec2 ndc = rp.xy / rp.w;
-  // выпуклость: тянем выборку шире геометрического следа (spread) и давим
-  // бочкой вокруг следа — в мелкое стекло влезает широкий угол
-  vec2 rel = (ndc - foot.xy) * spread;
-  float r2 = dot(rel, rel);
-  vec2 uv = (foot.xy + rel * (1.0 + distortK * r2)) * 0.5 + 0.5;
+  // выборка шире пятна стекла (spread) — в мелкое стекло влезает широкий угол
+  vec2 uv = (foot.xy + (ndc - foot.xy) * spread) * 0.5 + 0.5;
   // клемп вместо отбрасывания: даже при неточном следе зеркало покажет
   // растянутое изображение, а не чёрный провал
   uv = clamp(uv, vec2(0.0), vec2(1.0));
@@ -344,7 +336,7 @@ function mirrorStateSig() {
     + "|" + CAR.yaw.toFixed(5)
     // поворотники в зеркалах не рисуются (кузов вырезан, кроме дверей),
     // поэтому их фаза пробуждение не триггерит
-    + "|" + MIRROR_RES + "," + MIRROR_VIEW_DEG + "," + MIRROR_DISTORT_K + "," + MIRROR_CAM_OFFSET
+    + "|" + MIRROR_RES + "," + MIRROR_VIEW_DEG
     // ресайз окна меняет покрытие RTT — будимся и под него
     + "|" + mirrorAspect().toFixed(3);
   try { s += "|" + ((typeof xrayOn !== "undefined" && xrayOn) ? 1 : 0); } catch (e) {}
@@ -407,9 +399,9 @@ function tickMirrors() {
   }
   for (const e of mirrorEntries) {
     // точка стекла и направление — константы кузова: в мир одним преобразованием.
-    // Камера стоит на продолжении луча ЗА стеклом (со стороны водителя) и смотрит
-    // точно в центр стекла: след стекла всегда в центре кадра, а лучи сквозь проём
-    // честно долетают до мира позади машины. Остальное давит бочка в шейдере.
+    // Камера стоит почти в стекле (фиксированные 0.3 м впереди по взгляду,
+    // со стороны водителя) и смотрит точно в центр стекла: пятно стекла всегда
+    // в центре кадра, широкое поле тянется spread-развёрткой в шейдере.
     BABYLON.Vector3.TransformCoordinatesToRef(e.gptLocal, wm, _pt);
     BABYLON.Vector3.TransformNormalToRef(e.dirLocal, wm, _v2);
     _v2.normalize();
@@ -427,7 +419,7 @@ function tickMirrors() {
     e.cam.getViewMatrix().multiplyToRef(e.cam.getProjectionMatrix(), _refl);
     e.m4.copyFrom(_refl);
     e.mat.setMatrix("reflectionMatrix", e.m4);
-    // след центра стекла в NDC — центр бочки
+    // след центра стекла в NDC — центр выборки
     BABYLON.Vector3.TransformCoordinatesToRef(_pt, _refl, _fuv);
     e.fv.copyFrom(_fuv);
     e.mat.setVector3("foot", e.fv);
@@ -544,7 +536,7 @@ function setupMirrors(opts) {
 
     // Без мипмапов: их генерация каждый кадр в 2048 (×2 зеркала) — чистая
     // пропускная способность в тепло. Трилинейный без мипов невозможен,
-    // поэтому пара — билинейный фильтр (зеркала мелкие, бочка всё равно давит).
+    // поэтому пара — билинейный фильтр (зеркала мелкие, всё равно давит).
     const tex = new BABYLON.RenderTargetTexture("mirrorTex_" + sides[i], mirrorRes(), scene, false);
     tex.activeCamera = cam;
     tex.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
@@ -555,15 +547,14 @@ function setupMirrors(opts) {
     tex.renderList = MIRROR_NONE;
 
     const mat = new BABYLON.ShaderMaterial("mirrorMat_" + sides[i], scene,
-      { vertex: "convexMirror", fragment: "convexMirror" },
+      { vertex: "flatMirror", fragment: "flatMirror" },
       {
         attributes: ["position", "uv"],
-        uniforms: ["world", "worldViewProjection", "reflectionMatrix", "distortK", "spread", "foot", "edgeColor"],
+        uniforms: ["world", "worldViewProjection", "reflectionMatrix", "spread", "foot", "edgeColor"],
         samplers: ["mirrorSampler"],
       });
     mat.setTexture("mirrorSampler", tex);
-    mat.setFloat("distortK", MIRROR_DISTORT_K);
-    mat.setFloat("spread", 3);   // перезапишет applyMirrorView() ниже
+    mat.setFloat("spread", 1);
     mat.setVector3("foot", BABYLON.Vector3.Zero());
     mat.setColor3("edgeColor", new BABYLON.Color3(0.02, 0.02, 0.03));
     // стекло модели одностороннее и смотрит назад, поэтому в салоне мы видим
@@ -572,15 +563,12 @@ function setupMirrors(opts) {
 
     mirrorPlates.add(p.mesh);
     const side = p.center.x < 0 ? "right" : "left";
-    // точка стекла со сдвигом наружу от центра авто — константа кузова
-    const gpt = p.center.clone();
-    gpt.x += (p.center.x < 0 ? MIRROR_GLASS_OUT : -MIRROR_GLASS_OUT);
     const entry = {
       mesh: p.mesh, tex, mat, cam,
       srcMat: p.mesh.material, srcVC: p.mesh.useVertexColors,
       side,
       center: p.center.clone(),
-      gptLocal: gpt, dirLocal: new BABYLON.Vector3(0, 0, 1),
+      gptLocal: p.center.clone(), dirLocal: new BABYLON.Vector3(0, 0, 1),
       glassHalf: 0.09,   // половина ширины стекла в кузове, м (замер ниже)
       // свои объекты под uniform-ы: общие темпы на всех записях приводили к
       // тому, что оба зеркала семплировали по матрице последнего (левого)
@@ -605,8 +593,8 @@ function setupMirrors(opts) {
     }
   }
   applyMirrorView();
-  // Вырезаем ровно те детали, что перекрывают обзор: из номинальной точки
-  // камеры трассируем сетку лучей через зону стекла; всё своё, во что упёрлись
+  // Вырезаем ровно те детали, что перекрывают обзор: из точки камеры
+  // трассируем сетку лучей через зону стекла; всё своё, во что упёрлись
   // в пределах полметра за стеклом, — из отражений вон (корпус зеркала,
   // кромка двери вокруг стекла). Остальное железо и мир остаются видимыми.
   mirrorNearMeshes = new Set();
@@ -622,31 +610,31 @@ function setupMirrors(opts) {
       const dout = BABYLON.Vector3.TransformNormal(e.dirLocal, rwm);
       dout.normalize();
       const campos = gw.subtract(dout.scale(MIRROR_CAM_OFFSET));
-        const cg = BABYLON.Vector3.Distance(campos, gw);
-        // базис в плоскости стекла для сетки лучей
-        const lat = BABYLON.Vector3.Cross(dout, upW);
-        if (lat.lengthSquared() < 1e-6) lat.set(1, 0, 0);
-        lat.normalize();
-        const ver = BABYLON.Vector3.Cross(lat, dout);
-        ver.normalize();
-        const offs = [[0, 0]];
-        for (let k = 0; k < 4; k++) {
-          const a = k / 4 * Math.PI * 2;
-          offs.push([Math.cos(a) * 0.03, Math.sin(a) * 0.03]);
-        }
-        for (const [oa, ob] of offs) {
-          const tgt = gw.add(lat.scale(oa)).add(ver.scale(ob));
-          const dir = tgt.subtract(campos);
-          dir.normalize();
-          const ray = new BABYLON.Ray(campos.clone(), dir.clone(), cg + 0.6);
-          const hits = scene.multiPickWithRay(ray, () => true) || [];
-          for (const h of hits) {
-            const m = h.pickedMesh;
-            if (m && carSet.has(m) && !mirrorPlates.has(m) && h.distance < cg + 0.6)
-              mirrorNearMeshes.add(m);
-          }
+      const cg = BABYLON.Vector3.Distance(campos, gw);
+      // базис в плоскости стекла для сетки лучей
+      const lat = BABYLON.Vector3.Cross(dout, upW);
+      if (lat.lengthSquared() < 1e-6) lat.set(1, 0, 0);
+      lat.normalize();
+      const ver = BABYLON.Vector3.Cross(lat, dout);
+      ver.normalize();
+      const offs = [[0, 0]];
+      for (let k = 0; k < 4; k++) {
+        const a = k / 4 * Math.PI * 2;
+        offs.push([Math.cos(a) * 0.03, Math.sin(a) * 0.03]);
+      }
+      for (const [oa, ob] of offs) {
+        const tgt = gw.add(lat.scale(oa)).add(ver.scale(ob));
+        const dir = tgt.subtract(campos);
+        dir.normalize();
+        const ray = new BABYLON.Ray(campos.clone(), dir.clone(), cg + 0.6);
+        const hits = scene.multiPickWithRay(ray, () => true) || [];
+        for (const h of hits) {
+          const m = h.pickedMesh;
+          if (m && carSet.has(m) && !mirrorPlates.has(m) && h.distance < cg + 0.6)
+            mirrorNearMeshes.add(m);
         }
       }
+    }
   }
   refreshMirrorList(true);
   setMirrorsActive(CAR.mode === 1);
@@ -674,10 +662,6 @@ function mirrorTunables() {
   return {
     res: MIRROR_RES,
     fovDeg: Math.round(MIRROR_VIEW_DEG),
-    distortK: MIRROR_DISTORT_K,
-    spread: mirrorEntries.length && mirrorEntries[0].viewSpread
-      ? +mirrorEntries[0].viewSpread.toFixed(2) : 3,
-    camOffset: MIRROR_CAM_OFFSET,
   };
 }
 // Видимый угол V задаёт spread (угол = spread × угловой размер стекла),
@@ -694,34 +678,12 @@ function applyMirrorView() {
   for (const e of mirrorEntries) {
     const alpha = Math.atan((e.glassHalf || 0.09) / MIRROR_CAM_OFFSET);
     const spread = tanHalfV / Math.tan(alpha);
-    e.viewSpread = spread;
     e.cam.fov = fov;
     e.mat.setFloat("spread", spread);
   }
 }
-// Применить бочку ко всем зеркалам (кадр подхватит сам).
-function applyMirrorTunables() {
-  for (const e of mirrorEntries) {
-    e.mat.setFloat("distortK", MIRROR_DISTORT_K);
-  }
-}
 function setMirrorFovDeg(deg) {
   MIRROR_VIEW_DEG = Math.min(60, Math.max(12, Math.round(deg)));
-  applyMirrorView();
-}
-function setMirrorDistortK(k) {
-  MIRROR_DISTORT_K = k;
-  applyMirrorTunables();
-}
-function setMirrorSpread(s) {
-  // Совместимость: разлёт отдельно больше не крутится (его задаёт угол),
-  // пересчитываем угол из разлёта по первому стеклу.
-  const e0 = mirrorEntries[0];
-  const alpha = Math.atan(((e0 && e0.glassHalf) || 0.09) / MIRROR_CAM_OFFSET);
-  setMirrorFovDeg(2 * Math.atan(s * Math.tan(alpha)) * 180 / Math.PI);
-}
-function setMirrorCamOffset(m) {
-  MIRROR_CAM_OFFSET = m;   // угол держим: spread/FOV пересчитать под новый вынос
   applyMirrorView();
 }
 // Разрешение: текстуру проще пересоздать, чем тянуть. Состояние зеркал
