@@ -343,7 +343,7 @@ const ENV_URL = "https://assets.babylonjs.com/environments/environmentSpecular.e
 // lowerRadiusLimit, а обращение к const до инициализации уронило бы страницу.
 // Салон ограничен углом обзора по вертикали, остальные виды — дистанцией;
 // свободная камера берёт те же границы из RadiusLimit.
-const CAM_FOV_MIN = 0.7;                        // 40°  — узкий обзор, приближение
+const CAM_FOV_MIN = 20 * Math.PI / 180;           // 20°  — узкий обзор, приближение
 const CAM_FOV_MAX = 130 * Math.PI / 180;        // 130° — широкий обзор, отдаление
 const CAM_DIST_MIN = 3.2;                       // м, ближе не подъехать
 const CAM_DIST_MAX = 90;                        // м, дальше не отъехать
