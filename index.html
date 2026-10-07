@@ -359,15 +359,14 @@ const LOOK_DRAG_SCALE = 1;
 
 const canvas = document.getElementById("view");
 
-// Мобила: высокий DPR жжёт тайловый GPU — режем кап именно там, десктоп не трогаем.
-// Сглаживание оставлено включённым везде: без MSAA картинка сыплется лесенками.
+// isMobile остался только для фильтрации зеркал (mirror.js); качество везде как на ПК.
 const isMobile = ((window.Telegram && window.Telegram.WebApp && /ios|android/i.test(window.Telegram.WebApp.platform || ""))) ||
   (window.matchMedia && window.matchMedia("(pointer:coarse)").matches) ||
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
 const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:false, stencil:false }, true);
-// Кап DPR: десктоп до 1.5× CSS, мобила до 1.25× (было 1.5 везде)
+// Кап DPR общий: не рендерим выше 1.5× CSS (избегаем 4-9× пикселей)
 const dpr = window.devicePixelRatio || 1;
-const capped = Math.min(dpr, isMobile ? 1.25 : 1.5);
+const capped = Math.min(dpr, 1.5);
 engine.setHardwareScalingLevel(1.0 / capped);
 
 // ── разрешение фиксировано ─────────────────────────────────────────
@@ -380,12 +379,10 @@ scene.clearColor = new BABYLON.Color4(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1);
 scene.useRightHandedSystem = false;
 
 const ip = scene.imageProcessingConfiguration;
-// ACES на мобиле выключен: лишний fullscreen-проход на каждый пиксель.
-// Без ACES картинка ярче/площе — свет ниже чуть приглушён в компенсацию (см. hemi/sun/env).
-ip.toneMappingEnabled = !isMobile;
+ip.toneMappingEnabled = true;
 ip.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
 ip.exposure = 1.15;
-ip.contrast = isMobile ? 1.0 : 1.08;
+ip.contrast = 1.08;
 
 const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2, Math.PI / 2.6, 9, new BABYLON.Vector3(0, 0.7, 0), scene);
 cam.attachControl(canvas, true);
@@ -398,7 +395,7 @@ cam.pinchDeltaPercentage = 0.02;
 cam.panningSensibility = 0;
 
 const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), scene);
-hemi.intensity = isMobile ? 0.55 : 0.45;
+hemi.intensity = 0.45;
 hemi.groundColor = new BABYLON.Color3(0.16, 0.17, 0.2);
 
 // Солнце сверху. Направление задаёт ход лучей, поэтому у солнца на высоте 79°
@@ -407,7 +404,7 @@ hemi.groundColor = new BABYLON.Color3(0.16, 0.17, 0.2);
 // а боковой уход даёт теням форму и показывает, где у машины крылья.
 const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.15, -1, 0.13), scene);
 sun.position = new BABYLON.Vector3(2, 14, -2);
-sun.intensity = isMobile ? 2.3 : 2.6;
+sun.intensity = 2.6;
 
 
 
@@ -420,7 +417,7 @@ cabin.intensity = 0;
 // environment for PBR reflections (car paint is metallic)
 try {
   scene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(ENV_URL, scene);
-  scene.environmentIntensity = isMobile ? 0.7 : 0.85;
+  scene.environmentIntensity = 0.85;
 } catch (e) {}
  
  // небо: градиентный купол
@@ -870,6 +867,7 @@ for (const s of mirSliders) {
     const e = mirrorSide(s.side);
     // клавиши двигают угол с шагом 0.5°, поэтому и здесь округляем к тому же шагу
     if (e) e[s.field] = deg * Math.PI / 180;
+    if (typeof mirrorRefreshDirs === "function") mirrorRefreshDirs();
     if (typeof mirrorHudShow === "function") mirrorHudShow();
   });
 }
@@ -891,6 +889,7 @@ document.getElementById("setMirReset").addEventListener("click", () => {
     e.yaw = d.yaw;
     e.pitch = d.pitch;
   }
+  if (typeof mirrorRefreshDirs === "function") mirrorRefreshDirs();
   syncSettings();
 });
 
