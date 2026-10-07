@@ -244,6 +244,14 @@ body.playback-active #driveCtrl{display:none !important}
   <h3>Зеркала<button id="mirrorClose" aria-label="Закрыть">✕</button></h3>
 
   <div class="win-sec">
+    <h4>Рендер</h4>
+    <div class="win-btns">
+      <button id="setMirRender">Рендер: вкл</button>
+    </div>
+    <div class="win-note">Полностью выключает обновление зеркал — для замера FPS без них</div>
+  </div>
+
+  <div class="win-sec">
     <h4>Направление</h4>
     <div class="win-row">
       <label>Лев. Г</label>
@@ -762,11 +770,25 @@ function openMirrorWin(o) {
   mirrorWin.classList.toggle("open", o);
   mirrorBackdrop.classList.toggle("open", o);
   mirrorBtn.classList.toggle("on", o);
-  if (o) { syncSettings(); syncMirrorTunables(); }
+  if (o) { syncSettings(); syncMirrorTunables(); syncMirrorRenderBtn(); }
 }
 mirrorBtn.addEventListener("click", () => openMirrorWin(!mirrorWin.classList.contains("open")));
 document.getElementById("mirrorClose").addEventListener("click", () => openMirrorWin(false));
 mirrorBackdrop.addEventListener("click", () => openMirrorWin(false));
+
+// Кнопка on/off рендера зеркал (замер FPS без них). Состояние живёт в mirror.js.
+const setMirRender = document.getElementById("setMirRender");
+function syncMirrorRenderBtn() {
+  if (!setMirRender) return;
+  const on = typeof mirrorRenderEnabled === "undefined" || mirrorRenderEnabled;
+  setMirRender.textContent = on ? "Рендер: вкл" : "Рендер: выкл";
+  setMirRender.classList.toggle("on", on);
+}
+setMirRender.addEventListener("click", () => {
+  const on = typeof mirrorRenderEnabled !== "undefined" && mirrorRenderEnabled;
+  if (typeof setMirrorRenderEnabled === "function") setMirrorRenderEnabled(!on);
+  syncMirrorRenderBtn();
+});
 
 const setMirRes = document.getElementById("setMirRes");
 const setMirResV = document.getElementById("setMirResV");
@@ -1684,6 +1706,7 @@ function debugTick(rawDt) {
   let mir = "?";
   try { mir = (typeof mirrorActive !== "undefined" && mirrorActive) ? "on" : "off"; } catch (e) {}
   try { if (typeof mirrorIdlePaused !== "undefined" && mirrorIdlePaused) mir += "(пауза)"; } catch (e) {}
+  try { if (typeof mirrorRenderEnabled !== "undefined" && !mirrorRenderEnabled) mir += "(рендер выкл)"; } catch (e) {}
   dbgEl.textContent =
     "fps " + dbgFps.toFixed(0) +
     " | meshes " + scene.meshes.length +

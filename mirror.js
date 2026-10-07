@@ -282,7 +282,8 @@ function setMirrorsActive(on) {
         const i = glassOff.indexOf(e.mesh);
         if (i >= 0) glassOff.splice(i, 1);
       }
-      mirrorAttachTex(e);   // обратно в конвейер: список + камера + renderList
+      // Рендер могут выключить из окна зеркал — тогда не прицепляем.
+      if (mirrorRenderEnabled) mirrorAttachTex(e);   // обратно в конвейер: список + камера + renderList
     } else {
       e.mesh.material = e.srcMat;
       e.mesh.useVertexColors = e.srcVC;
@@ -300,6 +301,23 @@ function setMirrorsActive(on) {
 let mirrorIdlePaused = false;
 let mirrorIdleSig = null;
 let mirrorIdleFrames = 0;
+// Ручной выключатель рендера из окна зеркал (для замера FPS без них).
+// В отличие от паузы простоя — стоит, пока пользователь не включит обратно.
+let mirrorRenderEnabled = true;
+function setMirrorRenderEnabled(on) {
+  mirrorRenderEnabled = !!on;
+  mirrorIdleSig = null; mirrorIdleFrames = 0;
+  if (!mirrorRenderEnabled) {
+    for (const e of mirrorEntries) mirrorDetachTex(e);
+    mirrorIdlePaused = true;
+  } else {
+    mirrorIdlePaused = false;
+    if (mirrorActive) {
+      for (const e of mirrorEntries) mirrorAttachTex(e);
+      refreshMirrorList(true);
+    }
+  }
+}
 function mirrorStateSig() {
   const p = CAR.root.position;
   let s = p.x.toFixed(4) + "," + p.y.toFixed(4) + "," + p.z.toFixed(4)
@@ -315,6 +333,7 @@ function mirrorStateSig() {
 
 function tickMirrors() {
   if (!mirrorActive || !mirrorEntries.length) return;
+  if (!mirrorRenderEnabled) return;   // выключены из настроек: стоят отцепленными, делать нечего
   const sig = mirrorStateSig();
   if (sig === mirrorIdleSig) {
     mirrorIdleFrames++;
