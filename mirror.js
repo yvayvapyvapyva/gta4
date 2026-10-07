@@ -24,6 +24,10 @@ let MIRROR_DISTORT_K = 0.35;     // сила бочкообразной дист
 // applyMirrorView), а крутить его напрямую было бесполезно: угол стоял,
 // менялась только резкость.
 let MIRROR_VIEW_DEG = 24;
+// Запас FOV поверх видимого угла: горизонталь камеры жмётся аспектом
+// канваса (RTT делит аспект с окном), добирается в tickMirrors под текущий
+// аспект — см. там. База 2.0 держит аспекты до ~0.5 без адаптации.
+const MIRROR_FOV_MARGIN = 2.0;
 let MIRROR_CAM_OFFSET = 1.3;     // камера — на продолжении отражённого луча за стеклом, м
 const MIRROR_GLASS_OUT = 0.05;   // сдвиг точки стекла наружу от центра авто, м
 // Выключена (1): зеркала мелкие, картинка давится бочкой шейдера —
@@ -324,13 +328,25 @@ function setMirrorRenderEnabled(on) {
     }
   }
 }
+// Аспект буфера движка (= аспект канваса): его же делят камеры зеркал,
+// поэтому горизонталь их FOV жмётся им же.
+function mirrorAspect() {
+  try {
+    const eng = scene.getEngine();
+    const w = eng.getRenderWidth(), h = eng.getRenderHeight();
+    if (w > 0 && h > 0) return w / h;
+  } catch (e) {}
+  return 1;
+}
 function mirrorStateSig() {
   const p = CAR.root.position;
   let s = p.x.toFixed(4) + "," + p.y.toFixed(4) + "," + p.z.toFixed(4)
     + "|" + CAR.yaw.toFixed(5)
     // поворотники в зеркалах не рисуются (кузов вырезан, кроме дверей),
     // поэтому их фаза пробуждение не триггерит
-    + "|" + MIRROR_RES + "," + MIRROR_VIEW_DEG + "," + MIRROR_DISTORT_K + "," + MIRROR_CAM_OFFSET;
+    + "|" + MIRROR_RES + "," + MIRROR_VIEW_DEG + "," + MIRROR_DISTORT_K + "," + MIRROR_CAM_OFFSET
+    // ресайз окна меняет покрытие RTT — будимся и под него
+    + "|" + mirrorAspect().toFixed(3);
   try { s += "|" + ((typeof xrayOn !== "undefined" && xrayOn) ? 1 : 0); } catch (e) {}
   s += "|" + scene.meshes.length;
   for (const e of mirrorEntries) s += "|" + e.yaw.toFixed(4) + "," + e.pitch.toFixed(4);
@@ -379,6 +395,16 @@ function tickMirrors() {
   // матрица корня пересчитывается при отрисовке, а мы читаем её до scene.render()
   root.computeWorldMatrix(true);
   const wm = root.getWorldMatrix();
+  // Узкий экран: горизонталь зеркальных камер ужата аспектом, фиксированного
+  // запаса не хватает на любой аспект. Расширяем FOV на 1/min(1,aspect) —
+  // тогда покрытие по горизонтали всегда как у базового, и выборка шейдера
+  // не уходит за край текстуры. На широком экране множитель 1 — как было.
+  {
+    const asp = mirrorAspect() || 1;
+    const need = Math.tan(MIRROR_VIEW_DEG * Math.PI / 360) * MIRROR_FOV_MARGIN / Math.min(1, asp);
+    const want = Math.min(140 * Math.PI / 180, Math.max(15 * Math.PI / 180, 2 * Math.atan(need)));
+    for (const e of mirrorEntries) if (Math.abs(e.cam.fov - want) > 1e-4) e.cam.fov = want;
+  }
   for (const e of mirrorEntries) {
     // точка стекла и направление — константы кузова: в мир одним преобразованием.
     // Камера стоит на продолжении луча ЗА стеклом (со стороны водителя) и смотрит
@@ -657,12 +683,14 @@ function mirrorTunables() {
 // Видимый угол V задаёт spread (угол = spread × угловой размер стекла),
 // а FOV лишь подгоняется под конус выборки, чтобы тексели не тратились
 // впустую и не было clamp-мазни по краям. Формулы — обращение школьной
-// развёртки шейдера: tan(V/2) = spread·tan α; FOV = V × запас 1.25.
+// развёртки шейдера: tan(V/2) = spread·tan α; FOV = V × запас.
+// Это базовый FOV под широкий экран; под узкий tickMirrors расширяет его
+// ещё на 1/min(1,aspect), иначе шейдер уходит за [0,1] и clamp тянет край.
 function applyMirrorView() {
   const halfV = MIRROR_VIEW_DEG * Math.PI / 360;
   const tanHalfV = Math.tan(halfV);
   const fov = Math.min(140 * Math.PI / 180, Math.max(15 * Math.PI / 180,
-    2 * Math.atan(tanHalfV * 1.25)));
+    2 * Math.atan(tanHalfV * MIRROR_FOV_MARGIN)));
   for (const e of mirrorEntries) {
     const alpha = Math.atan((e.glassHalf || 0.09) / MIRROR_CAM_OFFSET);
     const spread = tanHalfV / Math.tan(alpha);
