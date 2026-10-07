@@ -400,8 +400,10 @@ function qualityMeter(rawDt) {
   if (fps < 45 && qualityScale < 2) {
     qualityScale = Math.min(2, qualityScale + 0.25);
     applyQuality();
-  } else if (fps > 57 && qualityScale > qualityMin) {
-    qualityScale = Math.max(qualityMin, qualityScale - 0.25);
+  } else if (fps > 57 && qualityScale > 1) {
+    // Вверх — только до 1: ниже (суперсемплинг к нативному DPR) греет,
+    // туда пускаем лишь вручную через «Высокое» (qualityMin).
+    qualityScale = Math.max(1, qualityScale - 0.25);
     applyQuality();
   }
 }
@@ -1661,6 +1663,33 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
 });
 
 let last = performance.now();
+// ── debug overlay (?debug=1): счётчики сцены для ловли утечек ────────
+// Ничего не чинит, только показывает: если meshes/tex/rtt стоят на месте,
+// утечки нет — греет чистая нагрузка GPU. Смотреть в салоне на месте 1-2 мин.
+const DEBUG_OVERLAY = new URLSearchParams(location.search).has("debug");
+let dbgEl = null, dbgAcc = 0, dbgFrames = 0, dbgFps = 0;
+if (DEBUG_OVERLAY) {
+  dbgEl = document.createElement("div");
+  dbgEl.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:50;pointer-events:none;font:11px/1.5 monospace;color:#0f0;background:rgba(0,0,0,.65);padding:6px 8px;border-radius:6px;white-space:pre;";
+  document.body.appendChild(dbgEl);
+}
+function debugTick(rawDt) {
+  if (!dbgEl) return;
+  dbgFrames++;
+  dbgAcc += rawDt;
+  if (dbgAcc < 0.5) return;
+  dbgFps = dbgFrames / dbgAcc;
+  dbgFrames = 0; dbgAcc = 0;
+  let mir = "?";
+  try { mir = (typeof mirrorActive !== "undefined" && mirrorActive) ? "on" : "off"; } catch (e) {}
+  dbgEl.textContent =
+    "fps " + dbgFps.toFixed(0) +
+    " | meshes " + scene.meshes.length +
+    " | active " + scene.getActiveMeshes().length +
+    " | rtt " + scene.customRenderTargets.length +
+    " | tex " + scene.textures.length +
+    "\nmirror " + mir + " | mode " + CAR.mode + " | q " + qualityScale.toFixed(2);
+}
 const FRAME_MIN_MS = 1000 / 60;   // кап 60fps: на 120Гц-экранах режем работу вдвое
 engine.runRenderLoop(() => {
   const now = performance.now();
@@ -1690,6 +1719,7 @@ engine.runRenderLoop(() => {
     }
   }
   scene.render();
+  debugTick(rawDt);
 });
 </script>
 <script src="default-map.js"></script>
