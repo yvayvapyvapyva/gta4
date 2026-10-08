@@ -1,8 +1,8 @@
-// replay.js — запись и воспроизведение езды (детерминированный реплей)
+// replay.js — запись и воспроизведение езды (кинематический реплей:
+// поза телепортируется из записи, физика в воспроизведении не считается)
 // Подключается после drive-control.js, использует глобальные: CAR, keys, drive, ready, scene
 
-const REPLAY_TICK = 1 / 60; // фиксированный таймстеп записи (60 Гц)
-const REPLAY_FIXED_DT = REPLAY_TICK; // используем фиксированный dt для воспроизведения
+const REPLAY_TICK = 1 / 60; // частота кадров записи (60 Гц)
 
 let isRecording = false;
 let isPlaying = false;
@@ -152,9 +152,10 @@ function startPlayback() {
   isPaused = false;
   replayIndex = 0;
   replayTime = 0;
-  // Сброс машины в начальное состояние реплея
+  // Сброс машины в начальное состояние реплея (поза + камера + поворотники)
   const first = replayBuffer[0];
   resetCarToFrame(first);
+  if (CAR.root) applyReplayFrame(first); // до загрузки модели — только буфер, поза встанет в первом тике
   updateReplayMessages(0);
   showPlaybackUI();
   console.log('[Replay] Playback started');
@@ -168,9 +169,8 @@ function stopPlayback() {
   replayTime = 0;
   hidePlaybackUI();
   hideReplayMessages();
-  // Сбрасываем входы реплея, иначе машина продолжает ехать сама:
-  // applyReplayFrame кладёт газ в touchThrottle, а ручник — в _replayHandbrake,
-  // и без сброса drive() после выхода из реплея видит «нажатый газ».
+  // Машина остаётся в финальной позе и стоит: входы в кинематике не используются,
+  // сброс ниже — страховка от остатков прошлых версий (газ/ручник из кадров).
   window._replayHandbrake = undefined;
   if (typeof touchThrottle !== 'undefined') touchThrottle = 0;
   if (typeof touchSteerEnabled !== 'undefined') touchSteerEnabled = false;
@@ -181,16 +181,11 @@ function stopPlayback() {
 
 let isPaused = false;
 
-// Пауза/возобновление
+// Пауза/возобновление (часы стенные и на паузе стоят — ресинк не нужен)
 function togglePlaybackPause() {
   if (!isPlaying && !isPaused) return;
   isPaused = !isPaused;
   updatePauseButton();
-  if (!isPaused) {
-    // возобновляем — сбрасываем replayTime к текущему кадру, чтобы не было скачка
-    const frame = replayBuffer[replayIndex];
-    if (frame) replayTime = frame.t;
-  }
 }
 function updatePauseButton() {
   const btn = document.getElementById('playbackPause');
@@ -209,11 +204,11 @@ function hidePlaybackUI() {
   if (ui) { ui.hidden = true; document.body.classList.remove('playback-active'); }
 }
 
-// Обёртка над replayTick с учётом паузы
-function replayTickWithPause(dt) {
+// Обёртка над replayTick с учётом паузы (часы — стенные, см. replayTick)
+function replayTickWithPause(rawDt) {
   if (!isPlaying && !isPaused) return false;
   if (isPaused) return true; // просто ждём
-  return replayTick(dt);
+  return replayTick(rawDt);
 }
 
 // Инициализация кнопок playback UI
@@ -230,13 +225,10 @@ if (document.readyState === 'loading') {
   initPlaybackUI();
 }
 
-// Применить кадр реплея к машине (вызывается в drive() вместо чтения keys)
+// Состояние кадра без входов: поворотники, камера, рентген.
+// Входов (газ/ручник) в кинематике нет: поза телепортируется из записи,
+// физика в воспроизведении не считается. CAR.steer ставит resetCarToFrame.
 function applyReplayFrame(frame) {
-  // Входы
-  touchThrottle = frame.throttle;
-  CAR.steer = frame.steer;
-  // handbrake не сохраняем в CAR напрямую — нужен флаг для drive()
-  window._replayHandbrake = frame.handbrake;
   blinkerLeft = !!frame.blinkL;
   blinkerRight = !!frame.blinkR;
   // Камера
@@ -303,33 +295,86 @@ function setCarYawQuat() {
     CAR.root.rotationQuaternion);
 }
 
-// Тик воспроизведения — вызывать в начале drive(dt)
-// Используем фиксированный таймстеп для детерминированности
-function replayTick(dt) {
+// Тик воспроизведения — вызывать в начале drive(dt, rawDt).
+// Кинематика: часы стенные (rawDt без клампа — темп реальный на любом fps),
+// поза — интерполяция соседних кадров по t. Просадки дают гладкость,
+// а не расхождение: физика не считается, входы не нужны.
+function replayTick(rawDt) {
   if (!isPlaying || !replayBuffer.length) return false; // false = не в воспроизведении
 
-  // Фиксированный шаг физики (как при записи 60 Гц)
-  replayTime += REPLAY_FIXED_DT;
-  const targetTime = replayBuffer[replayIndex]?.t || 0;
+  replayTime += (isFinite(rawDt) && rawDt > 0) ? rawDt : REPLAY_TICK;
+  const last = replayBuffer[replayBuffer.length - 1];
 
-  // Если опередили запись — ждём (не должно случиться при фиксированном шаге)
-  if (replayTime < targetTime - 0.001) return true;
-
-  // Применяем кадр
-  applyReplayFrame(replayBuffer[replayIndex]);
-  replayIndex++;
-
-  // Конец реплея
-  if (replayIndex >= replayBuffer.length) {
+  // Конец реплея — встаём точно в последний кадр
+  if (replayTime >= last.t) {
+    applyKinematicFrame(last.t);
+    updateReplayMessages(last.t);
     stopPlayback();
     return false;
   }
+  applyKinematicFrame(replayTime);
   updateReplayMessages(replayTime);
   return true;
 }
+
+// Телепорт в момент t: поза — интерполяция соседних кадров,
+// дискретное (поворотники/камера/рентген) — из левого кадра.
+function applyKinematicFrame(t) {
+  const n = replayBuffer.length;
+  const first = replayBuffer[0];
+  if (t <= first.t) { resetCarToFrame(first); applyReplayFrame(first); return; }
+  let lo = 0, hi = n - 1;
+  while (lo + 1 < hi) { const m = (lo + hi) >> 1; if (replayBuffer[m].t <= t) lo = m; else hi = m; }
+  const a = replayBuffer[lo], b = replayBuffer[lo + 1];
+  const span = b.t - a.t;
+  const k = span > 1e-6 ? Math.max(0, Math.min(1, (t - a.t) / span)) : 0;
+  resetCarToFrame({
+    pos: { x: kinLerp(a.pos.x, b.pos.x, k), z: kinLerp(a.pos.z, b.pos.z, k) },
+    yaw: kinLerpAngle(a.yaw, b.yaw, k),
+    v: kinLerp(a.v, b.v, k),
+    steer: kinLerp(a.steer || 0, b.steer || 0, k),
+    vy: 0,
+    groundY: kinLerp(a.groundY ?? 0, b.groundY ?? 0, k),
+    lift: a.lift ?? 0,
+  });
+  applyReplayFrame(a);
+}
+
+const kinLerp = (a, b, k) => a + (b - a) * k;
+// Интерполяция курса по кратчайшей дуге: без wrap разворот через ±π
+// провернул бы машину через весь круг.
+function kinLerpAngle(a, b, k) {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return a + d * k;
+}
+
+// Визуал кинематики за кадр: прокрут от записанной скорости, доворот,
+// руль в салоне, спидометр, следящая камера. Вызывается из drive() вместо физики.
+function kinematicVisualTick(dt) {
+  if (typeof CAR === 'undefined' || !CAR || !CAR.root) return;
+  for (const w of CAR.wheels || []) {
+    w.angle -= CAR.v / CAR.wheelR * dt;
+    w.spin.rotation.x = w.angle;
+    if (w.front) w.steer.rotation.y = CAR.steer;
+  }
+  if (CAR.steerWheel) {
+    CAR.steerWheel.rotationQuaternion = CAR.steerWheelBase.multiply(
+      BABYLON.Quaternion.RotationAxis(
+        CAR.steerWheelAxis, -CAR.steer / CAR.maxSteer * Math.PI * 2 * CAR.steerWheelTurns));
+  }
+  try {
+    if (typeof spdEl !== 'undefined' && spdEl) {
+      const kmh = Math.abs(CAR.v) * 3.6;
+      spdEl.firstChild.nodeValue = String(Math.round(kmh));
+    }
+  } catch (e) {}
+  if (typeof editCameraTick === 'function') editCameraTick(dt);
+}
 // Хук в drive(): в начале функции добавить
-// if (isPlaying) { if (!replayTick(dt)) return; /* дальше идёт физика с уже подставленными входами */ }
-// И в месте чтения handbrake: использовать window._replayHandbrake вместо keys.Space
+// if (window.Replay?.isPlaying?.() && replayTickWithPause(rawDt)) { kinematicVisualTick(dt); return; }
+// Чтение ручника через window._replayHandbrake больше не нужно: входов в реплее нет.
 
 // Экспорт
 window.Replay = {
@@ -345,7 +390,7 @@ window.Replay = {
   isEditing: () => isEditing,
   getBuffer: () => replayBuffer,
   getMessages: () => replayMessages,
-  FIXED_DT: REPLAY_FIXED_DT
+  kinematicTick: kinematicVisualTick
 };
 
 // localStorage helpers
@@ -576,6 +621,8 @@ function closeReplayEditor() {
   if (el.win) el.win.classList.remove('open');
   if (el.backdrop) el.backdrop.classList.remove('open');
   window._replayHandbrake = undefined;
+  if (typeof touchThrottle !== 'undefined') touchThrottle = 0;
+  if (typeof syncDvThrottle === 'function') syncDvThrottle();
 }
 
 function seekEdit(i) {
@@ -583,7 +630,7 @@ function seekEdit(i) {
   editIndex = Math.max(0, Math.min(replayBuffer.length - 1, Math.round(i)));
   const frame = replayBuffer[editIndex];
   if (!frame) return;
-  // Ставим машину точно в кадр (позиция + входы + камера), физика заморожена
+  // Ставим машину точно в кадр (поза + камера + поворотники), физика заморожена
   resetCarToFrame(frame);
   applyReplayFrame(frame);
   window._replayHandbrake = undefined; // в редакторе ручник не держим

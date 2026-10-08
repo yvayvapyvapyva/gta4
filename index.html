@@ -1161,23 +1161,27 @@ function applySupport() {
   else CAR.root.rotationQuaternion = carQuat.clone();
 }
 
-function drive(dt) {
+function drive(dt, rawDt) {
   // === REPLAY EDITOR: предпросмотр кадра — физика заморожена, только камера ===
   if (typeof isEditing !== 'undefined' && isEditing) {
     if (typeof editCameraTick === 'function') editCameraTick(dt);
     else if (typeof window.Replay?.editTick === 'function') window.Replay.editTick(dt);
     return;
   }
-  // === REPLAY: воспроизведение ===
+  // === REPLAY: кинематическое воспроизведение — телепорт по записи, физики нет ===
   if (typeof replayTickWithPause === 'function' && (window.Replay?.isPlaying?.() || window.Replay?.isPaused?.())) {
-    if (!replayTickWithPause(dt)) {
+    if (!replayTickWithPause(rawDt ?? dt)) {
       // реплей закончился или не активен — продолжаем нормальную езду
     } else if (window.Replay?.isPaused?.()) {
-      // на паузе — пропускаем физику полностью
+      // на паузе поза замирает, камера следует
+      if (typeof editCameraTick === 'function') editCameraTick(dt);
+      else if (typeof window.Replay?.editTick === 'function') window.Replay.editTick(dt);
       return;
     } else {
-      // в режиме воспроизведения входа уже подставлены в applyReplayFrame
-      // запрещаем пользовательский ввод
+      // поза уже в кадре (applyKinematicFrame), обновляем визуал и выходим
+      if (typeof kinematicVisualTick === 'function') kinematicVisualTick(dt);
+      else if (typeof window.Replay?.kinematicTick === 'function') window.Replay.kinematicTick(dt);
+      return;
     }
   }
 
@@ -1746,9 +1750,9 @@ engine.runRenderLoop(() => {
   const dt = Math.min(rawDt, 0.05);
   last = now;
   if (ready) {
-    // Во время реплея используем фиксированный dt для детерминированности
-    const replayFixedDt = (window.Replay?.isPlaying?.() && window.Replay?.FIXED_DT) ? window.Replay.FIXED_DT : dt;
-    drive(replayFixedDt);
+    // Реплей кинематический: часы у него стенные (rawDt), физика не считается —
+    // фиксированный шаг больше не нужен, drive сам разберёт режимы.
+    drive(dt, rawDt);
     // конусы проверяем ПОСЛЕ движения машины — как в simulator2: иначе удар
     // считается по позиции прошлого кадра и на большой скорости конус
     // проскакивает между проверками
