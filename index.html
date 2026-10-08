@@ -57,11 +57,12 @@
 /* Приборные стрелки поворотников: видны только в реплее/редакторе,
    когда тач-панель скрыта. Зелёные, как на панели авто. */
 #turnHud{position:fixed;left:50%;top:calc(10px + var(--tg-top));transform:translateX(-50%);z-index:6;
-  pointer-events:none;display:flex;gap:20px;align-items:center;
-  background:rgba(8,10,14,.72);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:4px 18px;}
+  pointer-events:none;display:flex;gap:12px;align-items:center;
+  background:rgba(8,10,14,.72);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:4px 12px;}
 #turnHud[hidden]{display:none;}
-#turnHud span{font-size:26px;line-height:1.2;color:#223526;transition:color .08s;}
-#turnHud span.lit{color:#35ff62;text-shadow:0 0 12px rgba(53,255,98,.9);}
+#turnHud span{display:flex;align-items:center;}
+#turnHud span svg{width:26px;height:26px;fill:#223526;transition:fill .08s;}
+#turnHud span.lit svg{fill:#35ff62;filter:drop-shadow(0 0 6px rgba(53,255,98,.9));}
 
   /* ── кнопка настроек и окно (как в первом приложении) ──────────── */
   /* Шестерёнка живёт в правом верхнем углу: там пусто (HUD и камера слева
@@ -230,7 +231,7 @@ body.edit-active #driveCtrl{display:none !important}
   <div id="spd">0<small>км/ч</small></div>
 </div>
 <div id="toast" hidden></div>
-<div id="turnHud" hidden><span id="turnL">◀</span><span id="turnR">▶</span></div>
+<div id="turnHud" hidden><span id="turnL"><svg viewBox="2 0 24 24" aria-hidden="true"><rect x="14" y="7.5" width="12" height="9" rx="2"/><path d="M14 2 L2 12 L14 22 Z"/></svg></span><span id="turnR"><svg viewBox="14 0 24 24" aria-hidden="true"><rect x="14" y="7.5" width="12" height="9" rx="2"/><path d="M26 2 L38 12 L26 22 Z"/></svg></span></div>
 <div id="loader">
   <div class="box">
     <div class="t">ЗАГРУЗКА</div>
