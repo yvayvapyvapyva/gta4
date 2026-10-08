@@ -158,7 +158,7 @@ if(dvXray)dvXray.addEventListener('click',()=>{
 const BLINK=0.8, BLINK_DUTY=0.4;
 let blinkT=0, blinkOn=false;
 let indSides=null;
-const AMBER=new BABYLON.Color3(2.5, 1.2, 0.1);  // ярче и насыщеннее
+const AMBER=new BABYLON.Color3(4.0, 1.8, 0.15);  // эмиссия с запасом: дальний мелкий фонарь живёт только пересветом
 
 // GlowLayer — полноэкранные проходы каждый кадр, даже когда нечего светить.
 // Поэтому слой включён только на время активного поворотника снаружи:
@@ -276,11 +276,12 @@ window.setupIndicators=function(meshes){
   }
   indSides={left,right};
   // GlowLayer для индикаторов: включаем только сами фонари.
-  // Создаём выключенным и в низком разрешении 256: полноэкранный блюр 512
-  // грел GPU каждый кадр даже с выключенными поворотниками.
+  // Блюр 512 вместо 256 — ореол шире и тянется дальше, мелкий дальний фонарь
+  // даёт заметное пятно, а не точку. Стоит только пока мигает: вне активности
+  // слой целиком выведен из конвейера (syncIndicatorGlow), вхолостую не греет.
   // syncIndicatorGlow включает слой только на время мигания снаружи.
-  window.indicatorGlowLayer = new BABYLON.GlowLayer("indicatorGlow", scene, { mainTextureFixedSize: 256 });
-  window.indicatorGlowLayer.intensity = 3.5;
+  window.indicatorGlowLayer = new BABYLON.GlowLayer("indicatorGlow", scene, { mainTextureFixedSize: 512 });
+  window.indicatorGlowLayer.intensity = 6.0;
   indicatorGlowState=null;
   window.indicatorGlowLayer.customEmissiveColorSelector = (mesh, subMesh, material, result) => {
     // в салоне (CAR.mode === 1) свечение отключено — не светится сквозь стекло
@@ -289,7 +290,7 @@ window.setupIndicators=function(meshes){
       return;
     }
     if (/indicator/i.test(mesh.name) || /indicator/i.test((mesh.parent && mesh.parent.name) || '')) {
-      result.set(1, 0.6, 0.08);  // более насыщенный янтарный цвет свечения
+      result.set(1.6, 0.9, 0.1);  // янтарь с запасом под дальность
     } else {
       result.set(0, 0, 0);
     }
