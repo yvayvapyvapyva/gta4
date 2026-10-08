@@ -203,16 +203,38 @@ function stopPlayback() {
   if (typeof touchSteerEnabled !== 'undefined') touchSteerEnabled = false;
   if (typeof CAR !== 'undefined' && CAR) { CAR.v = 0; CAR.steer = 0; }
   if (typeof syncDvThrottle === 'function') syncDvThrottle();
+  resetBlinkers();
   console.log('[Replay] Playback stopped');
 }
 
 let isPaused = false;
 
-// Пауза/возобновление (часы стенные и на паузе стоят — ресинк не нужен)
+// Поворотники в исходное: кадры реплея/редактора ставят blinkerLeft/Right,
+// а гасить их по выходу было некому — мигали дальше сами.
+function resetBlinkers() {
+  try {
+    if (typeof blinkerLeft !== 'undefined') blinkerLeft = false;
+    if (typeof blinkerRight !== 'undefined') blinkerRight = false;
+    if (typeof applyBlink === 'function') applyBlink(); // тушит 3D-фонари и glow
+    if (typeof syncBlinkBtns === 'function') syncBlinkBtns(false); // кнопки на панели
+  } catch (e) {}
+}
+
+// Пауза/возобновление (часы стенные и на паузе стоят — ресинк не нужен).
+// На паузе поворотники гаснут; при продолжении ближайший тик вернёт их
+// из кадра (applyReplayFrame) — запоминать сторону не нужно.
 function togglePlaybackPause() {
   if (!isPlaying && !isPaused) return;
   isPaused = !isPaused;
   updatePauseButton();
+  if (isPaused) {
+    try {
+      if (typeof blinkerLeft !== 'undefined') blinkerLeft = false;
+      if (typeof blinkerRight !== 'undefined') blinkerRight = false;
+      if (typeof applyBlink === 'function') applyBlink();
+      if (typeof syncBlinkBtns === 'function') syncBlinkBtns(false);
+    } catch (e) {}
+  }
 }
 function updatePauseButton() {
   const btn = document.getElementById('playbackPause');
@@ -694,6 +716,7 @@ function closeReplayEditor() {
   window._replayHandbrake = undefined;
   if (typeof touchThrottle !== 'undefined') touchThrottle = 0;
   if (typeof syncDvThrottle === 'function') syncDvThrottle();
+  resetBlinkers();
 }
 
 function seekEdit(i) {
