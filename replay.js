@@ -46,6 +46,7 @@ function captureFrame(now) {
     camYaw: r3(CAR.camYaw),
     camPitch: r3(CAR.camPitch),
     camDist: r3(CAR.camDist),
+    camFov: r3(CAR.camFov), // угол обзора салона (зум колесом/щипком/кнопками)
     lookYaw: r3(CAR.lookYaw),
     lookPitch: r3(CAR.lookPitch),
     // полное состояние физики
@@ -290,6 +291,11 @@ function applyReplayFrame(frame) {
   CAR.lookPitch = frame.lookPitch;
   CAR.lookYawTarget = frame.lookYaw;
   CAR.lookPitchTarget = frame.lookPitch;
+  // Угол обзора салона из записи (зум). Старых записей без поля не трогаем.
+  if (isFinite(frame.camFov)) {
+    if (typeof setCamFov === 'function') setCamFov(frame.camFov);
+    else { CAR.camFov = frame.camFov; }
+  }
   // X-ray режим
   if (typeof xrayOn !== 'undefined' && typeof toggleXray === 'function' && frame.xray !== xrayOn) {
     toggleXray();
