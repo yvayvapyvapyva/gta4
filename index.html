@@ -54,6 +54,14 @@
     border-radius:8px; padding:10px 18px; box-shadow:0 6px 20px rgba(0,0,0,.5);
     opacity:0; transition:opacity .15s, transform .15s; white-space:nowrap; }
   #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+/* Приборные стрелки поворотников: видны только в реплее/редакторе,
+   когда тач-панель скрыта. Зелёные, как на панели авто. */
+#turnHud{position:fixed;left:50%;top:calc(10px + var(--tg-top));transform:translateX(-50%);z-index:6;
+  pointer-events:none;display:flex;gap:20px;align-items:center;
+  background:rgba(8,10,14,.72);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:4px 18px;}
+#turnHud[hidden]{display:none;}
+#turnHud span{font-size:26px;line-height:1.2;color:#223526;transition:color .08s;}
+#turnHud span.lit{color:#35ff62;text-shadow:0 0 12px rgba(53,255,98,.9);}
 
   /* ── кнопка настроек и окно (как в первом приложении) ──────────── */
   /* Шестерёнка живёт в правом верхнем углу: там пусто (HUD и камера слева
@@ -222,6 +230,7 @@ body.edit-active #driveCtrl{display:none !important}
   <div id="spd">0<small>км/ч</small></div>
 </div>
 <div id="toast" hidden></div>
+<div id="turnHud" hidden><span id="turnL">◀</span><span id="turnR">▶</span></div>
 <div id="loader">
   <div class="box">
     <div class="t">ЗАГРУЗКА</div>
@@ -1775,6 +1784,7 @@ engine.runRenderLoop(() => {
     if (objectTick) objectTick(dt);
     if (mirrorTick) mirrorTick();
     if (typeof tickBlink === "function") tickBlink(dt);
+    if (typeof syncTurnHud === "function") syncTurnHud();
     if (typeof tickBlinkSounds === "function") tickBlinkSounds();
     if (typeof syncDvWheel === "function") syncDvWheel();
     // окно открыто — держим его в согласии с тем, что меняли мимо него

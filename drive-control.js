@@ -208,6 +208,22 @@ function syncBlinkBtns(blink){
   if(blkL)blkL.classList.toggle('active',blinkerLeft && blink);
   if(blkR)blkR.classList.toggle('active',blinkerRight && blink);
 }
+// Приборные стрелки поверх картинки: только в реплее/редакторе, где тач-панель
+// скрыта (в обычной езде состояние видно на кнопках ◀ ▶). Мигают в фазе blinkOn.
+function syncTurnHud(){
+  const hud=document.getElementById('turnHud');
+  if(!hud)return;
+  const R=window.Replay;
+  const inReplay=!!R&&!!(R.isPlaying?.()||R.isPaused?.()||R.isEditing?.());
+  // Пилюля видна всё время, пока хоть один поворотник включён
+  // (и в тёмной, и в светлой фазе); гаснет только когда оба выключены.
+  const show=inReplay&&(blinkerLeft||blinkerRight);
+  hud.hidden=!show;
+  if(!show)return;
+  const L=document.getElementById('turnL'),Rr=document.getElementById('turnR');
+  if(L)L.classList.toggle('lit',!!(blinkerLeft&&blinkOn));
+  if(Rr)Rr.classList.toggle('lit',!!(blinkerRight&&blinkOn));
+}
 function toggleBlinkL(){
   if(!ready)return;
   blinkerLeft=!blinkerLeft;if(blinkerLeft)blinkerRight=false;
