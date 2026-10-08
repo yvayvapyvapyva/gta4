@@ -202,12 +202,14 @@ body.edit-active #driveCtrl{display:none !important}
 #replayEditScrub::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;
   background:var(--acc);cursor:pointer;border:2px solid #181b22;}
 #replayEditScrub::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--acc);cursor:pointer;border:2px solid #181b22;}
-.replay-edit-msg{display:flex;gap:8px;align-items:center;padding:8px;border:1px solid rgba(255,255,255,.1);
+.replay-edit-msg{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px;border:1px solid rgba(255,255,255,.1);
   border-radius:8px;margin-bottom:8px;background:rgba(255,255,255,.04);}
-.replay-edit-msg input[type=text]{flex:1;min-width:0;font:inherit;font-size:12.5px;color:var(--fg);
+.replay-edit-msg input[type=text]{flex:1;min-width:120px;font:inherit;font-size:12.5px;color:var(--fg);
   padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;}
 .replay-edit-msg input[type=number]{width:64px;font:inherit;font-size:12.5px;color:var(--fg);
   padding:7px 8px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;}
+.replay-edit-msg select{font:inherit;font-size:12.5px;color:var(--fg);padding:7px 8px;border-radius:8px;
+  background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;max-width:110px;}
 .replay-edit-msg button{flex:0 0 auto;}
 </style>
 </head>
@@ -361,6 +363,7 @@ body.edit-active #driveCtrl{display:none !important}
   <div class="playback-controls">
     <button id="playbackPause" class="playback-btn" aria-label="Пауза">⏸</button>
     <button id="playbackStop" class="playback-btn" aria-label="Остановить">⏹</button>
+    <button id="playbackMute" class="playback-btn" aria-label="Озвучка сообщений" title="Озвучка сообщений">🔊</button>
   </div>
 </div>
 
@@ -369,6 +372,15 @@ body.edit-active #driveCtrl{display:none !important}
   <h3>Сохранённые реплеи<button id="replayClose" aria-label="Закрыть">✕</button></h3>
   <div id="replayList" style="max-height:60vh; overflow-y:auto;"></div>
   <div class="win-note">Клик — воспроизвести. Кнопка ✎ — редактировать.</div>
+</div>
+
+<div id="voiceLoadBackdrop" class="win-backdrop"></div>
+<div id="voiceLoadWin" class="win" style="width:min(300px,90vw);text-align:center">
+  <h3 style="justify-content:center">Загрузка озвучки</h3>
+  <div id="voiceLoadTrack" style="height:6px;background:rgba(255,255,255,.12);border-radius:3px;overflow:hidden">
+    <div id="voiceLoadFill" style="height:100%;width:0%;background:var(--acc);transition:width .2s"></div>
+  </div>
+  <div id="voiceLoadMsg" class="win-note" style="margin-top:8px">Подготовка…</div>
 </div>
 
 <div id="replayEditBackdrop" class="win-backdrop"></div>
@@ -389,6 +401,10 @@ body.edit-active #driveCtrl{display:none !important}
     <div class="win-row" style="margin-top:8px">
       <label style="flex:0 0 auto">Показ, с</label>
       <input type="number" id="replayEditDur" min="0.5" max="60" step="0.5" value="3" style="width:70px;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 8px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
+      <select id="replayEditVoice" title="Голос озвучки" style="font:inherit;font-size:12.5px;color:var(--fg);padding:7px 8px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
+        <option value="command">команда</option>
+        <option value="comment">коммент.</option>
+      </select>
       <button id="replayEditAdd" style="flex:1">＋ Вставить здесь</button>
     </div>
   </div>
@@ -1778,6 +1794,7 @@ engine.runRenderLoop(() => {
 <script src="drive-control.js"></script>
 <script src="sounds.js"></script>
 <script src="replay.js"></script>
+<script src="tts.js"></script>
 <script>
   function resizeEngine(){
     try{

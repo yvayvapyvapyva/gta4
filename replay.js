@@ -113,7 +113,8 @@ function loadReplay(json) {
   return true;
 }
 
-// Нормализация сообщений: только {t, dur, text} с числами и непустым текстом.
+// Нормализация сообщений: только {t, dur, text, voice} с числами и непустым текстом.
+// voice — голос TTS из onepage2: command (Дмитрий) или comment (Светлана).
 function sanitizeMessages(src) {
   if (!Array.isArray(src)) return [];
   const out = [];
@@ -122,7 +123,7 @@ function sanitizeMessages(src) {
     const t = +m.t, dur = +m.dur;
     const text = String(m.text ?? '').slice(0, 200);
     if (!isFinite(t) || !isFinite(dur) || t < 0 || dur <= 0 || !text.trim()) continue;
-    out.push({ t: Math.round(t * 1000) / 1000, dur: Math.min(60, Math.max(0.5, Math.round(dur * 10) / 10)), text: text.trim() });
+    out.push({ t: Math.round(t * 1000) / 1000, dur: Math.min(60, Math.max(0.5, Math.round(dur * 10) / 10)), text: text.trim(), voice: m.voice === 'comment' ? 'comment' : 'command' });
   }
   out.sort((a, b) => a.t - b.t);
   return out;
@@ -143,6 +144,22 @@ function hideReplayMessages() {
   if (el) { el.hidden = true; el.textContent = ''; }
 }
 
+// Озвучка сообщений при воспроизведении: каждое срабатывает один раз
+// в момент активации (время монотонно, повторный проход невозможен).
+// Накладки уходят в очередь tts.js — строго по порядку, без каши.
+const voiceSeen = new Set();
+function voiceTick(t) {
+  if (typeof ttsVoiceOn !== 'undefined' && !ttsVoiceOn) return;
+  if (typeof ttsSpeak !== 'function') return;
+  replayMessages.forEach((m, i) => {
+    if (voiceSeen.has(i)) return;
+    if (t >= m.t && t < m.t + m.dur) {
+      voiceSeen.add(i);
+      try { ttsSpeak(m.voice || 'command', m.text); } catch (e) {}
+    }
+  });
+}
+
 // Начать воспроизведение
 function startPlayback() {
   if (isRecording) stopRecording();
@@ -157,6 +174,14 @@ function startPlayback() {
   resetCarToFrame(first);
   if (CAR.root) applyReplayFrame(first); // до загрузки модели — только буфер, поза встанет в первом тике
   updateReplayMessages(0);
+  // Озвучка: сбрасываем отметки и греем кэш TTS одним батчем на голос —
+  // к моменту показа сообщений аудио уже локально.
+  voiceSeen.clear();
+  try {
+    if (typeof ttsPrefetch === 'function') {
+      ttsPrefetch(replayMessages.map((m) => ({ voice: m.voice || 'command', text: m.text }))).catch(() => {});
+    }
+  } catch (e) {}
   showPlaybackUI();
   console.log('[Replay] Playback started');
 }
@@ -169,6 +194,8 @@ function stopPlayback() {
   replayTime = 0;
   hidePlaybackUI();
   hideReplayMessages();
+  voiceSeen.clear();
+  if (typeof ttsStop === 'function') { try { ttsStop(); } catch (e) {} }
   // Машина остаётся в финальной позе и стоит: входы в кинематике не используются,
   // сброс ниже — страховка от остатков прошлых версий (газ/ручник из кадров).
   window._replayHandbrake = undefined;
@@ -314,6 +341,7 @@ function replayTick(rawDt) {
   }
   applyKinematicFrame(replayTime);
   updateReplayMessages(replayTime);
+  voiceTick(replayTime);
   return true;
 }
 
@@ -558,8 +586,50 @@ function playReplay(name) {
   if (!data) return;
   openReplayList(false);
   window.Replay.loadReplay(data);
-  window.Replay.startPlayback();
-  showToast('Воспроизведение: ' + name);
+  const msgs = (window.Replay.getMessages && window.Replay.getMessages()) || [];
+  const canVoice = typeof ttsPrefetch === 'function' && typeof ttsHas === 'function';
+  // Греть нечего (нет сообщений или всё уже в кэше) — играем сразу без лоадера.
+  const cold = canVoice ? msgs.filter((m) => !ttsHas(m.voice || 'command', m.text)) : [];
+  if (!cold.length) {
+    window.Replay.startPlayback();
+    showToast('Воспроизведение: ' + name);
+    return;
+  }
+  // Сначала грузим всю озвучку с прогрессом — и только потом стартуем,
+  // чтобы не было «текст есть, а голоса нет».
+  openVoiceLoad(true);
+  updateVoiceLoad(0, cold.length);
+  const items = cold.map((m) => ({ voice: m.voice || 'command', text: m.text }));
+  const prefetch = ttsPrefetch(items, (done, total) => updateVoiceLoad(done, total));
+  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('tts timeout')), 25000));
+  Promise.race([prefetch, timeout]).then((stat) => {
+    openVoiceLoad(false);
+    const failed = Math.max(0, (stat && stat.total || 0) - (stat && stat.done || 0));
+    window.Replay.startPlayback();
+    showToast(failed > 0
+      ? 'Озвучка загрузилась частично (' + failed + ' шт.) — остальное текстом'
+      : 'Воспроизведение: ' + name);
+  }).catch(() => {
+    // Офлайн/таймаут: картинку не блокируем — едем с одними субтитрами.
+    openVoiceLoad(false);
+    window.Replay.startPlayback();
+    showToast('Озвучка не загрузилась — только текст');
+  });
+}
+
+// Лоадер предзагрузки озвучки (модалка с прогрессом перед стартом реплея).
+function openVoiceLoad(open) {
+  const w = document.getElementById('voiceLoadWin');
+  const b = document.getElementById('voiceLoadBackdrop');
+  if (w) w.classList.toggle('open', !!open);
+  if (b) b.classList.toggle('open', !!open);
+}
+function updateVoiceLoad(done, total) {
+  const f = document.getElementById('voiceLoadFill');
+  const m = document.getElementById('voiceLoadMsg');
+  const t = Math.max(1, total || 0), d = Math.min(done || 0, t);
+  if (f) f.style.width = (d / t * 100).toFixed(1) + '%';
+  if (m) m.textContent = (total || 0) > 0 ? ('Аудио: ' + d + ' / ' + total) : 'Подготовка…';
 }
 
 // ── Редактор записей ──────────────────────────────────────────────
@@ -583,6 +653,7 @@ function editEls() {
     play: document.getElementById('replayEditPlay'),
     text: document.getElementById('replayEditText'),
     dur: document.getElementById('replayEditDur'),
+    voice: document.getElementById('replayEditVoice'),
     msgs: document.getElementById('replayEditMsgs'),
     count: document.getElementById('replayEditCount'),
   };
@@ -706,6 +777,8 @@ function renderEditMsgs() {
       '<button data-act="goto" title="Перейти к началу (' + m.t.toFixed(1) + ' с)" style="padding:4px 8px">⏵ ' + m.t.toFixed(1) + '–' + end + '</button>' +
       '<input type="text" maxlength="200" value="">' +
       '<input type="number" min="0.5" max="60" step="0.5" title="Длительность показа, с" value="' + m.dur + '">' +
+      '<select data-act="voice" title="Голос озвучки"><option value="command">команда</option><option value="comment">коммент.</option></select>' +
+      '<button data-act="hear" title="Прослушать" style="padding:4px 8px">🔊</button>' +
       '<button data-act="del" title="Удалить" style="padding:4px 8px">✕</button>';
     row.querySelector('input[type=text]').value = m.text;
     row.querySelector('input[type=text]').addEventListener('change', (e) => {
@@ -737,6 +810,20 @@ function renderEditMsgs() {
       renderEditMsgs();
       updateReplayMessages(replayBuffer[editIndex]?.t ?? 0);
     });
+    const voiceSel = row.querySelector('[data-act=voice]');
+    voiceSel.value = m.voice || 'command';
+    voiceSel.addEventListener('change', (e) => {
+      replayMessages[idx].voice = e.target.value === 'comment' ? 'comment' : 'command';
+    });
+    row.querySelector('[data-act=hear]').addEventListener('click', () => {
+      const mm = replayMessages[idx];
+      if (!mm) return;
+      const v = voiceSel.value === 'comment' ? 'comment' : 'command';
+      mm.voice = v;
+      if (typeof ttsPreview === 'function') {
+        try { ttsPreview(v, mm.text); } catch (e) {}
+      } else showToast('Озвучка недоступна (нет tts.js)');
+    });
     el.msgs.appendChild(row);
   });
 }
@@ -745,7 +832,7 @@ function saveReplayEdits() {
   if (!editName) return;
   const data = loadReplayFromStorage(editName);
   if (!data) { showToast('Запись пропала'); return; }
-  data.messages = replayMessages.map(m => ({ t: m.t, dur: m.dur, text: m.text }));
+  data.messages = replayMessages.map(m => ({ t: m.t, dur: m.dur, text: m.text, voice: m.voice || 'command' }));
   if (saveReplayToStorage(editName, data)) showToast('Сохранено: ' + editName);
   else showToast('Ошибка сохранения');
 }
@@ -763,7 +850,8 @@ function initReplayEditor() {
     if (!isFinite(dur)) dur = 3;
     dur = Math.min(60, Math.max(0.5, Math.round(dur * 10) / 10));
     const t = replayBuffer[editIndex]?.t ?? 0;
-    replayMessages.push({ t, dur, text });
+    const voice = el.voice?.value === 'comment' ? 'comment' : 'command';
+    replayMessages.push({ t, dur, text, voice });
     replayMessages.sort((a, b) => a.t - b.t);
     if (el.text) el.text.value = '';
     renderEditMsgs();
