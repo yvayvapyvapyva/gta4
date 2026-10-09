@@ -174,6 +174,9 @@ function startPlayback() {
   const first = replayBuffer[0];
   resetCarToFrame(first);
   if (CAR.root) applyReplayFrame(first); // до загрузки модели — только буфер, поза встанет в первом тике
+  prevRepBlinkL = false;
+  prevRepBlinkR = false;
+  try { replayBlinkEdge(first); } catch (e) {}
   updateReplayMessages(0);
   // Озвучка: сбрасываем отметки и греем кэш TTS одним батчем на голос —
   // к моменту показа сообщений аудио уже локально.
@@ -204,6 +207,8 @@ function stopPlayback() {
   if (typeof touchSteerEnabled !== 'undefined') touchSteerEnabled = false;
   if (typeof CAR !== 'undefined' && CAR) { CAR.v = 0; CAR.steer = 0; }
   if (typeof syncDvThrottle === 'function') syncDvThrottle();
+  prevRepBlinkL = false;
+  prevRepBlinkR = false;
   resetBlinkers();
   console.log('[Replay] Playback stopped');
 }
@@ -394,6 +399,23 @@ function applyKinematicFrame(t) {
     lift: a.lift ?? 0,
   });
   applyReplayFrame(a);
+  replayBlinkEdge(a);
+}
+
+// Фронт включения поворотника в записи: как рычаг в живой езде (toggleBlink
+// сбрасывает blinkT в 0 — вспышка и щелчок сразу), иначе фаза свободная и
+// мигание идёт со сдвигом относительно манёвра: «звук не с видео».
+let prevRepBlinkL = false, prevRepBlinkR = false;
+function replayBlinkEdge(frame) {
+  try {
+    const L = !!frame.blinkL, R = !!frame.blinkR;
+    if ((L && !prevRepBlinkL) || (R && !prevRepBlinkR)) {
+      if (typeof blinkT !== 'undefined') blinkT = 0;
+      if (typeof applyBlink === 'function') applyBlink();
+    }
+    prevRepBlinkL = L;
+    prevRepBlinkR = R;
+  } catch (e) {}
 }
 
 const kinLerp = (a, b, k) => a + (b - a) * k;
@@ -742,6 +764,7 @@ function seekEdit(i) {
   // Ставим машину точно в кадр (поза + камера + поворотники), физика заморожена
   resetCarToFrame(frame);
   applyReplayFrame(frame);
+  try { replayBlinkEdge(frame); } catch (e) {}
   window._replayHandbrake = undefined; // в редакторе ручник не держим
   CAR.v = 0; CAR.vy = 0; // стоим на месте, иначе drive() увёз бы машину
   updateReplayMessages(frame.t);

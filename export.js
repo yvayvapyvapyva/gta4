@@ -36,6 +36,11 @@ let exportDuration = 0;
 let exportLastHudSec = -1;
 let exportSavedScaling = null;
 let exportSavedStyle = null;
+// Плавный старт: первые кадры после ресайза канваса под портрет бывают
+// пустыми/рваными — рекордер стартует после N живых кадров, а не сразу,
+// иначе в начало файла ложится мусор и уползает синхрон.
+let exportWarmLeft = 0;
+const EXPORT_WARM_FRAMES = 3;
 
 function exportSupported() {
   try {
@@ -162,8 +167,8 @@ function exportDrawHud(c) {
   } catch (e) {}
 }
 function exportArrow(c, cx, cy, dir, lit) {
-  // стрелка с древком ~110px: хвостовик + наконечник, как #turnHud
-  const s = 110 / 24; // viewBox 24x24 -> px
+  // стрелка с древком ~64px: хвостовик + наконечник, как #turnHud
+  const s = 64 / 24; // viewBox 24x24 -> px
   c.save();
   c.translate(cx, cy);
   c.scale(dir * s, s);
@@ -178,12 +183,12 @@ function exportArrow(c, cx, cy, dir, lit) {
   c.restore();
 }
 function exportTurnArrows(c, lon, ron) {
-  const cy = 120;
+  const cy = 96;
   c.fillStyle = 'rgba(8,10,14,0.72)';
-  exportRoundRect(c, EXPORT_W / 2 - 170, cy - 70, 340, 140, 24);
+  exportRoundRect(c, EXPORT_W / 2 - 110, cy - 45, 220, 90, 18);
   c.fill();
-  exportArrow(c, EXPORT_W / 2 - 85, cy, -1, lon);
-  exportArrow(c, EXPORT_W / 2 + 85, cy, 1, ron);
+  exportArrow(c, EXPORT_W / 2 - 55, cy, -1, lon);
+  exportArrow(c, EXPORT_W / 2 + 55, cy, 1, ron);
 }
 
 // ── звук в поток ────────────────────────────────────────────────────
@@ -285,7 +290,8 @@ function exportBegin(name) {
   }
   exportRecorder.ondataavailable = (e) => { if (e.data && e.data.size) exportChunks.push(e.data); };
   exportRecorder.onstop = exportDownload;
-  exportRecorder.start(1000);
+  // start() — не здесь, а из exportTick после прогревочных кадров
+  exportWarmLeft = EXPORT_WARM_FRAMES;
   exportT0 = performance.now();
   exportActive = true;
   showExportHud(true);
@@ -302,6 +308,15 @@ function exportTick() {
   } catch (e) { return; }
   exportDrawHud(exportCtx2d);
   updateExportHud();
+  // Плавный старт рекордера: ждём живых кадров уже идущего воспроизведения.
+  if (exportRecorder && exportRecorder.state === 'inactive' && !exportFinalizing) {
+    try {
+      if (window.Replay.isPlaying() && !window.Replay.isPaused()) {
+        if (exportWarmLeft > 0) exportWarmLeft--;
+        else exportRecorder.start(1000);
+      }
+    } catch (e) {}
+  }
   if (!window.Replay.isPlaying() && !window.Replay.isPaused() && !exportFinalizing) {
     // лента кончилась (stopPlayback уже отработал) — хвост на звук и финал
     exportFinalizing = true;

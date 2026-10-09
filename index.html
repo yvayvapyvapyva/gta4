@@ -1815,7 +1815,7 @@ engine.runRenderLoop(() => {
     // проскакивает между проверками
     if (objectTick) objectTick(dt);
     if (mirrorTick) mirrorTick();
-    if (typeof tickBlink === "function") tickBlink(dt);
+    if (typeof tickBlink === "function") tickBlink(rawDt); // фаза — стенные часы: под просадкой fps ритм не тянется
     if (typeof syncTurnHud === "function") syncTurnHud();
     if (typeof tickBlinkSounds === "function") tickBlinkSounds();
     if (typeof syncDvWheel === "function") syncDvWheel();

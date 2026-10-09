@@ -17,6 +17,7 @@ const ttsCache = new Map(); // "voice\ntext" -> blob-URL mp3
 let ttsAudio = null;
 let ttsQueue = [];   // [{voice, text}] — озвучиваем строго по очереди, без каши
 let ttsBusy = false;
+let ttsCurSrc = null; // текущий BufferSource (быстрый путь), чтобы глушить по стопу
 let ttsVoiceOn = true;
 try { ttsVoiceOn = localStorage.getItem('gta4_voice_on') !== '0'; } catch (e) {}
 
@@ -113,7 +114,36 @@ async function ttsPrefetch(items, onProgress) {
   for (const v of Object.keys(byVoice)) {
     await ttsEnsure(v, [...byVoice[v]], (ok) => { done += ok; report(); });
   }
+  // Преддекодируем всё скачанное в AudioBuffer: тогда play() в момент
+  // срабатывания сообщения стартует мгновенно, без задержки декодирования
+  // mp3 (именно она давала «голос запаздывает за текстом» в начале).
+  try { await ttsDecodeCached(items); } catch (e) {}
   return { done, total };
+}
+
+// Декодированные буферы: key voice\ntext -> AudioBuffer. Декодирование идёт
+// параллельно и работает даже при suspended-контексте.
+const ttsDecoded = new Map();
+async function ttsDecodeCached(items) {
+  let ctx = null;
+  try { if (typeof ensureAudioContext === 'function') ctx = ensureAudioContext(); } catch (e) {}
+  if (!ctx || !ctx.decodeAudioData) return;
+  const jobs = [];
+  for (const it of items || []) {
+    if (!it || !it.text) continue;
+    const v = it.voice === 'comment' ? 'comment' : 'command';
+    const key = ttsKey(v, it.text);
+    if (ttsDecoded.has(key)) continue;
+    const url = ttsCache.get(key);
+    if (!url) continue;
+    jobs.push(
+      fetch(url).then((r) => r.arrayBuffer())
+        .then((ab) => ctx.decodeAudioData(ab))
+        .then((buf) => { ttsDecoded.set(key, buf); })
+        .catch(() => {})
+    );
+  }
+  await Promise.all(jobs);
 }
 
 // В очередь на озвучку (порядок = порядок активации сообщений).
@@ -127,6 +157,24 @@ function ttsPump() {
   if (ttsBusy) return;
   const item = ttsQueue.shift();
   if (!item) return;
+  // Быстрый путь — готовый AudioBuffer: старт по семплу точно, без декодера.
+  const buf = ttsDecoded.get(ttsKey(item.voice, item.text));
+  if (buf && typeof ensureAudioContext === 'function') {
+    try {
+      const ctx = ensureAudioContext();
+      const bus = typeof soundBusNode === 'function' ? soundBusNode() : null;
+      if (ctx && buf) {
+        ttsBusy = true;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(bus || ctx.destination);
+        ttsCurSrc = src;
+        src.onended = () => { ttsBusy = false; ttsCurSrc = null; ttsPump(); };
+        src.start();
+        return;
+      }
+    } catch (e) { ttsBusy = false; ttsCurSrc = null; }
+  }
   const url = ttsCache.get(ttsKey(item.voice, item.text));
   if (!url) {
     // В кэше нет (офлайн на старте) — докачиваем и переигрываем этот пункт.
@@ -155,6 +203,8 @@ function ttsPump() {
 function ttsStop() {
   ttsQueue.length = 0;
   ttsBusy = false;
+  try { if (ttsCurSrc) { ttsCurSrc.onended = null; ttsCurSrc.stop(); } } catch (e) {}
+  ttsCurSrc = null;
   try { const a = ttsEl(); a.onended = null; a.onerror = null; a.pause(); } catch (e) {}
 }
 
