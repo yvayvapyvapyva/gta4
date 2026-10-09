@@ -40,7 +40,7 @@ let exportSavedStyle = null;
 // пустыми/рваными — рекордер стартует после N живых кадров, а не сразу,
 // иначе в начало файла ложится мусор и уползает синхрон.
 let exportWarmLeft = 0;
-const EXPORT_WARM_FRAMES = 3;
+const EXPORT_WARM_FRAMES = 6;
 
 function exportSupported() {
   try {
@@ -297,7 +297,33 @@ function exportBegin(name) {
   showExportHud(true);
   try { if (typeof ttsUnlock === 'function') ttsUnlock(); } catch (e) {}
   window.Replay.startPlayback();
+  exportSnapCamera(); // камера — сразу в кадр, без дотяжки экспонентой
   showToast('⏺ Запись MP4…');
+}
+
+// Жёсткая доводка камеры в кадр первого тика: после смены разрешения
+// следящая камера дотягивается экспонентой (~секунда) — в видео это выглядит
+// как «машина сбоку, потом центрируется». Ставим углы/таргет сразу.
+function exportSnapCamera() {
+  try {
+    if (typeof CAR === 'undefined' || !CAR || !CAR.root) return;
+    const p = CAR.root.position;
+    if (CAR.mode === 0 && typeof cam !== 'undefined' && cam) {
+      if (typeof camTarget !== 'undefined' && camTarget) {
+        camTarget.set(p.x, p.y + 0.75, p.z);
+        cam.target.copyFrom(camTarget);
+      } else {
+        cam.target.set(p.x, p.y + 0.75, p.z);
+      }
+      cam.alpha = CAR.yaw + Math.PI / 2 + (CAR.camYaw || 0);
+      cam.beta = CAR.camPitch;
+      cam.radius = CAR.camDist;
+    } else if (CAR.mode === 1 && typeof cockpit !== 'undefined' && cockpit) {
+      cockpit.rotation.set(
+        (typeof COCKPIT_PITCH !== 'undefined' ? COCKPIT_PITCH : 0.16) + (CAR.lookPitch || 0),
+        Math.PI - (CAR.lookYaw || 0), 0);
+    }
+  } catch (e) {}
 }
 
 // Вызывается из render loop каждый кадр после scene.render().
