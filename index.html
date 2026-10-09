@@ -178,6 +178,29 @@
 body.playback-active #driveCtrl{display:none !important}
 body.playback-active #gearBtn,body.playback-active #recBtn,body.playback-active #mirrorBtn{display:none !important}
 body.edit-active #driveCtrl{display:none !important}
+/* Режим экспорта MP4: экранный интерфейс прячется (в видео рисуется свой HUD
+   на композитном канвасе), канвас центрируется letterbox-ом */
+body.export-active #driveCtrl,body.export-active #gearBtn,body.export-active #recBtn,
+body.export-active #mirrorBtn,body.export-active #replayMsg,
+body.export-active #toast,body.export-active #hud{display:none !important}
+body.export-active{background:#000}
+body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);}
+/* Гид кадрирования 9:16: что попадёт в MP4 1080x1920.
+   Портретный рендер держит тот же вертикальный FOV и режет бока —
+   это ровно центральный кроп 9:16 широкого кадра, его рамка и показана.
+   Всё вне рамки затемнено, HUD поверх (z выше). */
+#cropGuide{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(calc(100vh * 9 / 16), 100vw);aspect-ratio:9/16;z-index:4;pointer-events:none;
+  border:2px dashed var(--acc);box-shadow:0 0 0 9999px rgba(0,0,0,.55);}
+#cropGuide[hidden]{display:none;}
+#cropGuide .cg-label{position:absolute;top:8px;left:50%;transform:translateX(-50%);white-space:nowrap;
+  font-size:11px;font-weight:600;color:var(--acc);background:rgba(8,10,14,.8);
+  border:1px solid rgba(255,138,61,.4);border-radius:8px;padding:3px 10px;}
+/* Плашка REC во время экспорта MP4 */
+#exportHud{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  z-index:11;pointer-events:none;font-size:13px;font-weight:600;color:#fff;background:rgba(180,20,20,.85);
+  border:1px solid #ff6b6b;border-radius:10px;padding:8px 16px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+#exportHud[hidden]{display:none;}
 /* Оверлей текстовых сообщений реплея (и воспроизведение, и предпросмотр в редакторе) */
 #replayMsg{position:fixed;left:50%;top:calc(70px + var(--tg-top));transform:translateX(-50%);z-index:6;pointer-events:none;
   max-width:min(640px,92vw);text-align:center;font-size:18px;font-weight:600;line-height:1.4;color:#fff;
@@ -270,6 +293,9 @@ body.edit-active #driveCtrl{display:none !important}
 
   <div class="win-sec">
     <h4>Вид</h4>
+    <div class="win-btns">
+      <button id="cropGuideBtn" title="Показать, что попадёт в вертикальный кадр MP4 (G)">Рамка 9:16</button>
+    </div>
     <div class="win-note">
       Езда: <b>W/A/S/D</b> · <b>Space</b> — ручник · <b>C</b> — камера<br>
       <b>R</b> — сброс · <b>M</b> — зеркала · <b>Q/E</b> — поворотники<br>
@@ -372,6 +398,8 @@ body.edit-active #driveCtrl{display:none !important}
 
 <!-- Playback UI overlay -->
 <div id="replayMsg" hidden></div>
+<div id="cropGuide" hidden><div class="cg-label">9:16 · в кадр MP4 1080×1920</div></div>
+<div id="exportHud" hidden>⏺ REC</div>
 <div id="playbackUI" hidden>
   <div class="playback-controls">
     <button id="playbackPause" class="playback-btn" aria-label="Пауза">⏸</button>
@@ -1799,16 +1827,19 @@ engine.runRenderLoop(() => {
     }
   }
   scene.render();
+  if (typeof exportTick === "function") exportTick();
+  if (typeof syncCropGuide === "function") syncCropGuide();
   debugTick(rawDt);
 });
 </script>
-<script src="default-map.js"></script>
-<script src="map.js"></script>
-<script src="mirror.js"></script>
-<script src="drive-control.js"></script>
-<script src="sounds.js"></script>
-<script src="replay.js"></script>
-<script src="tts.js"></script>
+<script src="default-map.js?v=2"></script>
+<script src="map.js?v=2"></script>
+<script src="mirror.js?v=2"></script>
+<script src="drive-control.js?v=2"></script>
+<script src="sounds.js?v=2"></script>
+<script src="replay.js?v=2"></script>
+<script src="tts.js?v=2"></script>
+<script src="export.js?v=2"></script>
 <script>
   function resizeEngine(){
     try{

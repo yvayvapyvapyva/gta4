@@ -27,6 +27,22 @@ function ttsEl() {
   return ttsAudio;
 }
 
+// Элемент озвучки — в общую шину sounds.js: тогда голос попадает и в колонки,
+// и (на время экспорта) в MediaStreamDestination рекордера.
+// MediaElementSource создаётся один раз на элемент, дальше переиспользуется.
+let ttsSrcNode = null;
+function ttsWireBus() {
+  try {
+    if (ttsSrcNode) return;
+    if (typeof ensureAudioContext !== 'function' || typeof soundBusNode !== 'function') return;
+    const ctx = ensureAudioContext();
+    const bus = soundBusNode();
+    if (!ctx || !bus) return;
+    ttsSrcNode = ctx.createMediaElementSource(ttsEl());
+    ttsSrcNode.connect(bus);
+  } catch (e) {}
+}
+
 // Мобильные браузеры режут programmatic play() без жеста: первым касанием
 // или клавишей прогоняем тихий wav — дальше autoplay разрешён (sticky).
 let ttsUnlocked = false;
@@ -125,6 +141,7 @@ function ttsPump() {
   try {
     ttsBusy = true;
     const a = ttsEl();
+    ttsWireBus();
     a.onended = () => { ttsBusy = false; ttsPump(); };
     a.onerror = () => { ttsBusy = false; ttsPump(); };
     a.src = url;
@@ -149,6 +166,7 @@ function ttsPreview(voice, text) {
     if (!url) return;
     try {
       const a = ttsEl();
+      ttsWireBus();
       a.onended = null; a.onerror = null;
       a.src = url;
       const p = a.play();

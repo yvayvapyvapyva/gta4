@@ -4,6 +4,9 @@
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
 let audioCtx = null;
 const soundBuffers = new Map();
+// Общая шина: все звуки идут через неё в колонки, а на время экспорта MP4
+// к ней цепляется ещё и MediaStreamDestination (см. export.js).
+let soundBus = null;
 
 function ensureAudioContext() {
   if (!audioCtx) {
@@ -12,7 +15,23 @@ function ensureAudioContext() {
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
+  if (!soundBus) {
+    soundBus = audioCtx.createGain();
+    soundBus.gain.value = masterVolume;
+    soundBus.connect(audioCtx.destination);
+  }
   return audioCtx;
+}
+// Узел для подключения рекордера/TTS. Создаёт контекст при необходимости.
+function soundBusNode() {
+  try {
+    if (typeof ensureAudioContext === 'function') ensureAudioContext();
+  } catch (e) {}
+  return soundBus;
+}
+// Куда выводить очередной звук: в шину, а если её нет — напрямую.
+function soundOut(ctx) {
+  return soundBus || ctx.destination;
 }
 
 // Генерация реалистичного щелчка реле поворотника
@@ -63,7 +82,7 @@ function playBlinkClick(isOn) {
   source.buffer = buffer;
   const gain = ctx.createGain();
   gain.gain.value = 0.7;
-  source.connect(gain).connect(ctx.destination);
+  source.connect(gain).connect(soundOut(ctx));
   source.start();
 }
 
@@ -97,7 +116,10 @@ window.tickBlinkSounds = tickBlinkSounds;
 
 // Громкость мастер (0..1)
 let masterVolume = 1;
-window.setMasterVolume = (v) => { masterVolume = Math.max(0, Math.min(1, v)); };
+window.setMasterVolume = (v) => {
+  masterVolume = Math.max(0, Math.min(1, v));
+  try { if (soundBus) soundBus.gain.value = masterVolume; } catch (e) {}
+};
 window.getMasterVolume = () => masterVolume;
 
 // Громкий БИП при сбитии конуса
@@ -131,7 +153,7 @@ function playConeHit() {
   source.buffer = buffer;
   const gain = ctx.createGain();
   gain.gain.value = 1.0; // громко
-  source.connect(gain).connect(ctx.destination);
+  source.connect(gain).connect(soundOut(ctx));
   source.start();
 }
 

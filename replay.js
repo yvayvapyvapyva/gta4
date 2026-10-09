@@ -446,6 +446,7 @@ window.Replay = {
   isEditing: () => isEditing,
   getBuffer: () => replayBuffer,
   getMessages: () => replayMessages,
+  getTime: () => replayTime,
   kinematicTick: kinematicVisualTick
 };
 
@@ -585,6 +586,7 @@ function renderReplayList() {
         <div style="font-size:11px;color:var(--dim);">${date} · ${dur} · ${frames} кадров · 💬${msgs} · ${size}</div>
       </div>
       <div style="display:flex;gap:6px;margin-left:8px;flex:0 0 auto">
+        <button class="replay-mp4" data-name="${name}" style="padding:4px 10px;font-size:11px;background:rgba(98,208,223,.12);border:1px solid #62d0df;border-radius:6px;color:#62d0df;cursor:pointer;" title="Сохранить MP4 1080x1920">🎬</button>
         <button class="replay-edit" data-name="${name}" style="padding:4px 10px;font-size:11px;background:rgba(255,138,61,.15);border:1px solid var(--acc);border-radius:6px;color:var(--acc);cursor:pointer;" title="Редактировать сообщения">✎</button>
         <button class="replay-del" data-name="${name}" style="padding:4px 10px;font-size:11px;background:rgba(255,59,59,.2);border:1px solid #ff3b3b;border-radius:6px;color:#ff6b6b;cursor:pointer;">Удалить</button>
       </div>
@@ -593,6 +595,13 @@ function renderReplayList() {
 
   // Делегирование событий
   replayListEl.onclick = e => {
+    const mp4Btn = e.target.closest('.replay-mp4');
+    if (mp4Btn) {
+      e.stopPropagation();
+      if (typeof window.ExportMP4?.start === 'function') window.ExportMP4.start(mp4Btn.dataset.name);
+      else showToast('Экспорт недоступен (нет export.js)');
+      return;
+    }
     const editBtn = e.target.closest('.replay-edit');
     if (editBtn) { e.stopPropagation(); openReplayEditor(editBtn.dataset.name); return; }
     const delBtn = e.target.closest('.replay-del');
