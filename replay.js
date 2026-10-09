@@ -821,8 +821,29 @@ function editCameraTick(dt) {
   if (CAR.wheels) for (const w of CAR.wheels) if (w.front && w.steer) w.steer.rotation.y = CAR.steer;
 }
 
-function renderEditMsgs() {
-  const el = editEls();
+// Прослушивание со спиннером: пока грузится аудио, на кнопке крутится
+// индикатор; страховка 15 с — зависший fetch не блокирует кнопку навсегда.
+function hearWithSpinner(btn, voice, text) {
+  if (typeof ttsPreview !== 'function') { showToast('Озвучка недоступна (нет tts.js)'); return; }
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>';
+  let done = false;
+  const restore = () => {
+    if (done) return;
+    done = true;
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  };
+  setTimeout(restore, 15000);
+  try {
+    const p = ttsPreview(voice, text);
+    if (p && p.then) p.then(restore).catch(restore);
+    else restore();
+  } catch (e) { restore(); }
+}
+
+function renderEditMsgs() {  const el = editEls();
   if (!el.msgs) return;
   if (el.count) el.count.textContent = String(replayMessages.length);
   if (!replayMessages.length) {
@@ -876,14 +897,12 @@ function renderEditMsgs() {
     voiceSel.addEventListener('change', (e) => {
       replayMessages[idx].voice = e.target.value === 'comment' ? 'comment' : 'command';
     });
-    row.querySelector('[data-act=hear]').addEventListener('click', () => {
+    row.querySelector('[data-act=hear]').addEventListener('click', (e) => {
       const mm = replayMessages[idx];
       if (!mm) return;
       const v = voiceSel.value === 'comment' ? 'comment' : 'command';
       mm.voice = v;
-      if (typeof ttsPreview === 'function') {
-        try { ttsPreview(v, mm.text); } catch (e) {}
-      } else showToast('Озвучка недоступна (нет tts.js)');
+      hearWithSpinner(e.currentTarget, v, mm.text);
     });
     el.msgs.appendChild(row);
   });
@@ -903,8 +922,14 @@ function initReplayEditor() {
   if (!el.win) return;
   el.scrub?.addEventListener('input', () => { setEditPlaying(false); seekEdit(+el.scrub.value); });
   el.play?.addEventListener('click', () => setEditPlaying(!editPlaying));
-  document.getElementById('replayEditAdd')?.addEventListener('click', () => {
-    if (!isEditing || !replayBuffer.length) return;
+  document.getElementById('replayEditHear')?.addEventListener('click', (e) => {
+    if (!isEditing) return;
+    const text = (el.text?.value ?? '').trim().slice(0, 200);
+    if (!text) { showToast('Введите текст сообщения'); el.text?.focus(); return; }
+    const voice = el.voice?.value === 'comment' ? 'comment' : 'command';
+    hearWithSpinner(e.currentTarget, voice, text);
+  });
+  document.getElementById('replayEditAdd')?.addEventListener('click', () => {    if (!isEditing || !replayBuffer.length) return;
     const text = (el.text?.value ?? '').trim().slice(0, 200);
     if (!text) { showToast('Введите текст сообщения'); el.text?.focus(); return; }
     let dur = +el.dur?.value;

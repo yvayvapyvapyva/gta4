@@ -209,9 +209,11 @@ function ttsStop() {
 }
 
 // Кнопка 🔊 в редакторе: прослушать один текст сразу (мимо очереди).
+// Возвращает промис, resolved когда воспроизведение стартовало:
+// по нему caller крутит спиннер ожидания загрузки аудио.
 function ttsPreview(voice, text) {
-  if (!text || !text.trim()) return;
-  ttsEnsure(voice, [text]).then(() => {
+  if (!text || !text.trim()) return Promise.resolve(false);
+  return ttsEnsure(voice, [text]).then(() => {
     const url = ttsCache.get(ttsKey(voice === 'comment' ? 'comment' : 'command', text));
     if (!url) return;
     try {

@@ -246,6 +246,11 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 .replay-edit-msg select{font:inherit;font-size:12.5px;color:var(--fg);padding:7px 8px;border-radius:8px;
   background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;max-width:110px;}
 .replay-edit-msg button{flex:0 0 auto;}
+/* Спиннер ожидания загрузки аудио на кнопке прослушивания */
+.spin{display:inline-block;width:14px;height:14px;vertical-align:-2px;
+  border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;
+  animation:spinRot .7s linear infinite;}
+@keyframes spinRot{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
@@ -438,6 +443,7 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
     <h4>Новое сообщение в текущем моменте</h4>
     <div class="win-row" style="gap:8px">
       <input type="text" id="replayEditText" placeholder="Текст сообщения…" maxlength="200" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
+      <button id="replayEditHear" title="Прослушать" style="flex:0 0 auto">🔊</button>
     </div>
     <div class="win-row" style="margin-top:8px">
       <label style="flex:0 0 auto">Показ, с</label>
