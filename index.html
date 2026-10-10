@@ -524,7 +524,7 @@ ip.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
 ip.exposure = 1.15;
 ip.contrast = 1.08;
 
-const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2, Math.PI / 2.6, 9, new BABYLON.Vector3(0, 0.7, 0), scene);
+const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2, 1 * Math.PI / 180, CAM_DIST_MAX, new BABYLON.Vector3(0, 0.7, 0), scene);
 cam.attachControl(canvas, true);
 cam.lowerRadiusLimit = CAM_DIST_MIN;
 cam.upperRadiusLimit = CAM_DIST_MAX;
@@ -689,7 +689,7 @@ const CAR = {
   turnRadius: 4.38,     // радиус дуги = (turnDiameter − width) / 2
   maxSteer: 0.56,       // предельный угол колёс, рад (~32°)
   steerLockToLock: 1,   // секунд на поворот руля от края до края (замедление)
-  camYaw: 0, camPitch: 1.13, camDist: 20,
+  camYaw: 0, camPitch: 1 * Math.PI / 180, camDist: CAM_DIST_MAX,
   camFov: 1.45,    // угол обзора салона, рад (~83° по вертикали)
   cockpitZOffset: 0.05, // смещение камеры салона по Z (м), настраивается в настройках
   mode: 0,           // 0 следом · 1 салон · 2 свободная
