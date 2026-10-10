@@ -151,6 +151,20 @@ const rampTex = new BABYLON.DynamicTexture("rampTex", { width:256, height:256 },
 }
 matRamp.diffuseTexture = rampTex;
 
+// Боковины/торцы настила — темнее верха для контраста: та же текстура
+// асфальта, но диффуз ~55%. Висят вторым сабматериалом (см. makeRampSegment:
+// первые 18 индексов buildRampMesh — верх, остальное — бока/торцы/низ).
+const matRampSide = new BABYLON.StandardMaterial("rampSideMat", scene);
+matRampSide.diffuseColor = new BABYLON.Color3(0.48, 0.48, 0.51);
+matRampSide.specularColor = new BABYLON.Color3(0.015, 0.015, 0.02);
+matRampSide.specularPower = 128;
+matRampSide.backFaceCulling = false;
+matRampSide.diffuseTexture = rampTex;
+const rampMulti = new BABYLON.MultiMaterial("rampMulti", scene);
+rampMulti.subMaterials.push(matRamp, matRampSide);
+// Сколько индексов в buildRampMesh занимает верх (3 квада подъём/плато/спуск).
+const RAMP_TOP_INDEX_COUNT = 18;
+
 const drawStore = {};
 for (const t of DRAW_TYPES) drawStore[t] = { polys:[], groups:[] };
 const segRotY = (dx, dz) => Math.atan2(dx, dz);
@@ -315,7 +329,12 @@ function makeRampSegment(ax, az, dx, dz, D, h) {
   const g = new BABYLON.TransformNode("rampSeg" + (drawSeq++), scene);
   const poly = buildRampMesh(D, h, "rampSurface" + (drawSeq++));
   poly.parent = g;
-  poly.material = matRamp;
+  // Мультиматериал: верх светлый, бока/торцы тёмные (см. RAMP_TOP_INDEX_COUNT).
+  poly.material = rampMulti;
+  poly.subMeshes = [];
+  poly.subMeshes.push(new BABYLON.SubMesh(0, 0, poly.getTotalVertices(), 0, RAMP_TOP_INDEX_COUNT, poly));
+  poly.subMeshes.push(new BABYLON.SubMesh(1, 0, poly.getTotalVertices(),
+    RAMP_TOP_INDEX_COUNT, poly.getTotalIndices() - RAMP_TOP_INDEX_COUNT, poly));
   poly.isPickable = true;
   poly.metadata = { isLine:true, stype:"estacada", group:g, isSurface:true };
   buildRampCurbs(g, [-EST_W / 2 + 0.12, EST_W / 2 - 0.12], D, EST_L2, h);
