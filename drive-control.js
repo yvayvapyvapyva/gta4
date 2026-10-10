@@ -137,7 +137,8 @@ function syncDvView(){
   dvView.classList.toggle('on',CAR.mode===1);
   dvView.setAttribute('aria-label','Вид: '+name+'. Переключить на «'+next+'»');
 }
-if(dvView)dvView.addEventListener('click',()=>{
+if(dvView)dvView.addEventListener('pointerdown',e=>{
+  e.preventDefault();
   if(!ready)return;
   // Свободный вид убран из езды, как и в клавише C: ходим только по
   // «следом» и «салон». Ветка на случай отсутствия toggleCam держит ту же логику.
@@ -148,7 +149,8 @@ syncDvView();
 
 // ── Кнопка прозрачности кузова (X-ray) ─────────────────────────
 const dvXray=document.getElementById('dvXray');
-if(dvXray)dvXray.addEventListener('click',()=>{
+if(dvXray)dvXray.addEventListener('pointerdown',e=>{
+  e.preventDefault();
   if(!ready)return;
   if(typeof toggleXray==='function')toggleXray();
 });
