@@ -661,7 +661,7 @@ const CAR = {
   lift: 0,         // высота подъёма кузова над землёй
   track: 1.42,     // ширина колеи, м (половина идёт в опорные точки)
   maxSpeed: 15/3.6, // 15 км/ч (было 10)
-  maxReverse: 10/3.6,
+  maxReverse: 15/3.6, // как вперёд: откат с горки должен догонять скорость на газу
   accel: 3,
   reverseAccel: 3,
   brake: 18,
@@ -1166,6 +1166,11 @@ let objectTick = null;   // map.js обновляет конусы при езд
 let mirrorTick = null;   // mirror.js пересчитывает плоскости зеркал перед кадром
 
 const MAX_SLOPE = 0.62;   // круче — считаем стеной, ~36°
+// Перепад высот поперёк колеи, м: больше — бок эстакады, туда нельзя.
+// Усреднение опоры между настилом и землёй утопило бы колёса под текстуру,
+// поэтому такой шаг запрещаем: бордюр не пускает ни внутрь, ни наружу.
+// Перепад ВДОЛЬ уклона (подъём/спуск) сюда не входит — там едем свободно.
+const MAX_SIDE_SPREAD = 0.35;
 const GRAVITY = 9.8;
 const WHEEL_OFF = [[1, -1], [1, 1], [-1, -1], [-1, 1]];   // [±колея, ±вперёд]
 const upTarget = new BABYLON.Vector3(0, 1, 0);
@@ -1354,22 +1359,48 @@ const maxSteer = CAR.maxSteer;
     throttle = gas - back;
   }
 
+  // Уклон: гравитация тянет вдоль склона. supY.gp — уклон вперёд из прошлого
+  // кадра (лаг в 1 кадр незаметен): перед выше = в горку = тянет назад.
+  // Тяга симметрична (x2.5 в обе стороны): скатывание что назад, что вперёд
+  // одинаково злое — до ограничителя. На штатном уклоне 0.16 это ~3.9 м/с².
+  // На ровном и в полёте (supY.hit=false) pull = 0.
+  const slopeRaw = supY.hit ? GRAVITY * supY.gp : 0;
+  const slopePull = slopeRaw * 2.5;
+
   if (throttle > 0) {
     a = CAR.accel * throttle * clamp(1 - CAR.v / CAR.maxSpeed, 0.12, 1);
   } else if (throttle < 0) {
     if (CAR.v > 0.4) a = -CAR.brake * (touchActive ? 1 : back);  // тормоз
     else a = -CAR.reverseAccel * (-throttle) * clamp(1 + CAR.v / CAR.maxReverse, 0.1, 1);
   }
+  // Помощь в горку под газом: компенсирует встречный уклон ПОЛНОСТЬЮ —
+  // на газу сопротивления горки нет вообще, как на ровном.
+  // Знак pull — направление силы: pull > 0 тянет назад, pull < 0 вперёд.
+  // Газ против силы — произведение > 0 (вперёд в горку / назад в горку
+  // задним ходом); сила уже вычтена строкой a -= slopePull ниже,
+  // поэтому компенсация — вернуть её обратно (a += pull).
+  // Под горку с газом не подталкиваем.
+  if (throttle !== 0 && throttle * slopePull > 0) a += slopePull;
   if (hand) a -= Math.sign(CAR.v) * CAR.brake * hand * (Math.abs(CAR.v) > 0.05 ? 1 : 0);
-  // на сбросе газа мотор давит на вал: сила гаснет к остановке, как и должно
-  if (!touchActive && !throttle && !hand && Math.abs(CAR.v) > 0.05) {
+  // на сбросе газа мотор давит на вал: сила гаснет к остановке, как и должно.
+  // Исключение — скатывание по склону (движение туда же, куда тянет уклон):
+  // там мотор не мешает в обе стороны симметрично, иначе скатывание душилось
+  // бы до черепашьих. Без него — свободное скатывание до ограничителя,
+  // тормоз держит легко.
+  const rollingWithSlope = Math.abs(CAR.v) > 0.05 && CAR.v * slopePull < 0;
+  if (!touchActive && !throttle && !hand && Math.abs(CAR.v) > 0.05 && !rollingWithSlope) {
     a -= Math.sign(CAR.v) * CAR.engineBrake * Math.min(1, Math.abs(CAR.v) / 1.5);
   }
   a -= Math.sign(CAR.v) * CAR.roll;
   a -= CAR.drag * CAR.v * Math.abs(CAR.v);
+  a -= slopePull;
 
   CAR.v = clamp(CAR.v + a * dt, -CAR.maxReverse, CAR.maxSpeed);
-  if (Math.abs(CAR.v) < 0.05 && !touchActive && !throttle) CAR.v = 0;
+  if (Math.abs(CAR.v) < 0.05 && !touchActive && !throttle) {
+    // Стоим: держим ноль, только если не тянет уклон (без ручника)
+    // или держим ручник. Иначе на склоне начинаем катиться.
+    if (hand || Math.abs(slopePull) < 0.3) CAR.v = 0;
+  }
 
   // траектория: модель велосипеда, ограниченная сцеплением (иначе на скорости
   // машину закручивает сильнее, чем шины держат — получается занос)
@@ -1398,7 +1429,18 @@ const maxSteer = CAR.maxSteer;
     const rx = p.x - CAR.rearZ * f0x, rz = p.z - CAR.rearZ * f0z;
     const tryMove = (ddx, ddz) => {
       const tx = rx + ddx + CAR.rearZ * fwd.x, tz = rz + ddz + CAR.rearZ * fwd.z;
-      if (sampleSupport(tx, tz, CAR.y).steep > MAX_SLOPE) return "slope";
+      const supC = sampleSupport(tx, tz, CAR.y);
+      if (supC.steep > MAX_SLOPE) return "slope";
+      // Бок эстакады: одно колесо уже на настиле, другое ещё на земле.
+      // gq — уклон вбок, умноженный на колею даёт перепад поперёк машины.
+      // Как у конусов и бордюров: наружу (перепад не растёт) — выпускаем,
+      // иначе враскоряку встанет насмерть с обнулённой скоростью.
+      const spread = Math.abs(supC.gq) * CAR.track;
+      if (spread > MAX_SIDE_SPREAD) {
+        const curSup = sampleSupport(p.x, p.z, CAR.y);
+        const curSpread = Math.abs(curSup.gq) * CAR.track;
+        if (!(curSpread > 0 && spread <= curSpread + 1e-9)) return "wall";
+      }
       if (obstacleProbe && obstacleProbe(tx, tz, CAR.y)) return "wall";
       return { x: tx, z: tz };
     };

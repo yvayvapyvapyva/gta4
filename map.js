@@ -495,7 +495,11 @@ const CONTACT_GAP = 0.03;
 const OBST_STEP = 0.45;
 
 // Бордюры, заборы и бока эстакады: машина не проходит сквозь них.
-function carPointInBands(px, pz, y, skipEstacada) {
+// Глубина проникновения точки в линейные препятствия (бордюры, заборы,
+// бордюры эстакады, бок настила): 0 — точка чиста.
+// Нужна, чтобы выпускать машину наружу, как конусы (см. obstacleBlocked).
+function pointBandDepth(px, pz, y, skipEstacada) {
+  let depth = 0;
   const list = [["curb", LINE_WIDTH.curb / 2 + CONTACT_GAP], ["fence", 0.04 + CONTACT_GAP]];
   try {
     for (const [t, hw] of list) {
@@ -508,11 +512,33 @@ function carPointInBands(px, pz, y, skipEstacada) {
           const px2 = -uz, py2 = ux;
           const rx = px - ax, rz = pz - az;
           const u = rx * ux + rz * uz, v = rx * px2 + rz * py2;
-          if (u > -hw && u < LL + hw && Math.abs(v) < hw) return true;
+          if (u < -hw || u > LL + hw) continue;
+          const pen0 = hw - Math.abs(v);
+          if (pen0 > depth) depth = pen0;
         }
       }
     }
-    if (skipEstacada) return false;
+    // Бордюры эстакады — непреодолимы всегда: ни заехать через них сбоку,
+    // ни съехать. Проверка идёт ДО skipEstacada и без условия по высоте,
+    // поэтому действует и когда машина уже на настиле.
+    // Ось бордюра — на ±(EST_W/2 − 0.12) от оси настила (см. buildRampCurbs),
+    // полуширина ленты 0.12 + зазор.
+    const chw = 0.12 + CONTACT_GAP, coff = EST_W / 2 - 0.12;
+    for (const p of drawStore.estacada.polys) {
+      if (p.length < 2) continue;
+      for (let si = 0; si < p.length - 1; si++) {
+        const ax = p[si][0], az = p[si][1], bx = p[si + 1][0], bz = p[si + 1][1];
+        const LL = Math.hypot(bx - ax, bz - az);
+        if (LL < 1e-4) continue;
+        const ux = (bx - ax) / LL, uz = (bz - az) / LL;
+        const rx = px - ax, rz = pz - az;
+        const u = rx * ux + rz * uz, v = rx * -uz + rz * ux;
+        if (u < -0.5 || u > LL + EST_L2 + LL + 0.5) continue;
+        const pen1 = chw - Math.abs(Math.abs(v) - coff);
+        if (pen1 > depth) depth = pen1;
+      }
+    }
+    if (skipEstacada) return depth;
     const hw = EST_W / 2, L2 = EST_L2;
     for (const p of drawStore.estacada.polys) {
       if (p.length < 2) continue;
@@ -530,11 +556,17 @@ function carPointInBands(px, pz, y, skipEstacada) {
         if (u <= LL) yt = u / LL * h;
         else if (u <= LL + L2) yt = h;
         else yt = h * (1 - (u - LL - L2) / LL);
-        if (yt - y > EST_CLIMB_STEP) return true;
+        const pen2 = yt - y - EST_CLIMB_STEP;
+        if (pen2 > depth) depth = pen2;
       }
     }
   } catch (e) {}
-  return false;
+  return Math.max(0, depth);
+}
+
+// Совместимость: булев вариант поверх глубины.
+function carPointInBands(px, pz, y, skipEstacada) {
+  return pointBandDepth(px, pz, y, skipEstacada) > 0;
 }
 
 function bodyProbePoints() {
@@ -555,15 +587,29 @@ function bodyProbePoints() {
   return out;
 }
 
-function obstacleBlocked(x, z, y) {
-  if (typeof CAR === "undefined" || !CAR || !CAR.root) return false;
+// Максимум глубины по всему габариту в точке (x, z).
+function bandDepthAt(x, z, y) {
+  if (typeof CAR === "undefined" || !CAR) return 0;
   const pts = bodyProbePoints();
   const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);
   const skipEst = carRidesEstacada(x, z, y);
+  let depth = 0;
   for (const p of pts) {
-    const wx = x + p[0] * c - p[1] * s;
-    const wz = z + p[0] * s + p[1] * c;
-    if (carPointInBands(wx, wz, y, skipEst)) return true;
+    const d = pointBandDepth(x + p[0] * c - p[1] * s, z + p[0] * s + p[1] * c, y, skipEst);
+    if (d > depth) depth = d;
+  }
+  return depth;
+}
+
+function obstacleBlocked(x, z, y) {
+  if (typeof CAR === "undefined" || !CAR || !CAR.root) return false;
+  // Как у конусов: наружу и вдоль (не глубже текущего) — выпускаем,
+  // вглубь — стена. Поэтому в бордюре не вязнем: упёрся, соскользнул
+  // вдоль или сдал назад, а продавить бордюр нельзя.
+  const cand = bandDepthAt(x, z, y);
+  if (cand > 0) {
+    const cur = bandDepthAt(CAR.root.position.x, CAR.root.position.z, y);
+    if (!(cur > 0 && cand <= cur + 1e-9)) return true;
   }
   // Конусы — твёрдые: прямоугольник кузова в точке (x,z) против круга конуса.
   // Важно: проверяем КАНДИДАТ (будущую позицию), а звук пищит по ФАКТУ.
