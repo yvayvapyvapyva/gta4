@@ -159,6 +159,11 @@
 .dv-btn.dv-xray.on:active{background:var(--acc);color:#12141a}
 .dv-btn.dv-view.on{background:rgba(255,138,61,.16);border-color:var(--acc);color:var(--acc)}
 .dv-btn.dv-view.on:active{background:var(--acc);color:#12141a}
+/* Педали газа/тормоза — высотой как ползунок руля (64px) */
+.dv-btn.dv-pedal{width:64px;height:64px;font-size:28px}
+/* Рамка как у ползунка руля: градиент, бордер 2px, радиус и тень — один в один */
+.dv-btn.dv-pedal{background:linear-gradient(180deg,#16232e,#0b1520);border:2px solid #2a4257;border-radius:16px;box-shadow:0 0 0 4px rgba(12,22,32,.6),0 6px 18px rgba(0,0,0,.5)}
+.dv-btn.dv-pedal.on,.dv-btn.dv-pedal:active{background:#ff6d00;border-color:#ff6d00;color:#1a1200}
 .dv-zoombtn{font-size:28px;line-height:1;color:#fff}
 .dv-zoombtn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
 .dv-blink{color:#fff}
@@ -384,15 +389,15 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 
 <div id="driveCtrl">
   <!-- Левая сторона: педали вперёд/назад вместо ползунка -->
-  <button class="dv-btn" id="dvGas" aria-label="Газ (вперёд)" style="left:16px;bottom:86px;">▲</button>
-  <button class="dv-btn" id="dvBrake" aria-label="Тормоз (назад)" style="left:16px;bottom:16px;">▼</button>
-  <button class="dv-btn dv-view" id="dvView" aria-label="Переключить вид" style="left:88px;bottom:86px;">👁</button>
-  <button class="dv-btn dv-xray" id="dvXray" aria-label="Прозрачность кузова" style="left:88px;bottom:16px;">⛶</button>
+  <button class="dv-btn dv-pedal" id="dvGas" aria-label="Газ (вперёд)" style="left:16px;bottom:calc(96px + env(safe-area-inset-bottom,0px));">▲</button>
+  <button class="dv-btn dv-pedal" id="dvBrake" aria-label="Тормоз (назад)" style="left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));">▼</button>
+  <button class="dv-btn dv-view" id="dvView" aria-label="Переключить вид" style="left:96px;bottom:calc(86px + env(safe-area-inset-bottom,0px));">👁</button>
+  <button class="dv-btn dv-xray" id="dvXray" aria-label="Прозрачность кузова" style="left:96px;bottom:calc(16px + env(safe-area-inset-bottom,0px));">⛶</button>
 
   <!-- Правая сторона -->
-  <button class="dv-btn dv-blink" id="dvBlinkL" aria-label="Левый поворотник" style="right:86px;bottom:96px;"><svg viewBox="2 0 24 24" aria-hidden="true"><rect x="14" y="7.5" width="12" height="9" rx="2"/><path d="M14 2 L2 12 L14 22 Z"/></svg></button>
-  <button class="dv-btn dv-blink" id="dvBlinkR" aria-label="Правый поворотник" style="right:16px;bottom:96px;"><svg viewBox="14 0 24 24" aria-hidden="true"><rect x="14" y="7.5" width="12" height="9" rx="2"/><path d="M26 2 L38 12 L26 22 Z"/></svg></button>
-  <div class="dv-slider-wrap" style="right:16px;bottom:16px;">
+  <button class="dv-btn dv-blink" id="dvBlinkL" aria-label="Левый поворотник" style="right:86px;bottom:calc(96px + env(safe-area-inset-bottom,0px));"><svg viewBox="2 0 24 24" aria-hidden="true"><rect x="14" y="7.5" width="12" height="9" rx="2"/><path d="M14 2 L2 12 L14 22 Z"/></svg></button>
+  <button class="dv-btn dv-blink" id="dvBlinkR" aria-label="Правый поворотник" style="right:16px;bottom:calc(96px + env(safe-area-inset-bottom,0px));"><svg viewBox="14 0 24 24" aria-hidden="true"><rect x="14" y="7.5" width="12" height="9" rx="2"/><path d="M26 2 L38 12 L26 22 Z"/></svg></button>
+  <div class="dv-slider-wrap" style="right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));">
     <div class="dv-slider" id="dvSlider" role="slider" aria-label="Руль" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0">
       <div class="dv-slider-h" id="dvSliderH"></div>
     </div>
