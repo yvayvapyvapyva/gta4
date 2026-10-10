@@ -98,16 +98,20 @@ function exportRoundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 function exportWrap(c, text, maxW) {
-  const words = String(text).split(/\s+/);
-  const lines = [];
-  let line = '';
-  for (const w of words) {
-    const t = line ? line + ' ' + w : w;
-    if (c.measureText(t).width > maxW && line) { lines.push(line); line = w; }
-    else line = t;
+  // Абзацы по \n сохраняются, длинные строки переносятся по словам.
+  const out = [];
+  for (const para of String(text).split('\n')) {
+    const words = para.split(/\s+/).filter(Boolean);
+    if (!words.length) continue;
+    let line = '';
+    for (const w of words) {
+      const t = line ? line + ' ' + w : w;
+      if (c.measureText(t).width > maxW && line) { out.push(line); line = w; }
+      else line = t;
+    }
+    if (line) out.push(line);
   }
-  if (line) lines.push(line);
-  return lines.slice(0, 4);
+  return out.slice(0, 6);
 }
 function exportDrawHud(c) {
   // Всё читаем из данных реплея/машины, а не из DOM: DOM-элементы на время

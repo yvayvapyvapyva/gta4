@@ -870,8 +870,8 @@ function renderEditMsgs() {  const el = editEls();
     const end = (m.t + m.dur).toFixed(1);
     row.innerHTML =
       '<button data-act="goto" title="Перейти к началу (' + m.t.toFixed(1) + ' с)" style="padding:4px 8px">⏵ ' + m.t.toFixed(1) + '–' + end + '</button>' +
-      '<input type="text" data-act="text" maxlength="200" title="Текст на экране" value="">' +
-      '<input type="text" data-act="speech" maxlength="500" title="Текст для озвучки (пусто = тишина)" placeholder="Озвучить текст" value="">' +
+      '<textarea data-act="text" maxlength="200" rows="2" title="Текст на экране"></textarea>' +
+      '<textarea data-act="speech" maxlength="500" rows="2" title="Текст для озвучки (пусто = тишина)" placeholder="Озвучить текст"></textarea>' +
       '<input type="number" min="0.5" max="60" step="0.5" title="Длительность показа, с" value="' + m.dur + '">' +
       '<select data-act="voice" title="Голос озвучки"><option value="command">команда</option><option value="comment">коммент.</option></select>' +
       '<button data-act="hear" title="Прослушать" style="padding:4px 8px">🔊</button>' +

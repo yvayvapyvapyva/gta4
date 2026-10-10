@@ -241,6 +241,8 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   border-radius:8px;margin-bottom:8px;background:rgba(255,255,255,.04);}
 .replay-edit-msg input[type=text]{flex:1;min-width:120px;font:inherit;font-size:12.5px;color:var(--fg);
   padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;}
+.replay-edit-msg textarea{flex:1;min-width:120px;font:inherit;font-size:12.5px;color:var(--fg);
+  padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;resize:vertical;}
 .replay-edit-msg input[type=number]{width:64px;font:inherit;font-size:12.5px;color:var(--fg);
   padding:7px 8px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;}
 .replay-edit-msg select{font:inherit;font-size:12.5px;color:var(--fg);padding:7px 8px;border-radius:8px;
@@ -442,11 +444,11 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   <div class="win-sec">
     <h4>Новое сообщение в текущем моменте</h4>
     <div class="win-row" style="gap:8px">
-      <input type="text" id="replayEditText" placeholder="Текст на экране…" maxlength="200" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
+      <textarea id="replayEditText" placeholder="Текст на экране…" maxlength="200" rows="2" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;resize:vertical;"></textarea>
     </div>
     <div class="win-row" style="gap:8px;margin-top:8px">
-      <input type="text" id="replayEditSpeech" placeholder="Озвучить текст" maxlength="500" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
-      <button id="replayEditHear" title="Прослушать" style="flex:0 0 auto">🔊</button>
+      <textarea id="replayEditSpeech" placeholder="Озвучить текст" maxlength="500" rows="2" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;resize:vertical;"></textarea>
+      <button id="replayEditHear" title="Прослушать" style="flex:0 0 auto;align-self:flex-start">🔊</button>
     </div>
     <div class="win-row" style="margin-top:8px">
       <label style="flex:0 0 auto">Показ, с</label>
