@@ -99,6 +99,12 @@ matLine.specularColor = new BABYLON.Color3(0.15, 0.15, 0.15);
 const matCurb = new BABYLON.StandardMaterial("curbMat", scene);
 matCurb.diffuseColor = new BABYLON.Color3(1, 1, 1);
 matCurb.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+// Тот же бетон, но двусторонний — для протянутого бордюра эстакады,
+// чтобы не зависеть от порядка обхода граней в кастомной геометрии.
+const matCurbDS = new BABYLON.StandardMaterial("curbMatDS", scene);
+matCurbDS.diffuseColor = new BABYLON.Color3(1, 1, 1);
+matCurbDS.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+matCurbDS.backFaceCulling = false;
 const matPost = new BABYLON.StandardMaterial("postMat", scene);
 matPost.diffuseColor = new BABYLON.Color3(0.42, 0.46, 0.5);
 matPost.specularColor = new BABYLON.Color3(0.4, 0.4, 0.42);
@@ -109,29 +115,34 @@ matRail.specularColor = new BABYLON.Color3(0.5, 0.5, 0.5);
 matRail.specularPower = 128;
 
 const matRamp = new BABYLON.StandardMaterial("rampMat", scene);
-matRamp.specularColor = new BABYLON.Color3(0.06, 0.06, 0.08);
-matRamp.specularPower = 16;
+matRamp.diffuseColor = new BABYLON.Color3(0.85, 0.85, 0.88); // как у земли: иначе текстура темнит сама по себе
+// Блик почти в ноль: асфальт шершавый, зеркалить ему нечем.
+// Сила ниже земли, конус уже — от солнца остаётся только матовое пятно.
+matRamp.specularColor = new BABYLON.Color3(0.015, 0.015, 0.02);
+matRamp.specularPower = 128;
 matRamp.backFaceCulling = false;
 const rampTex = new BABYLON.DynamicTexture("rampTex", { width:256, height:256 }, scene, true);
 {
+  // Тот же асфальт, что на земле: база 85, шум ±15, пятна и трещины —
+  // раньше тут была база 62, и настил выглядел заметно темнее площадки.
   const t = rampTex.getContext();
-  t.fillStyle = "rgb(62,62,64)";
+  t.fillStyle = "rgb(85,85,85)";
   t.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 4000; i++) {
-    const x = Math.random() * 256, y = Math.random() * 256, v = 64 + (Math.random() * 26 - 13);
+    const x = Math.random() * 256, y = Math.random() * 256, v = 85 + (Math.random() * 30 - 15);
     t.fillStyle = "rgb(" + (v | 0) + "," + (v | 0) + "," + (v | 0) + ")";
     t.fillRect(x, y, 2, 2);
   }
   for (let i = 0; i < 110; i++) {
     const x = Math.random() * 256, y = Math.random() * 256, r = 1.5 + Math.random() * 4;
-    const v = 66 + (Math.random() * 22 - 11);
-    t.fillStyle = "rgba(" + (v | 0) + "," + (v | 0) + "," + (v | 0) + ",0.4)";
+    const v = 70 + (Math.random() * 30 - 15);
+    t.fillStyle = "rgba(" + (v | 0) + "," + (v | 0) + "," + (v | 0) + ",0.45)";
     t.beginPath(); t.arc(x, y, r, 0, Math.PI * 2); t.fill();
   }
   for (let i = 0; i < 20; i++) {
     const x = Math.random() * 256, y = Math.random() * 256;
-    const l = 12 + Math.random() * 34, a = Math.random() * Math.PI;
-    t.strokeStyle = "rgba(18,18,18,0.35)";
+    const l = 14 + Math.random() * 40, a = Math.random() * Math.PI;
+    t.strokeStyle = "rgba(40,40,40,0.35)";
     t.lineWidth = 1;
     t.beginPath(); t.moveTo(x, y); t.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); t.stroke();
   }
@@ -234,22 +245,61 @@ function buildRampMesh(D, h, name, L2) {
 }
 
 function buildRampCurbs(g, sides, D, L2, h) {
+  // Цельный бордюр: поперечный прямоугольник, протянутый строго по профилю
+  // через точные точки изломов. Стыков нет вообще — ни щелей, ни торчащих
+  // граней нахлёста. Неиндексированные грани дают чёткие рёбра везде.
+  // Низ заглублен на 2 см в настил, верх — на 40 см выше него, как было.
+  const total = D + L2 + D;
+  if (total < 1e-6) return;
+  const yAt = (u) => {
+    if (u <= 0) return 0;
+    if (u <= D) return u / D * h;
+    if (u <= D + L2) return h;
+    if (u >= total) return 0;
+    return h * (1 - (u - D - L2) / D);
+  };
+  const us = [0];
+  for (let u = 0.5; u < total; u += 0.5) us.push(u);
+  us.push(D, D + L2, total);
+  us.sort((a, b) => a - b);
+  const stations = [];
+  let prevU = -1e9;
+  for (const u of us) {
+    if (u - prevU < 1e-6) continue;
+    prevU = u;
+    stations.push(u);
+  }
+  const W = 0.24, EMBED = 0.02, H = 0.4;
   for (const sx of sides) {
-    const mk = (z1, z2, y1, y2) => {
-      const Ls = Math.hypot(z2 - z1, y2 - y1) || 0.05;
-      const curb = BABYLON.MeshBuilder.CreateBox("rampCurb" + (drawSeq++),
-        { width:0.24, height:0.4, depth:Ls + 0.08 }, scene);
-      const py = (z2 - z1) / Ls, pz = -(y2 - y1) / Ls;
-      curb.parent = g;
-      curb.position.set(sx, (y1 + y2) / 2 + py * 0.2, (z1 + z2) / 2 + pz * 0.2);
-      curb.rotation.x = Math.atan2(-(y2 - y1), z2 - z1);
-      curb.material = matCurb;
-      curb.isPickable = false;
-      curb.metadata = { isLine:true, stype:"estacada", group:g };
+    const x0 = sx - W / 2, x1 = sx + W / 2;
+    const pos = [];
+    const ring = (u) => {
+      const yb = yAt(u) - EMBED, yt = yAt(u) + H;
+      return [[x0, yb, u], [x1, yb, u], [x1, yt, u], [x0, yt, u]];
     };
-    mk(-0.06, D + 0.06, 0, h);
-    mk(D - 0.06, D + L2 + 0.06, h, h);
-    mk(D + L2 - 0.06, D + L2 + D + 0.06, h, 0);
+    const quad = (a, b, c, d) => { pos.push(...a, ...b, ...c, ...a, ...c, ...d); };
+    let pr = ring(stations[0]);
+    quad(pr[0], pr[1], pr[2], pr[3]); // торец в начале
+    for (let i = 1; i < stations.length; i++) {
+      const cr = ring(stations[i]);
+      for (let e = 0; e < 4; e++) quad(pr[e], cr[e], cr[(e + 1) % 4], pr[(e + 1) % 4]);
+      pr = cr;
+    }
+    quad(pr[0], pr[1], pr[2], pr[3]); // торец в конце
+    const m = new BABYLON.Mesh("rampCurb" + (drawSeq++), scene);
+    const vd = new BABYLON.VertexData();
+    vd.positions = pos;
+    const idx = [];
+    for (let i = 0; i < pos.length / 3; i++) idx.push(i);
+    vd.indices = idx;
+    const norms = new Float32Array(pos.length);
+    BABYLON.VertexData.ComputeNormals(pos, idx, norms);
+    vd.normals = norms;
+    vd.applyToMesh(m);
+    m.parent = g;
+    m.material = matCurbDS;
+    m.isPickable = false;
+    m.metadata = { isLine:true, stype:"estacada", group:g };
   }
 }
 
@@ -261,10 +311,46 @@ function makeRampSegment(ax, az, dx, dz, D, h) {
   poly.isPickable = true;
   poly.metadata = { isLine:true, stype:"estacada", group:g, isSurface:true };
   buildRampCurbs(g, [-EST_W / 2 + 0.12, EST_W / 2 - 0.12], D, EST_L2, h);
+  buildRampLane(g, D, EST_L2, h);
   g.position.set(ax, 0, az);
   g.rotation.y = segRotY(dx, dz);
   for (const m of g.getChildMeshes(false)) freezeStatic(m);
   return g;
+}
+
+// Центральная сплошная разметка эстакады: две полосы. Единая лента ribbon
+// строго по профилю (включая точные точки изломов) — стыков нет вообще,
+// поэтому разрывов на гребне и у подошвы тоже нет. Дети группы g: удаляются
+// вместе с ней (dispose рекурсивен), в физику не попадают (без isSurface),
+// в редакторе клики проходят сквозь (isPickable=false).
+function buildRampLane(g, D, L2, h) {
+  const total = D + L2 + D;
+  if (total < 1e-6) return;
+  const yAt = (u) => {
+    if (u <= 0) return 0;
+    if (u <= D) return u / D * h;
+    if (u <= D + L2) return h;
+    if (u >= total) return 0;
+    return h * (1 - (u - D - L2) / D);
+  };
+  const us = [0];
+  for (let u = 0.5; u < total; u += 0.5) us.push(u);
+  us.push(D, D + L2, total);
+  us.sort((a, b) => a - b);
+  const left = [], right = [];
+  let prev = -1e9;
+  for (const u of us) {
+    if (u - prev < 1e-6) continue;
+    prev = u;
+    left.push(new BABYLON.Vector3(-0.05, yAt(u) + 0.015, u));
+    right.push(new BABYLON.Vector3(0.05, yAt(u) + 0.015, u));
+  }
+  if (left.length < 2) return;
+  const ribbon = BABYLON.MeshBuilder.CreateRibbon("rampLane" + (drawSeq++),
+    { pathArray:[left, right], sideOrientation:BABYLON.Mesh.DOUBLESIDE }, scene);
+  ribbon.parent = g;
+  ribbon.material = matLine;
+  ribbon.isPickable = false;
 }
 
 function makeLineSegment(type, a, b) {
