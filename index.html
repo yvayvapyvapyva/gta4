@@ -535,8 +535,8 @@ cam.pinchDeltaPercentage = 0.02;
 cam.panningSensibility = 0;
 
 const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), scene);
-hemi.intensity = 0.45;
-hemi.groundColor = new BABYLON.Color3(0.16, 0.17, 0.2);
+hemi.intensity = 0.75;
+hemi.groundColor = new BABYLON.Color3(0.32, 0.33, 0.38);
 
 // Солнце сверху. Направление задаёт ход лучей, поэтому у солнца на высоте 79°
 // вектор почти вертикальный: наклон 11° вбок оставлен намеренно — при строго
@@ -544,7 +544,7 @@ hemi.groundColor = new BABYLON.Color3(0.16, 0.17, 0.2);
 // а боковой уход даёт теням форму и показывает, где у машины крылья.
 const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.15, -1, 0.13), scene);
 sun.position = new BABYLON.Vector3(2, 14, -2);
-sun.intensity = 2.6;
+sun.intensity = 2.3;
 
 
 
