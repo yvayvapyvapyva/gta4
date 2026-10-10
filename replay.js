@@ -114,7 +114,8 @@ function loadReplay(json) {
   return true;
 }
 
-// Нормализация сообщений: только {t, dur, text, voice} с числами и непустым текстом.
+// Нормализация сообщений: {t, dur, text, speech, voice}.
+// text — текст на экране, speech — текст для озвучки (пусто = озвучить text).
 // voice — голос TTS из onepage2: command (Дмитрий) или comment (Светлана).
 function sanitizeMessages(src) {
   if (!Array.isArray(src)) return [];
@@ -124,10 +125,18 @@ function sanitizeMessages(src) {
     const t = +m.t, dur = +m.dur;
     const text = String(m.text ?? '').slice(0, 200);
     if (!isFinite(t) || !isFinite(dur) || t < 0 || dur <= 0 || !text.trim()) continue;
-    out.push({ t: Math.round(t * 1000) / 1000, dur: Math.min(60, Math.max(0.5, Math.round(dur * 10) / 10)), text: text.trim(), voice: m.voice === 'comment' ? 'comment' : 'command' });
+    const speech = String(m.speech ?? '').slice(0, 500).trim();
+    out.push({ t: Math.round(t * 1000) / 1000, dur: Math.min(60, Math.max(0.5, Math.round(dur * 10) / 10)), text: text.trim(), speech, voice: m.voice === 'comment' ? 'comment' : 'command' });
   }
   out.sort((a, b) => a.t - b.t);
   return out;
+}
+
+// Что озвучивать для сообщения: только отдельный speech-текст.
+// Пусто — тишина, показывается лишь экранный текст.
+function msgSpeech(m) {
+  if (!m) return '';
+  return String(m.speech ?? '').trim();
 }
 
 // Оверлей сообщений: один div на все случаи (воспроизведение + редактор).
@@ -155,8 +164,10 @@ function voiceTick(t) {
   replayMessages.forEach((m, i) => {
     if (voiceSeen.has(i)) return;
     if (t >= m.t && t < m.t + m.dur) {
-      voiceSeen.add(i);
-      try { ttsSpeak(m.voice || 'command', m.text); } catch (e) {}
+      voiceSeen.add(i); // отмечаем всегда, даже молчаливые — повторных проверок нет
+      const s = msgSpeech(m);
+      if (!s) return;
+      try { ttsSpeak(m.voice || 'command', s); } catch (e) {}
     }
   });
 }
@@ -183,7 +194,7 @@ function startPlayback() {
   voiceSeen.clear();
   try {
     if (typeof ttsPrefetch === 'function') {
-      ttsPrefetch(replayMessages.map((m) => ({ voice: m.voice || 'command', text: m.text }))).catch(() => {});
+      ttsPrefetch(replayMessages.map((m) => ({ voice: m.voice || 'command', text: msgSpeech(m) }))).catch(() => {});
     }
   } catch (e) {}
   showPlaybackUI();
@@ -543,7 +554,8 @@ function stopAndSave() {
 addEventListener('keydown', e => {
   if (e.code === 'KeyR' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
     const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    if (t && t.closest && t.closest('#replayEditWin')) return;
     if (typeof isEditing !== 'undefined' && isEditing) return;
     const settingsWin = document.getElementById('settingsWin');
     const mirrorWin = document.getElementById('mirrorWin');
@@ -648,7 +660,7 @@ function playReplay(name) {
   const msgs = (window.Replay.getMessages && window.Replay.getMessages()) || [];
   const canVoice = typeof ttsPrefetch === 'function' && typeof ttsHas === 'function';
   // Греть нечего (нет сообщений или всё уже в кэше) — играем сразу без лоадера.
-  const cold = canVoice ? msgs.filter((m) => !ttsHas(m.voice || 'command', m.text)) : [];
+  const cold = canVoice ? msgs.filter((m) => msgSpeech(m) && !ttsHas(m.voice || 'command', msgSpeech(m))) : [];
   if (!cold.length) {
     window.Replay.startPlayback();
     showToast('Воспроизведение: ' + name);
@@ -657,8 +669,8 @@ function playReplay(name) {
   // Сначала грузим всю озвучку с прогрессом — и только потом стартуем,
   // чтобы не было «текст есть, а голоса нет».
   openVoiceLoad(true);
-  updateVoiceLoad(0, cold.length);
-  const items = cold.map((m) => ({ voice: m.voice || 'command', text: m.text }));
+  updateVoiceLoad(0, Math.max(1, cold.length));
+  const items = cold.map((m) => ({ voice: m.voice || 'command', text: msgSpeech(m) }));
   const prefetch = ttsPrefetch(items, (done, total) => updateVoiceLoad(done, total));
   const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('tts timeout')), 25000));
   Promise.race([prefetch, timeout]).then((stat) => {
@@ -711,6 +723,7 @@ function editEls() {
     time: document.getElementById('replayEditTime'),
     play: document.getElementById('replayEditPlay'),
     text: document.getElementById('replayEditText'),
+    speech: document.getElementById('replayEditSpeech'),
     dur: document.getElementById('replayEditDur'),
     voice: document.getElementById('replayEditVoice'),
     msgs: document.getElementById('replayEditMsgs'),
@@ -857,16 +870,21 @@ function renderEditMsgs() {  const el = editEls();
     const end = (m.t + m.dur).toFixed(1);
     row.innerHTML =
       '<button data-act="goto" title="Перейти к началу (' + m.t.toFixed(1) + ' с)" style="padding:4px 8px">⏵ ' + m.t.toFixed(1) + '–' + end + '</button>' +
-      '<input type="text" maxlength="200" value="">' +
+      '<input type="text" data-act="text" maxlength="200" title="Текст на экране" value="">' +
+      '<input type="text" data-act="speech" maxlength="500" title="Текст для озвучки (пусто = тишина)" placeholder="Озвучить текст" value="">' +
       '<input type="number" min="0.5" max="60" step="0.5" title="Длительность показа, с" value="' + m.dur + '">' +
       '<select data-act="voice" title="Голос озвучки"><option value="command">команда</option><option value="comment">коммент.</option></select>' +
       '<button data-act="hear" title="Прослушать" style="padding:4px 8px">🔊</button>' +
       '<button data-act="del" title="Удалить" style="padding:4px 8px">✕</button>';
-    row.querySelector('input[type=text]').value = m.text;
-    row.querySelector('input[type=text]').addEventListener('change', (e) => {
+    row.querySelector('[data-act=text]').value = m.text;
+    row.querySelector('[data-act=speech]').value = m.speech || '';
+    row.querySelector('[data-act=text]').addEventListener('change', (e) => {
       const v = e.target.value.trim().slice(0, 200);
       if (!v) { renderEditMsgs(); return; } // пустой текст не сохраняем
       replayMessages[idx].text = v;
+    });
+    row.querySelector('[data-act=speech]').addEventListener('change', (e) => {
+      replayMessages[idx].speech = e.target.value.trim().slice(0, 500);
     });
     row.querySelector('input[type=number]').addEventListener('change', (e) => {
       let d = +e.target.value;
@@ -902,7 +920,9 @@ function renderEditMsgs() {  const el = editEls();
       if (!mm) return;
       const v = voiceSel.value === 'comment' ? 'comment' : 'command';
       mm.voice = v;
-      hearWithSpinner(e.currentTarget, v, mm.text);
+      const s = msgSpeech(mm);
+      if (!s) { showToast('Поле озвучки пусто — будет только текст'); return; }
+      hearWithSpinner(e.currentTarget, v, s);
     });
     el.msgs.appendChild(row);
   });
@@ -912,7 +932,7 @@ function saveReplayEdits() {
   if (!editName) return;
   const data = loadReplayFromStorage(editName);
   if (!data) { showToast('Запись пропала'); return; }
-  data.messages = replayMessages.map(m => ({ t: m.t, dur: m.dur, text: m.text, voice: m.voice || 'command' }));
+  data.messages = replayMessages.map(m => ({ t: m.t, dur: m.dur, text: m.text, speech: m.speech || '', voice: m.voice || 'command' }));
   if (saveReplayToStorage(editName, data)) showToast('Сохранено: ' + editName);
   else showToast('Ошибка сохранения');
 }
@@ -927,7 +947,9 @@ function initReplayEditor() {
     const text = (el.text?.value ?? '').trim().slice(0, 200);
     if (!text) { showToast('Введите текст сообщения'); el.text?.focus(); return; }
     const voice = el.voice?.value === 'comment' ? 'comment' : 'command';
-    hearWithSpinner(e.currentTarget, voice, text);
+    const speech = (el.speech?.value ?? '').trim().slice(0, 500);
+    if (!speech) { showToast('Поле озвучки пусто — будет только текст'); return; }
+    hearWithSpinner(e.currentTarget, voice, speech);
   });
   document.getElementById('replayEditAdd')?.addEventListener('click', () => {    if (!isEditing || !replayBuffer.length) return;
     const text = (el.text?.value ?? '').trim().slice(0, 200);
@@ -937,9 +959,11 @@ function initReplayEditor() {
     dur = Math.min(60, Math.max(0.5, Math.round(dur * 10) / 10));
     const t = replayBuffer[editIndex]?.t ?? 0;
     const voice = el.voice?.value === 'comment' ? 'comment' : 'command';
-    replayMessages.push({ t, dur, text, voice });
+    const speech = (el.speech?.value ?? '').trim().slice(0, 500);
+    replayMessages.push({ t, dur, text, speech, voice });
     replayMessages.sort((a, b) => a.t - b.t);
     if (el.text) el.text.value = '';
+    if (el.speech) el.speech.value = '';
     renderEditMsgs();
     updateReplayMessages(t);
     showToast('Сообщение вставлено на ' + t.toFixed(1) + ' с');
@@ -950,9 +974,12 @@ function initReplayEditor() {
   el.backdrop?.addEventListener('click', closeReplayEditor);
   addEventListener('keydown', (e) => {
     if (!isEditing) return;
-    if (e.code === 'Escape') { e.preventDefault(); closeReplayEditor(); }
-    else if (e.code === 'Space' && document.activeElement !== el.text) {
-      // пробел в редакторе = play/pause предпросмотра, а не ручник
+    if (e.code === 'Escape') { e.preventDefault(); closeReplayEditor(); return; }
+    // Фокус внутри панели редактора — хоткеи (включая пробел предпросмотра)
+    // не перехватываем: поля, селекты, слайдер и кнопки работают нативно.
+    const t = e.target;
+    if (t && t.closest && t.closest('#replayEditWin')) return;
+    if (e.code === 'Space') {
       e.preventDefault();
       setEditPlaying(!editPlaying);
     }

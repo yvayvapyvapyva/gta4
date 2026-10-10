@@ -240,10 +240,11 @@ function exportReplay(name) {
   exportDuration = buf.length ? buf[buf.length - 1].t : 0;
   const msgs = window.Replay.getMessages ? window.Replay.getMessages() : [];
   const canVoice = typeof ttsPrefetch === 'function' && typeof ttsHas === 'function';
-  const cold = canVoice ? msgs.filter((m) => !ttsHas(m.voice || 'command', m.text)) : [];
+  const speakOf = (m) => (typeof msgSpeech === 'function' ? msgSpeech(m) : String(m.speech ?? '').trim());
+  const cold = canVoice ? msgs.filter((m) => speakOf(m).trim() && !ttsHas(m.voice || 'command', speakOf(m))) : [];
   openVoiceLoad(true);
   updateVoiceLoad(0, Math.max(1, cold.length));
-  const items = cold.map((m) => ({ voice: m.voice || 'command', text: m.text }));
+  const items = cold.map((m) => ({ voice: m.voice || 'command', text: speakOf(m) }));
   const prefetch = canVoice
     ? ttsPrefetch(items, (done, total) => updateVoiceLoad(done, total))
     : Promise.resolve({ done: 0, total: 0 });

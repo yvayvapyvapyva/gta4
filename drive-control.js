@@ -241,6 +241,7 @@ addEventListener('keydown',e=>{
   if(e.repeat)return;
   const t=e.target;
   if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;
+  if(t&&t.closest&&t.closest('#replayEditWin'))return; // фокус в редакторе — хоткеи молчат
   if(e.code==='KeyQ')toggleBlinkL();
   else if(e.code==='KeyE')toggleBlinkR();
 });
@@ -502,6 +503,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   const t=e.target;
   if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;
+  if(t&&t.closest&&t.closest('#replayEditWin'))return; // фокус в редакторе — хоткеи молчат
   if (e.code === 'Equal' || e.code === 'NumpadAdd') { // = / +
     e.preventDefault(); zoomDir = 0.9; zoomStep(zoomDir); if (!zoomRaf) zoomRaf = requestAnimationFrame(zoomTick);
   } else if (e.code === 'Minus' || e.code === 'NumpadSubtract') { // - / _

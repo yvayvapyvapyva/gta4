@@ -442,7 +442,10 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   <div class="win-sec">
     <h4>Новое сообщение в текущем моменте</h4>
     <div class="win-row" style="gap:8px">
-      <input type="text" id="replayEditText" placeholder="Текст сообщения…" maxlength="200" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
+      <input type="text" id="replayEditText" placeholder="Текст на экране…" maxlength="200" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
+    </div>
+    <div class="win-row" style="gap:8px;margin-top:8px">
+      <input type="text" id="replayEditSpeech" placeholder="Озвучить текст" maxlength="500" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
       <button id="replayEditHear" title="Прослушать" style="flex:0 0 auto">🔊</button>
     </div>
     <div class="win-row" style="margin-top:8px">
@@ -710,6 +713,9 @@ addEventListener("keydown", (e) => {
   // иначе preventDefault ниже съедает пробел/WASD/стрелки при наборе текста.
   const t = e.target;
   if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+  // Фокус на панели редактора реплея — все игровые хоткеи молчат
+  // (Esc обрабатывает сам редактор).
+  if (t && t.closest && t.closest("#replayEditWin")) return;
   if (CONTROL_KEYS.has(e.code)) e.preventDefault();
   // режим регулировки зеркал перехватывает стрелки, чтобы они не управляли машиной
   if (typeof mirrorAdjActive === "function" && mirrorAdjActive()) {
