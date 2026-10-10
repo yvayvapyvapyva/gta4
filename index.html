@@ -152,16 +152,13 @@
 /* Стили нижней панели управления — каждый элемент position:fixed отдельно */
 #driveCtrl{position:fixed;left:0;right:0;bottom:0;top:0;z-index:8;pointer-events:none}
 #driveCtrl > *{position:fixed;pointer-events:auto}
-.dv-slider-v{width:64px;height:200px;touch-action:pan-y;cursor:grab;-webkit-tap-highlight-color:transparent;box-sizing:border-box;overflow:hidden;
-  background:linear-gradient(0deg,#16232e,#0b1520);border:2px solid #2a4257;border-radius:16px;box-shadow:0 0 0 4px rgba(12,22,32,.6),0 6px 18px rgba(0,0,0,.5)}
-.dv-slider-v.dragging{cursor:grabbing;touch-action:none}
-.dv-slider-v::before{content:'';position:absolute;top:50%;left:16%;right:16%;height:2px;background:#2a4257;border-radius:1px;transform:translateY(-50%)}
-.dv-slider-v-h{position:absolute;top:50%;left:50%;width:54px;height:54px;transform:translate(-50%,-50%);border-radius:12px;background:#ff6d00;border:2px solid #1a1200;box-shadow:0 3px 10px rgba(0,0,0,.55)}
 .dv-btn{width:54px;height:54px;font-size:24px;color:#d8e5ee;background:rgba(12,22,32,.85);border:1px solid #2a4257;border-radius:12px;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center}
 .dv-btn.on,.dv-btn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
 .dv-btn.active{background:#62d0df;color:#1a1200;border-color:#62d0df}
 .dv-btn.dv-xray.on{background:rgba(255,138,61,.16);border-color:var(--acc);color:var(--acc)}
 .dv-btn.dv-xray.on:active{background:var(--acc);color:#12141a}
+.dv-btn.dv-view.on{background:rgba(255,138,61,.16);border-color:var(--acc);color:var(--acc)}
+.dv-btn.dv-view.on:active{background:var(--acc);color:#12141a}
 .dv-zoombtn{font-size:28px;line-height:1;color:#fff}
 .dv-zoombtn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
 .dv-blink{color:#fff}
@@ -386,16 +383,15 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 </div>
 
 <div id="driveCtrl">
-  <!-- Левая сторона -->
-  <div class="dv-slider-v" id="dvThrottle" role="slider" aria-label="Газ/Тормоз" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0" style="left:16px;bottom:16px;">
-    <div class="dv-slider-v-h" id="dvThrottleH"></div>
-  </div>
-  <button class="dv-btn dv-view" id="dvView" aria-label="Переключить вид" style="left:88px;bottom:78px;">👁</button>
+  <!-- Левая сторона: педали вперёд/назад вместо ползунка -->
+  <button class="dv-btn" id="dvGas" aria-label="Газ (вперёд)" style="left:16px;bottom:86px;">▲</button>
+  <button class="dv-btn" id="dvBrake" aria-label="Тормоз (назад)" style="left:16px;bottom:16px;">▼</button>
+  <button class="dv-btn dv-view" id="dvView" aria-label="Переключить вид" style="left:88px;bottom:86px;">👁</button>
   <button class="dv-btn dv-xray" id="dvXray" aria-label="Прозрачность кузова" style="left:88px;bottom:16px;">⛶</button>
 
   <!-- Правая сторона -->
-  <button class="dv-btn dv-blink" id="dvBlinkL" aria-label="Левый поворотник" style="right:78px;bottom:88px;"><svg viewBox="2 0 24 24" aria-hidden="true"><rect x="14" y="7.5" width="12" height="9" rx="2"/><path d="M14 2 L2 12 L14 22 Z"/></svg></button>
-  <button class="dv-btn dv-blink" id="dvBlinkR" aria-label="Правый поворотник" style="right:16px;bottom:88px;"><svg viewBox="14 0 24 24" aria-hidden="true"><rect x="14" y="7.5" width="12" height="9" rx="2"/><path d="M26 2 L38 12 L26 22 Z"/></svg></button>
+  <button class="dv-btn dv-blink" id="dvBlinkL" aria-label="Левый поворотник" style="right:86px;bottom:96px;"><svg viewBox="2 0 24 24" aria-hidden="true"><rect x="14" y="7.5" width="12" height="9" rx="2"/><path d="M14 2 L2 12 L14 22 Z"/></svg></button>
+  <button class="dv-btn dv-blink" id="dvBlinkR" aria-label="Правый поворотник" style="right:16px;bottom:96px;"><svg viewBox="14 0 24 24" aria-hidden="true"><rect x="14" y="7.5" width="12" height="9" rx="2"/><path d="M26 2 L38 12 L26 22 Z"/></svg></button>
   <div class="dv-slider-wrap" style="right:16px;bottom:16px;">
     <div class="dv-slider" id="dvSlider" role="slider" aria-label="Руль" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0">
       <div class="dv-slider-h" id="dvSliderH"></div>

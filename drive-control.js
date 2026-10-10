@@ -67,60 +67,57 @@ const DV_LOCK = () => CAR.maxSteer;
   window.syncDvWheel = () => { if (drag) return; pos = Math.max(-1, Math.min(1, -CAR.steer / DV_LOCK())); draw(pos); };
 })();
 
-// ── Газ/тормоз: вертикальный ползунок ────────────────────────────────────
+// ── Газ/тормоз: две кнопки-педали (вперёд/назад) ──────────────────────────
+// Держание кнопки = полный газ/тормоз (touchThrottle ±1), дальше работает
+// штатная аналоговая ветка drive() (целевая скорость + PID), поэтому
+// разгон/торможение такие же плавные, как были у ползунка на максимуме.
 (function() {
-  let pos = 0, drag = null;
-  const slider = document.getElementById('dvThrottle');
-  const handle = document.getElementById('dvThrottleH');
-  if (!slider || !handle) return;
-  let travel = 1;
-  const measure = () => { travel = Math.max(1, (slider.clientHeight - handle.offsetHeight) / 2); };
-  measure();
-  addEventListener('resize', measure);
-  const draw = (p) => {
-    handle.style.transform = 'translate(-50%,-50%) translateY(' + (-p * travel).toFixed(1) + 'px)';
-    slider.setAttribute('aria-valuenow', Math.round(p * 100));
+  const gasBtn = document.getElementById('dvGas');
+  const brakeBtn = document.getElementById('dvBrake');
+  if (!gasBtn || !brakeBtn) return;
+  let gasHeld = false, brakeHeld = false;
+  let keyGas = false, keyBrake = false; // только подсветка: газ с клавиатуры едет дискретной веткой drive()
+  const apply = () => {
+    touchThrottle = (gasHeld ? 1 : 0) - (brakeHeld ? 1 : 0);
+    paint();
   };
-  const setPos = (p) => {
-    pos = Math.max(-1, Math.min(1, p));
-    touchThrottle = pos;  // аналоговое значение -1..1
-    draw(pos);
+  const paint = () => {
+    gasBtn.classList.toggle('on', gasHeld || keyGas);
+    brakeBtn.classList.toggle('on', brakeHeld || keyBrake);
   };
-  // Клик/тап по полосе слайдера — прыжок ручки к месту касания
-  // Тап по ручке — начало драга без прыжка
-  slider.addEventListener('pointerdown', e => {
-    measure();
-    const isHandle = e.target === handle;
-    if (!isHandle) {
-      const rect = slider.getBoundingClientRect();
-      const p = -(e.clientY - rect.top - rect.height / 2) / travel;
-      setPos(p);
-    }
-    // начинаем драг (и для ручки, и для полосы)
-    drag = { id: e.pointerId, startPos: pos, startY: e.clientY };
-    slider.classList.add('dragging');
+  const bindHold = (el, set) => {
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+      set(true);
+    });
+    const end = () => set(false);
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end);
+    // Блокировка двойного тап-зума на iOS
+    el.addEventListener('touchend', e => {
+      if (e.detail > 1) e.preventDefault();
+    }, { passive: false });
+  };
+  bindHold(gasBtn, v => { gasHeld = v; apply(); });
+  bindHold(brakeBtn, v => { brakeHeld = v; apply(); });
+  const keyTargetOk = (e) => {
+    const t = e.target;
+    return !(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable));
+  };
+  addEventListener('keydown', e => {
+    if (!keyTargetOk(e)) return;
+    if (e.code === 'KeyW') { keyGas = true; paint(); }
+    else if (e.code === 'KeyS') { keyBrake = true; paint(); }
   });
-  window.addEventListener('pointermove', e => {
-    if (!drag || drag.id !== e.pointerId) return;
-    e.preventDefault();
-    setPos(drag.startPos - (e.clientY - drag.startY) / travel);
+  addEventListener('keyup', e => {
+    if (e.code === 'KeyW') { keyGas = false; paint(); }
+    else if (e.code === 'KeyS') { keyBrake = false; paint(); }
   });
-  const endDrag = e => {
-    if (!drag || drag.id !== e.pointerId) return;
-    drag = null;
-    slider.classList.remove('dragging');
-    touchThrottle = 0;
-    draw(0);
-    pos = 0;
-  };
-  window.addEventListener('pointerup', endDrag);
-  window.addEventListener('pointercancel', endDrag);
-  window.addEventListener('blur', () => { if (drag) { drag = null; slider.classList.remove('dragging'); touchThrottle = 0; draw(0); pos = 0; } });
-  // Блокировка двойного тап-зума на iOS для ползунка газа
-  slider.addEventListener('touchend', e => {
-    if (e.detail > 1) e.preventDefault();
-  }, { passive: false });
-  window.syncDvThrottle = () => { if (drag) return; touchThrottle = 0; draw(0); pos = 0; };
+  addEventListener('blur', () => { gasHeld = false; brakeHeld = false; keyGas = false; keyBrake = false; apply(); });
+  // Сброс извне (стоп реплея/редактора): газ в нейтраль.
+  window.syncDvThrottle = () => { gasHeld = false; brakeHeld = false; apply(); };
 })();
 
 // ── Кнопка переключения вида (следом / салон / свободная) ─────
@@ -133,7 +130,7 @@ function syncDvView(){
   const name=modes[CAR.mode]||'';
   const next=modes[(CAR.mode+1)%driveCount];
   dvView.textContent='👁';
-  dvView.classList.toggle('active',CAR.mode===1);
+  dvView.classList.toggle('on',CAR.mode===1);
   dvView.setAttribute('aria-label','Вид: '+name+'. Переключить на «'+next+'»');
 }
 if(dvView)dvView.addEventListener('click',()=>{
