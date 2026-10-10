@@ -122,6 +122,9 @@ const DV_LOCK = () => CAR.maxSteer;
 
 // ── Кнопка переключения вида (следом / салон / свободная) ─────
 const dvView=document.getElementById('dvView');
+// SVG-иконка глаза (контур Lucide, ISC): монохром под currentColor,
+// никаких эмодзи — они рисуются цветом платформы.
+const DV_VIEW_SVG='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path fill="none" d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle fill="none" cx="12" cy="12" r="3"/></svg>';
 function syncDvView(){
   if(!dvView)return;
   // Кнопка показывает только следующий из двух ездовых режимов.
@@ -129,7 +132,8 @@ function syncDvView(){
   const driveCount=(typeof CAM_DRIVE_MODES!=='undefined')?CAM_DRIVE_MODES:2;
   const name=modes[CAR.mode]||'';
   const next=modes[(CAR.mode+1)%driveCount];
-  dvView.textContent='👁';
+  // Иконка — SVG из разметки; textContent не трогаем, иначе затёрли бы его эмодзи.
+  if(!dvView.querySelector('svg'))dvView.innerHTML=DV_VIEW_SVG;
   dvView.classList.toggle('on',CAR.mode===1);
   dvView.setAttribute('aria-label','Вид: '+name+'. Переключить на «'+next+'»');
 }
