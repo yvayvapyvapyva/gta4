@@ -1561,8 +1561,8 @@ const maxSteer = CAR.maxSteer;
     BABYLON.Vector3.LerpToRef(camTarget, camTargetTmp, 1 - Math.exp(-dt * 9), camTarget);
     cam.target.copyFrom(camTarget);
     const k = 1 - Math.exp(-dt * 5);
-    // автовозврат камеры за спину через 3 с бездействия (по кратчайшему пути)
-    if (performance.now() - CAR.idle > 3000) {
+    // автовозврат камеры за спину через 5 с бездействия (по кратчайшему пути)
+    if (performance.now() - CAR.idle > 5000) {
       const decay = 1 - Math.exp(-dt * 1.2);
       const targetAlpha = CAR.yaw + Math.PI / 2; // строго за спиной
       let diff = targetAlpha - cam.alpha;
