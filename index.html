@@ -317,8 +317,8 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
     <h4>Скорость</h4>
     <div class="win-row">
       <label>Макс.</label>
-      <input type="range" id="setMaxSpeed" min="2" max="20" step="1" value="15">
-      <span class="val" id="setMaxSpeedV">15 км/ч</span>
+      <input type="range" id="setMaxSpeed" min="2" max="20" step="1" value="10">
+      <span class="val" id="setMaxSpeedV">10 км/ч</span>
     </div>
     <div class="win-note">Ограничение скорости вперёд и назад (км/ч)</div>
   </div>
@@ -712,8 +712,8 @@ const CAR = {
   vy: 0,           // вертикальная скорость, для падений и спусков
   lift: 0,         // высота подъёма кузова над землёй
   track: 1.42,     // ширина колеи, м (половина идёт в опорные точки)
-  maxSpeed: 15/3.6, // 15 км/ч (было 10)
-  maxReverse: 15/3.6, // как вперёд
+  maxSpeed: 10/3.6, // 10 км/ч
+  maxReverse: 10/3.6, // как вперёд
   accel: 2,        // разгон на газу, м/с²
   reverseAccel: 2, // разгон задним ходом, м/с²
   brake: 18,       // ручник (резкая остановка), м/с²
