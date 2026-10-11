@@ -654,7 +654,11 @@ function openReplayList(open) {
   if (!replayWin || !replayBackdrop) return;
   replayWin.classList.toggle('open', open);
   replayBackdrop.classList.toggle('open', open);
-  if (open) renderReplayList();
+  if (open) {
+    renderReplayList();
+    // ползунок руля теперь живёт здесь — подтянуть значение
+    try { if (typeof syncSettings === 'function') syncSettings(); } catch (e) {}
+  }
 }
 function renderReplayList() {
   if (!replayListEl) return;

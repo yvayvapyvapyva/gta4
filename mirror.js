@@ -33,11 +33,8 @@ const MIRROR_ANISO = 1;
 // Только степени двойки; меняется из окна зеркал (ползунок).
 const MIRROR_SAMPLE_STEPS = [1, 2, 4, 8];
 let MIRROR_SAMPLES = 4;
-const MIRROR_ADJ_DEG = 0.5;    // шаг регулировки зеркала, градусы за нажатие
-const MIRROR_ADJ = MIRROR_ADJ_DEG * Math.PI / 180;   // то же в радианах
 // Регулировка зеркал по умолчанию, градусы: левое смотрит чуть влево-назад,
 // правое — чуть вправо-назад, оба чуть вниз на дорогу.
-// Значения кратны шагу MIRROR_ADJ_DEG.
 const MIRROR_DEFAULT_DEG = {
   left:  { yaw: 7, pitch: -7 },
   right: { yaw: -7, pitch: -7 },
@@ -53,8 +50,6 @@ let mirrorNearMeshes = null; // Set деталей у стекла (корпус
 let mirrorList = null;    // общий список мешей для RTT
 let mirrorListed = -1;    // сколько мешей было в сцене на прошлой сборке
 let mirrorActive = false;
-let mirrorAdjOn = false;  // режим регулировки направления зеркал
-let mirrorAdjSide = 0;    // выбранное зеркало (индекс в mirrorEntries)
 let mirrorCarMeshes = null; // Set всего железа машины (из setupMirrors)
 let mirrorDoorKeep = null;  // Set дверных мешей: единственное железо, видимое в зеркалах
 
@@ -276,7 +271,6 @@ function setMirrorsActive(on) {
   mirrorActive = want;
   // смена режима — это всегда движение: сбрасываем паузу простоя
   mirrorIdlePaused = false; mirrorIdleSig = null; mirrorIdleFrames = 0;
-  if (!mirrorActive) { mirrorAdjOn = false; mirrorHudShow(); }
   if (mirrorActive) refreshMirrorList(true);
   for (const e of mirrorEntries) {
     if (mirrorActive) {
@@ -431,71 +425,6 @@ function tickMirrors() {
     e.mat.setVector3("foot", e.fv);
   }
   refreshMirrorList(false);
-}
-
-// ── регулировка направления зеркал ────────────────────────────────────
-// M — включить режим, стрелки — доворот выбранного зеркала,
-// L/R — выбрать левое/правое, K — сбросить. Работает в режиме «салон».
-const MIRROR_YAW_MIN = -0.6, MIRROR_YAW_MAX = 0.6;
-const MIRROR_PITCH_MIN = -0.35, MIRROR_PITCH_MAX = 0.35;
-
-let mirrorHud = null;
-function mirrorHudEl() {
-  if (!mirrorHud) {
-    // в index.html уже есть штатный #mirrorhud — используем его, а не клон
-    mirrorHud = document.getElementById("mirrorhud");
-    if (!mirrorHud) {
-      mirrorHud = document.createElement("div");
-      mirrorHud.id = "mirrorhud";
-      mirrorHud.hidden = true;
-      document.body.appendChild(mirrorHud);
-    }
-  }
-  return mirrorHud;
-}
-
-function mirrorHudShow() {
-  const el = mirrorHudEl();
-  if (!mirrorAdjActive()) { el.hidden = true; return; }
-  const e = mirrorEntries[mirrorAdjSide] || mirrorEntries[0];
-  if (!e) { el.hidden = true; return; }
-  el.hidden = false;
-  const side = e.side === "left" ? "левое" : "правое";
-  const y = (e.yaw / Math.PI * 180).toFixed(1), p = (e.pitch / Math.PI * 180).toFixed(1);
-  el.textContent = "зеркало " + side + " (" + e.side + ") " +
-    "· ← → " + y + "° · ↑ ↓ " + p + "° · L/R — выбор · K — сброс";
-}
-
-function mirrorAdjActive() {
-  return mirrorActive && mirrorAdjOn && mirrorEntries.length > 0;
-}
-
-function mirrorAdjToggle() {
-  if (!mirrorActive || !mirrorEntries.length) { mirrorAdjOn = false; mirrorHudShow(); return; }
-  mirrorAdjOn = !mirrorAdjOn;
-  mirrorHudShow();
-}
-
-function mirrorAdjPick(side) {
-  for (let i = 0; i < mirrorEntries.length; i++) {
-    if (mirrorEntries[i].side === side) { mirrorAdjSide = i; break; }
-  }
-  mirrorHudShow();
-}
-
-function mirrorAdjStep(dx, dy) {
-  const e = mirrorEntries[mirrorAdjSide] || mirrorEntries[0];
-  if (!e) return;
-  // держим углы на сетке шага: накопление двоичной погрешности иначе
-  // даёт 0.4999° вместо ровных 0.5° и ломает совпадение с HUD
-  const snap = (v, lim) => {
-    const n = Math.round(v / MIRROR_ADJ) * MIRROR_ADJ;
-    return Math.min(lim[1], Math.max(lim[0], n));
-  };
-  e.yaw = snap(e.yaw + dx * MIRROR_ADJ, [MIRROR_YAW_MIN, MIRROR_YAW_MAX]);
-  e.pitch = snap(e.pitch + dy * MIRROR_ADJ, [MIRROR_PITCH_MIN, MIRROR_PITCH_MAX]);
-  mirrorRefreshDirs();
-  mirrorHudShow();
 }
 
 function setupMirrors(opts) {

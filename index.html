@@ -46,9 +46,6 @@
   #spd { font-size:44px; font-weight:600; line-height:1; letter-spacing:-2px;
     font-variant-numeric:tabular-nums; text-shadow:0 2px 10px rgba(0,0,0,.6); }
   #spd small { font-size:14px; font-weight:400; color:var(--dim); margin-left:5px; letter-spacing:0; }
-  #mirrorhud { position:fixed; left:14px; top:calc(66px + var(--tg-top)); z-index:5; pointer-events:none;
-    font-size:11.5px; color:var(--fg); background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.12);
-    border-radius:7px; padding:4px 8px; text-shadow:0 1px 6px rgba(0,0,0,.7); }
   #toast { position:fixed; left:50%; top:calc(120px + var(--tg-top)); transform:translateX(-50%); z-index:6; pointer-events:none;
     font-size:14px; font-weight:600; color:#fff; background:rgba(220,60,60,.95); border:1px solid #ff6b6b;
     border-radius:8px; padding:10px 18px; box-shadow:0 6px 20px rgba(0,0,0,.5);
@@ -264,8 +261,6 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 <body>
 <canvas id="view"></canvas>
 
-<div id="mirrorhud" hidden></div>
-
 <div id="hud">
   <div id="spd">0<small>км/ч</small></div>
 </div>
@@ -294,7 +289,8 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 <div id="settingsWin" class="win">
   <h3>Настройки<button id="settingsClose" aria-label="Закрыть">✕</button></h3>
 
-  <div class="win-sec">
+  <!-- Вход в меню записи скрыт: открывается долгим нажатием (2 с) на кнопку администратора -->
+  <div class="win-sec" hidden>
     <div class="win-btns">
       <button id="replayListBtn">Запись</button>
     </div>
@@ -308,11 +304,11 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   </div>
 
   <div class="win-sec">
-    <h4>Вид</h4>
+    <h4>Горячие клавиши</h4>
     <div class="win-note">
       Езда: <b>W/A/S/D</b> · <b>Space</b> — ручник · <b>C</b> — камера<br>
-      <b>R</b> — сброс · <b>M</b> — зеркала · <b>Q/E</b> — поворотники<br>
-      <b>Стрелки</b> — вращение камеры (в режимах «Следом» и «Свободная»)
+      <b>R</b> — сброс · <b>Q/E</b> — поворотники · <b>X</b> — прозрачность<br>
+      <b>Стрелки</b> — вращение камеры
     </div>
   </div>
 
@@ -327,23 +323,10 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   </div>
 
   <div class="win-sec">
-    <h4>Руль</h4>
-    <div class="win-row">
-      <label>Поворот</label>
-      <input type="range" id="setSteerTime" min="0.2" max="2" step="0.1" value="0.5">
-      <span class="val" id="setSteerTimeV">0.5 с</span>
+    <h4>Поддержка</h4>
+    <div class="win-btns">
+      <button id="adminBtn">Написать администратору @Eliseev_I_A</button>
     </div>
-    <div class="win-note">Время поворота колёс от края до края с клавиатуры (с)</div>
-  </div>
-
-  <div class="win-sec">
-    <h4>Позиция камеры салона (Z)</h4>
-    <div class="win-row">
-      <label>Смещ. Z</label>
-      <input type="range" id="setCockpitZ" min="0" max="20" step="1" value="5">
-      <span class="val" id="setCockpitZV">5 см</span>
-    </div>
-    <div class="win-note">Смещение камеры вперёд/назад относительно руля (см)</div>
   </div>
 </div>
 
@@ -357,7 +340,6 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
       <span style="font-size:12.5px">Обновление зеркал</span>
       <button id="setMirRender" class="switch" role="switch" aria-checked="true" aria-label="Рендер зеркал" title="Выключить — для замера FPS без зеркал"><span class="knob"></span></button>
     </div>
-    <div class="win-note">Полностью выключает обновление зеркал — для замера FPS без них</div>
   </div>
 
   <div class="win-sec">
@@ -381,10 +363,6 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
       <label>Прав. В</label>
       <input type="range" id="setMirRP" min="-20" max="20" step="0.5" value="0">
       <span class="val" id="setMirRPV">0°</span>
-    </div>
-    <div class="win-note">
-      Клавиши в салоне: <b>M</b> — режим регулировки, <b>← →</b> по горизонтали,
-      <b>↑ ↓</b> по вертикали (шаг 0.5°), <b>L/R</b> — выбор зеркала
     </div>
   </div>
 
@@ -412,7 +390,16 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
     <div class="win-btns">
       <button id="setMirReset">Сброс зеркал (K)</button>
     </div>
-    <div class="win-note">Возвращает направление и отражение к заводским (1024 · 24° · 4×)</div>
+  </div>
+
+  <div class="win-sec">
+    <h4>Позиция камеры салона (Z)</h4>
+    <div class="win-row">
+      <label>Смещ. Z</label>
+      <input type="range" id="setCockpitZ" min="0" max="20" step="1" value="5">
+      <span class="val" id="setCockpitZV">5 см</span>
+    </div>
+    <div class="win-note">Смещение камеры вперёд/назад относительно руля (см)</div>
   </div>
 </div>
 
@@ -455,6 +442,15 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   <div class="win-row" style="justify-content:space-between;margin-bottom:10px">
     <span style="font-size:12.5px">Кнопка записи</span>
     <button id="recBtnSwitch" class="switch" role="switch" aria-checked="false" aria-label="Кнопка записи" title="Показывать кнопку ● на экране"><span class="knob"></span></button>
+  </div>
+  <div class="win-sec">
+    <h4>Руль</h4>
+    <div class="win-row">
+      <label>Поворот</label>
+      <input type="range" id="setSteerTime" min="0.2" max="2" step="0.1" value="0.5">
+      <span class="val" id="setSteerTimeV">0.5 с</span>
+    </div>
+    <div class="win-note">Время поворота колёс от края до края с клавиатуры (с)</div>
   </div>
   <div id="replayList" style="max-height:60vh; overflow-y:auto;"></div>
   <div class="win-btns" style="margin-top:10px">
@@ -771,17 +767,7 @@ addEventListener("keydown", (e) => {
   // (Esc обрабатывает сам редактор).
   if (t && t.closest && t.closest("#replayEditWin")) return;
   if (CONTROL_KEYS.has(e.code)) e.preventDefault();
-  // режим регулировки зеркал перехватывает стрелки, чтобы они не управляли машиной
-  if (typeof mirrorAdjActive === "function" && mirrorAdjActive()) {
-    if (e.code === "KeyM") { mirrorAdjToggle(); return; }
-    if (e.code === "ArrowLeft") { mirrorAdjStep(-1, 0); return; }
-    if (e.code === "ArrowRight") { mirrorAdjStep(1, 0); return; }
-    if (e.code === "ArrowUp") { mirrorAdjStep(0, 1); return; }
-    if (e.code === "ArrowDown") { mirrorAdjStep(0, -1); return; }
-    if (e.code === "KeyL") { mirrorAdjPick("left"); return; }
-    if (e.code === "KeyR") { mirrorAdjPick("right"); return; }
-    if (e.code === "KeyK") { fullMirrorReset(); return; }
-  } else if (e.code === "KeyM" && typeof mirrorAdjToggle === "function") mirrorAdjToggle();
+  if (e.code === "KeyK") fullMirrorReset();
   keys[e.code] = true;
   if (e.code === "KeyC") toggleCam();
   if (e.code === "KeyR") resetCar();
@@ -849,9 +835,7 @@ function toggleCam() {
 }
 
 // ===================== окно настроек =====================
-// Настройки вида, угла обзора кабины и четырёх ползунков зеркал. Зеркала пишем напрямую в mirrorEntries —
-// это те же поля, которые двигает регулировка стрелками, так что ползунок
-// и клавиши видят одно и то же значение.
+// Настройки вида, угла обзора кабины и четырёх ползунков зеркал. Зеркала пишем напрямую в mirrorEntries.
 const setWin = document.getElementById("settingsWin");
 const setBackdrop = document.getElementById("settingsBackdrop");
 const gearBtn = document.getElementById("gearBtn");
@@ -938,7 +922,6 @@ function fullMirrorReset() {
   if (typeof setMirrorRes === "function") setMirrorRes(1024);
   if (typeof setMirrorFovDeg === "function") setMirrorFovDeg(24);
   if (typeof setMirrorSamples === "function") setMirrorSamples(4);
-  if (typeof mirrorHudShow === "function") mirrorHudShow();
   syncSettings();
   syncMirrorTunables();
 }
@@ -963,6 +946,39 @@ document.getElementById("settingsMirrorBtn")?.addEventListener("click", () => {
   openSettings(false);
   openMirrorWin(true);
 });
+document.getElementById("adminBtn")?.addEventListener("click", () => {
+  if (adminHoldFired) { adminHoldFired = false; return; } // долгое нажатие — меню уже открыто
+  const url = "https://t.me/Eliseev_I_A";
+  try {
+    if (window.Telegram && Telegram.WebApp && typeof Telegram.WebApp.openTelegramLink === "function") {
+      Telegram.WebApp.openTelegramLink(url);
+      return;
+    }
+  } catch (e) {}
+  try { window.open(url, "_blank", "noopener"); }
+  catch (e) { location.href = url; }
+});
+// Скрытое меню записи: открывается долгим нажатием (2 с) на кнопку администратора
+let adminHoldTimer = 0;
+let adminHoldFired = false;
+{
+  const adminBtnEl = document.getElementById("adminBtn");
+  const adminHoldClear = () => clearTimeout(adminHoldTimer);
+  adminBtnEl?.addEventListener("pointerdown", () => {
+    adminHoldFired = false;
+    clearTimeout(adminHoldTimer);
+    adminHoldTimer = setTimeout(() => {
+      adminHoldFired = true;
+      if (typeof openSettings === "function") openSettings(false);
+      try { if (window.Replay?.openList) window.Replay.openList(true); } catch (e) {}
+    }, 2000);
+  });
+  adminBtnEl?.addEventListener("pointerup", adminHoldClear);
+  adminBtnEl?.addEventListener("pointercancel", adminHoldClear);
+  adminBtnEl?.addEventListener("pointerleave", adminHoldClear);
+  adminBtnEl?.addEventListener("contextmenu", (e) => e.preventDefault());
+  addEventListener("blur", adminHoldClear);
+}
 document.getElementById("mirrorClose").addEventListener("click", () => openMirrorWin(false));
 mirrorBackdrop.addEventListener("click", () => openMirrorWin(false));
 
@@ -1106,10 +1122,8 @@ for (const s of mirSliders) {
     const deg = +s.input.value;
     s.val.textContent = deg + "°";
     const e = mirrorSide(s.side);
-    // клавиши двигают угол с шагом 0.5°, поэтому и здесь округляем к тому же шагу
     if (e) e[s.field] = deg * Math.PI / 180;
     if (typeof mirrorRefreshDirs === "function") mirrorRefreshDirs();
-    if (typeof mirrorHudShow === "function") mirrorHudShow();
   });
 }
 
@@ -1379,7 +1393,7 @@ function drive(dt, rawDt) {
 
   // Камера: стрелки в игровом цикле (плавно, не сбиваются другими клавишами)
   // Во время реплея не трогаем камеру — она уже выставлена из кадра
-  if (!window.Replay?.isPlaying?.() && !mirrorAdjActive?.()) {
+  if (!window.Replay?.isPlaying?.()) {
     const step = 0.00875 * 60 * dt; // ~0.5°/s при 60fps, масштабируется по dt
     if (keys.ArrowLeft) {
       if (CAR.mode === 0) { CAR.camYaw -= step; CAR.idle = performance.now(); }
@@ -1956,8 +1970,7 @@ engine.runRenderLoop(() => {
     if (typeof syncTurnHud === "function") syncTurnHud();
     if (typeof tickBlinkSounds === "function") tickBlinkSounds();
     if (typeof syncDvWheel === "function") syncDvWheel();
-    // окно открыто — держим его в согласии с тем, что меняли мимо него
-    // (клавиша C, стрелки регулировки зеркал в салоне)
+    // окно открыто — держим его в согласии с тем, что меняли мимо него (клавиша C)
     if (setWin.classList.contains("open") || mirrorWin.classList.contains("open")) {
       syncSettings();
       syncMirrorTunables();
