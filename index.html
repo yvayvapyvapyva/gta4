@@ -78,6 +78,8 @@
   #gearBtn:hover { border-color:var(--acc); color:var(--acc); }
   #gearBtn.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
   #gearBtn:active { background:#ff6d00; border-color:#ff6d00; color:#12141a; }
+  /* В Telegram-миниапе шестерёнку опускаем на 50px (там выше своя шапка) */
+  body.tg-app #gearBtn { top:calc(max(14px,env(safe-area-inset-top,0px)) + var(--tg-top) + 50px); }
   #recBtn { position:fixed; right:max(14px,env(safe-area-inset-right,0px));
     top:calc(max(14px,env(safe-area-inset-top,0px)) + 54px + var(--tg-top)); z-index:7; width:40px; height:40px; padding:0;
     display:flex; align-items:center; justify-content:center; border-radius:14px; cursor:pointer;
@@ -2002,6 +2004,7 @@ engine.runRenderLoop(() => {
   function tgFullscreen(){
     try{
       if(!window.Telegram||!Telegram.WebApp)return;
+      document.body.classList.add('tg-app');
       Telegram.WebApp.ready();
       Telegram.WebApp.expand();
       if(Telegram.WebApp.setHeaderColor)Telegram.WebApp.setHeaderColor('#12141a');
