@@ -498,17 +498,6 @@ function mirrorAdjStep(dx, dy) {
   mirrorHudShow();
 }
 
-function mirrorAdjReset() {
-  const e = mirrorEntries[mirrorAdjSide] || mirrorEntries[0];
-  if (!e) return;
-  // сброс возвращает не нули, а штатную настройку этого зеркала
-  const d = mirrorDefault(e.side);
-  e.yaw = d.yaw;
-  e.pitch = d.pitch;
-  mirrorRefreshDirs();
-  mirrorHudShow();
-}
-
 function setupMirrors(opts) {
   if (mirrorEntries.length) return;
   const root = opts.root;

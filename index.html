@@ -301,6 +301,13 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   </div>
 
   <div class="win-sec">
+    <h4>Зеркала</h4>
+    <div class="win-btns">
+      <button id="settingsMirrorBtn">Открыть настройки зеркал</button>
+    </div>
+  </div>
+
+  <div class="win-sec">
     <h4>Вид</h4>
     <div class="win-note">
       Езда: <b>W/A/S/D</b> · <b>Space</b> — ручник · <b>C</b> — камера<br>
@@ -330,13 +337,6 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   </div>
 
   <div class="win-sec">
-    <h4>Зеркала</h4>
-    <div class="win-btns">
-      <button id="settingsMirrorBtn">Открыть настройки зеркал</button>
-    </div>
-  </div>
-
-  <div class="win-sec">
     <h4>Позиция камеры салона (Z)</h4>
     <div class="win-row">
       <label>Смещ. Z</label>
@@ -353,8 +353,9 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 
   <div class="win-sec">
     <h4>Рендер</h4>
-    <div class="win-btns">
-      <button id="setMirRender">Рендер: вкл</button>
+    <div class="win-row" style="justify-content:space-between">
+      <span style="font-size:12.5px">Обновление зеркал</span>
+      <button id="setMirRender" class="switch" role="switch" aria-checked="true" aria-label="Рендер зеркал" title="Выключить — для замера FPS без зеркал"><span class="knob"></span></button>
     </div>
     <div class="win-note">Полностью выключает обновление зеркал — для замера FPS без них</div>
   </div>
@@ -381,9 +382,6 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
       <input type="range" id="setMirRP" min="-20" max="20" step="0.5" value="0">
       <span class="val" id="setMirRPV">0°</span>
     </div>
-    <div class="win-btns" style="margin-top:10px">
-      <button id="setMirReset">Сброс зеркал (K)</button>
-    </div>
     <div class="win-note">
       Клавиши в салоне: <b>M</b> — режим регулировки, <b>← →</b> по горизонтали,
       <b>↑ ↓</b> по вертикали (шаг 0.5°), <b>L/R</b> — выбор зеркала
@@ -408,6 +406,13 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
       <span class="val" id="setMirMsaaV">4×</span>
     </div>
     <div class="win-note">Качество и сглаживание требуют перезаписи текстуры (короткий фриз). Остальное применяется сразу</div>
+  </div>
+
+  <div class="win-sec">
+    <div class="win-btns">
+      <button id="setMirReset">Сброс зеркал (K)</button>
+    </div>
+    <div class="win-note">Возвращает направление и отражение к заводским (1024 · 24° · 4×)</div>
   </div>
 </div>
 
@@ -775,7 +780,7 @@ addEventListener("keydown", (e) => {
     if (e.code === "ArrowDown") { mirrorAdjStep(0, -1); return; }
     if (e.code === "KeyL") { mirrorAdjPick("left"); return; }
     if (e.code === "KeyR") { mirrorAdjPick("right"); return; }
-    if (e.code === "KeyK") { mirrorAdjReset(); return; }
+    if (e.code === "KeyK") { fullMirrorReset(); return; }
   } else if (e.code === "KeyM" && typeof mirrorAdjToggle === "function") mirrorAdjToggle();
   keys[e.code] = true;
   if (e.code === "KeyC") toggleCam();
@@ -919,6 +924,25 @@ function mirrorSide(side) {
   return null;
 }
 
+// Полный сброс зеркал к заводским: направление обоих зеркал,
+// качество 1024, обзор 24°, сглаживание 4×. Выключатель рендера не трогаем.
+function fullMirrorReset() {
+  for (const s of ["left", "right"]) {
+    const e = mirrorSide(s);
+    if (!e || typeof mirrorDefault !== "function") continue;
+    const d = mirrorDefault(s);
+    e.yaw = d.yaw;
+    e.pitch = d.pitch;
+  }
+  if (typeof mirrorRefreshDirs === "function") mirrorRefreshDirs();
+  if (typeof setMirrorRes === "function") setMirrorRes(1024);
+  if (typeof setMirrorFovDeg === "function") setMirrorFovDeg(24);
+  if (typeof setMirrorSamples === "function") setMirrorSamples(4);
+  if (typeof mirrorHudShow === "function") mirrorHudShow();
+  syncSettings();
+  syncMirrorTunables();
+}
+
 gearBtn.addEventListener("click", () => openSettings(!setWin.classList.contains("open")));
 document.getElementById("settingsClose").addEventListener("click", () => openSettings(false));
 setBackdrop.addEventListener("click", () => openSettings(false));
@@ -947,8 +971,8 @@ const setMirRender = document.getElementById("setMirRender");
 function syncMirrorRenderBtn() {
   if (!setMirRender) return;
   const on = typeof mirrorRenderEnabled === "undefined" || mirrorRenderEnabled;
-  setMirRender.textContent = on ? "Рендер: вкл" : "Рендер: выкл";
   setMirRender.classList.toggle("on", on);
+  setMirRender.setAttribute("aria-checked", on ? "true" : "false");
 }
 setMirRender.addEventListener("click", () => {
   const on = typeof mirrorRenderEnabled !== "undefined" && mirrorRenderEnabled;
@@ -1097,18 +1121,7 @@ for (const el of [setCockpitZ, setMaxSpeed, setSteerTime, ...mirSliders.map(s =>
 addEventListener("pointerup", () => { setSliderDrag = null; });
 addEventListener("pointercancel", () => { setSliderDrag = null; });
 
-document.getElementById("setMirReset").addEventListener("click", () => {
-  // сброс — к штатным значениям зеркал, а не к нулям (как по клавише K)
-  for (const s of ["left", "right"]) {
-    const e = mirrorSide(s);
-    if (!e || typeof mirrorDefault !== "function") continue;
-    const d = mirrorDefault(s);
-    e.yaw = d.yaw;
-    e.pitch = d.pitch;
-  }
-  if (typeof mirrorRefreshDirs === "function") mirrorRefreshDirs();
-  syncSettings();
-});
+document.getElementById("setMirReset").addEventListener("click", () => fullMirrorReset());
 
 // настройки должны закрываться по Escape, как остальные окна
 addEventListener("keydown", (e) => {
