@@ -326,6 +326,16 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   </div>
 
   <div class="win-sec">
+    <h4>Руль</h4>
+    <div class="win-row">
+      <label>Поворот</label>
+      <input type="range" id="setSteerTime" min="0.2" max="2" step="0.1" value="0.5">
+      <span class="val" id="setSteerTimeV">0.5 с</span>
+    </div>
+    <div class="win-note">Время поворота колёс от края до края с клавиатуры (с)</div>
+  </div>
+
+  <div class="win-sec">
     <h4>Позиция камеры салона (Z)</h4>
     <div class="win-row">
       <label>Смещ. Z</label>
@@ -702,7 +712,7 @@ const CAR = {
   bodyCz: 0,            // центр кузова по Z в локальных осях, м
   turnRadius: 4.38,     // радиус дуги = (turnDiameter − width) / 2
   maxSteer: 0.56,       // предельный угол колёс, рад (~32°)
-  steerLockToLock: 1,   // секунд на поворот руля от края до края (замедление)
+  steerLockToLock: 0.5, // секунд на поворот руля от края до края (ползунок в настройках)
   camYaw: 0, camPitch: 1 * Math.PI / 180, camDist: CAM_DIST_MAX,
   camFov: 1.45,    // угол обзора салона, рад (~83° по вертикали)
   cockpitZOffset: 0.05, // смещение камеры салона по Z (м), настраивается в настройках
@@ -825,6 +835,8 @@ const setCockpitZ = document.getElementById("setCockpitZ");
 const setCockpitZV = document.getElementById("setCockpitZV");
 const setMaxSpeed = document.getElementById("setMaxSpeed");
 const setMaxSpeedV = document.getElementById("setMaxSpeedV");
+const setSteerTime = document.getElementById("setSteerTime");
+const setSteerTimeV = document.getElementById("setSteerTimeV");
 
 // Ограничение скорости (км/ч): одно на вперёд и назад.
 function setMaxSpeedKmh(kmh) {
@@ -865,6 +877,12 @@ function syncSettings() {
     const kmh = Math.round((CAR.maxSpeed || 0) * 3.6);
     setMaxSpeed.value = kmh;
     setMaxSpeedV.textContent = kmh + " км/ч";
+  }
+  // Скорость руля (время от края до края)
+  if (setSteerTime && setSteerTime !== setSliderDrag) {
+    const sec = Math.round((CAR.steerLockToLock || 0.5) * 10) / 10;
+    setSteerTime.value = sec;
+    setSteerTimeV.textContent = sec.toFixed(1) + " с";
   }
   for (const s of mirSliders) {
     if (s.input === setSliderDrag) continue;   // не дёргаем ползунок из-под пальца
@@ -1033,6 +1051,12 @@ setMaxSpeed.addEventListener("input", () => {
   setMaxSpeedV.textContent = kmh + " км/ч";
 });
 
+setSteerTime.addEventListener("input", () => {
+  const sec = Math.min(2, Math.max(0.2, Math.round(+setSteerTime.value * 10) / 10));
+  CAR.steerLockToLock = sec;
+  setSteerTimeV.textContent = sec.toFixed(1) + " с";
+});
+
 for (const s of mirSliders) {
   s.input.addEventListener("input", () => {
     const deg = +s.input.value;
@@ -1046,7 +1070,7 @@ for (const s of mirSliders) {
 }
 
 // пока ползунок тянут, syncSettings не должен переписывать его значение
-for (const el of [setCockpitZ, setMaxSpeed, ...mirSliders.map(s => s.input),
+for (const el of [setCockpitZ, setMaxSpeed, setSteerTime, ...mirSliders.map(s => s.input),
     setMirRes, setMirFov, setMirMsaa]) {
   el.addEventListener("pointerdown", () => { setSliderDrag = el; });
 }
@@ -1354,11 +1378,10 @@ const maxSteer = CAR.maxSteer;
   } else {
     // Клавиатура дискретна: A/D сразу дают полный отворот, поэтому рампа здесь
     // лишь делает нажатие не мгновенным, зато отпускание возвращает руль в центр
-    // мягко. Множитель 2 — по просьбе управлять рулем с клавиатуры вдвое быстрее
-    // (полный отворот за 0.25 с вместо 0.5), а ползунок уже мгновенный.
-    // Возврат к центру остаётся в 1.6 раза быстрее доворота, то есть 0.16 с.
+    // мягко. Темп — из настроек (CAR.steerLockToLock: секунд от края до края).
+    // Возврат к центру в 1.6 раза быстрее доворота.
     const want = steerIn * maxSteer;
-    const steerRate = 2 * maxSteer / CAR.steerLockToLock * 2;  // рад/с
+    const steerRate = 2 * maxSteer / CAR.steerLockToLock;  // рад/с
     const rate = (want === 0 ? steerRate * 1.6 : steerRate) * dt;
     CAR.steer += clamp(want - CAR.steer, -rate, rate);
   }
