@@ -114,7 +114,7 @@ function exportWrap(c, text, maxW) {
     }
     if (line) out.push(line);
   }
-  return out.slice(0, 6);
+  return out.slice(0, 7);
 }
 function exportDrawHud(c) {
   // Всё читаем из данных реплея/машины, а не из DOM: DOM-элементы на время

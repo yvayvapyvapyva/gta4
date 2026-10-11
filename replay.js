@@ -116,7 +116,7 @@ function sanitizeMessages(src) {
   for (const m of src) {
     if (!m || typeof m !== 'object') continue;
     const t = +m.t, dur = +m.dur;
-    const text = String(m.text ?? '').slice(0, 200);
+    const text = String(m.text ?? '').slice(0, 250);
     if (!isFinite(t) || !isFinite(dur) || t < 0 || dur <= 0 || !text.trim()) continue;
     const speech = String(m.speech ?? '').slice(0, 500).trim();
     out.push({ t: Math.round(t * 1000) / 1000, dur: Math.min(60, Math.max(0.5, Math.round(dur * 10) / 10)), text: text.trim(), speech, voice: m.voice === 'comment' ? 'comment' : 'command' });
@@ -978,7 +978,7 @@ function renderEditMsgs() {  const el = editEls();
     const end = (m.t + m.dur).toFixed(1);
     row.innerHTML =
       '<button data-act="goto" title="Перейти к началу (' + m.t.toFixed(1) + ' с)" style="padding:4px 8px">⏵ ' + m.t.toFixed(1) + '–' + end + '</button>' +
-      '<textarea data-act="text" maxlength="200" rows="2" title="Текст на экране"></textarea>' +
+      '<textarea data-act="text" maxlength="250" rows="2" title="Текст на экране"></textarea>' +
       '<textarea data-act="speech" maxlength="500" rows="2" title="Текст для озвучки (пусто = тишина)" placeholder="Озвучить текст"></textarea>' +
       '<input type="number" min="0.5" max="60" step="0.5" title="Длительность показа, с" value="' + m.dur + '">' +
       '<select data-act="voice" title="Голос озвучки"><option value="command">команда</option><option value="comment">коммент.</option></select>' +
@@ -987,7 +987,7 @@ function renderEditMsgs() {  const el = editEls();
     row.querySelector('[data-act=text]').value = m.text;
     row.querySelector('[data-act=speech]').value = m.speech || '';
     row.querySelector('[data-act=text]').addEventListener('change', (e) => {
-      const v = e.target.value.trim().slice(0, 200);
+      const v = e.target.value.trim().slice(0, 250);
       if (!v) { renderEditMsgs(); return; } // пустой текст не сохраняем
       replayMessages[idx].text = v;
     });
@@ -1176,7 +1176,7 @@ function initReplayEditor() {
   el.play?.addEventListener('click', () => setEditPlaying(!editPlaying));
   document.getElementById('replayEditHear')?.addEventListener('click', (e) => {
     if (!isEditing) return;
-    const text = (el.text?.value ?? '').trim().slice(0, 200);
+    const text = (el.text?.value ?? '').trim().slice(0, 250);
     if (!text) { showToast('Введите текст сообщения'); el.text?.focus(); return; }
     const voice = el.voice?.value === 'comment' ? 'comment' : 'command';
     const speech = (el.speech?.value ?? '').trim().slice(0, 500);
@@ -1184,7 +1184,7 @@ function initReplayEditor() {
     hearWithSpinner(e.currentTarget, voice, speech);
   });
   document.getElementById('replayEditAdd')?.addEventListener('click', () => {    if (!isEditing || !replayBuffer.length) return;
-    const text = (el.text?.value ?? '').trim().slice(0, 200);
+    const text = (el.text?.value ?? '').trim().slice(0, 250);
     if (!text) { showToast('Введите текст сообщения'); el.text?.focus(); return; }
     let dur = +el.dur?.value;
     if (!isFinite(dur)) dur = 3;

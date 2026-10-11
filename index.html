@@ -492,7 +492,7 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   <div class="win-sec">
     <h4>Новое сообщение в текущем моменте</h4>
     <div class="win-row" style="gap:8px">
-      <textarea id="replayEditText" placeholder="Текст на экране…" maxlength="200" rows="2" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;resize:vertical;"></textarea>
+      <textarea id="replayEditText" placeholder="Текст на экране…" maxlength="250" rows="2" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;resize:vertical;"></textarea>
     </div>
     <div class="win-row" style="gap:8px;margin-top:8px">
       <textarea id="replayEditSpeech" placeholder="Озвучить текст" maxlength="500" rows="2" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;resize:vertical;"></textarea>
@@ -1956,7 +1956,7 @@ engine.runRenderLoop(() => {
 <script src="sounds.js?v=2"></script>
 <script src="replay.js?v=2"></script>
 <script src="tts.js?v=2"></script>
-<script src="export.js?v=2"></script>
+<script src="export.js?v=3"></script>
 <script>
   function resizeEngine(){
     try{
