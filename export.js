@@ -415,7 +415,6 @@ window.ExportMP4 = { start: exportReplay, isActive: () => exportActive };
 // только когда включена вручную из «Вид» (кнопка или G).
 // Прячется в самом экспорте — там канвас уже портрет.
 let cropGuideManual = false;
-try { cropGuideManual = localStorage.getItem('gta4_cropguide') === '1'; } catch (e) {}
 let cropGuideShown = null;
 function syncCropGuide() {
   const el = document.getElementById('cropGuide');
@@ -434,7 +433,6 @@ function syncCropGuide() {
 }
 function toggleCropGuide(force) {
   cropGuideManual = typeof force === 'boolean' ? force : !cropGuideManual;
-  try { localStorage.setItem('gta4_cropguide', cropGuideManual ? '1' : '0'); } catch (e) {}
   cropGuideShown = null;
   syncCropGuide();
 }

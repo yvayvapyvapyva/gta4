@@ -8,13 +8,19 @@ let isRecording = false;
 let isPlaying = false;
 let replayBuffer = [];
 let replayStartTime = 0;
+let lastRecordTime = 0;
 let replayIndex = 0;
 let replayTime = 0; // накопленное время воспроизведения
+// Если запись — продолжение существующей (append), сюда кладётся её имя:
+// stopAndSave тогда дописывает в то же имя, а не создаёт новое.
+let appendTargetName = null;
 // Текстовые сообщения поверх реплея: [{t: старт, с; dur: длительность, с; text}]
 // Хранятся в JSON реплея полем messages, старые записи без поля = пусто.
 let replayMessages = [];
 
-// Сохранение текущих входов в буфер.
+// Сохранение кадра в буфер.
+// Реплей кинематический: поза телепортируется из записи, входы (газ/ручник)
+// при воспроизведении не используются и не хранятся.
 // Углы колёс НЕ храним: доворот выводится из steer, прокрут — интеграл
 // скорости (считается при воспроизведении). Числа округлены до тысячных —
 // JSON худеет в разы, на картинке разницы нет.
@@ -24,22 +30,9 @@ function captureFrame(now) {
   if (dt < REPLAY_TICK * 1000) return; // пишем не чаще 60 Гц
   lastRecordTime = now;
 
-  // Определяем throttle из клавиатуры/тача (как в drive())
-  const touchActive = Math.abs(touchThrottle) > 0.02;
-  let throttle = 0;
-  if (touchActive) {
-    throttle = touchThrottle; // -1..1
-  } else {
-    const gas = keys.KeyW ? 1 : 0;
-    const back = keys.KeyS ? 1 : 0;
-    throttle = gas - back; // -1, 0, 1
-  }
-
   const frame = {
     t: r3((now - replayStartTime) / 1000), // секунды от старта
-    throttle: r3(throttle),
     steer: r3(CAR.steer), // текущий угол руля (рад)
-    handbrake: keys.Space ? 1 : 0,
     blinkL: blinkerLeft ? 1 : 0,
     blinkR: blinkerRight ? 1 : 0,
     camMode: CAR.mode,
@@ -66,6 +59,7 @@ function startRecording() {
   if (isPlaying) stopPlayback();
   if (isEditing) closeReplayEditor();
   isRecording = true;
+  appendTargetName = null;
   replayBuffer = [];
   replayMessages = [];
   replayStartTime = performance.now();
@@ -82,7 +76,7 @@ function stopRecording() {
     tickRate: 1 / REPLAY_TICK,
     duration: replayBuffer.length > 0 ? replayBuffer[replayBuffer.length - 1].t : 0,
     frames: replayBuffer,
-    messages: []
+    messages: replayMessages.map(m => ({ t: m.t, dur: m.dur, text: m.text, speech: m.speech || '', voice: m.voice || 'command' }))
   };
   console.log('[Replay] Recording stopped, frames:', replayBuffer.length);
   return json;
@@ -108,7 +102,6 @@ function loadReplay(json) {
   replayBuffer = json.frames;
   replayMessages = sanitizeMessages(json.messages);
   replayIndex = 0;
-  replayAccumulator = 0;
   console.log('[Replay] Loaded, frames:', replayBuffer.length, 'duration:', json.duration,
     'messages:', replayMessages.length);
   return true;
@@ -211,9 +204,7 @@ function stopPlayback() {
   hideReplayMessages();
   voiceSeen.clear();
   if (typeof ttsStop === 'function') { try { ttsStop(); } catch (e) {} }
-  // Машина остаётся в финальной позе и стоит: входы в кинематике не используются,
-  // сброс ниже — страховка от остатков прошлых версий (газ/ручник из кадров).
-  window._replayHandbrake = undefined;
+  // Машина остаётся в финальной позе и стоит: входы в кинематике не используются.
   if (typeof touchThrottle !== 'undefined') touchThrottle = 0;
   if (typeof touchSteerEnabled !== 'undefined') touchSteerEnabled = false;
   if (typeof CAR !== 'undefined' && CAR) { CAR.v = 0; CAR.steer = 0; }
@@ -463,7 +454,6 @@ function kinematicVisualTick(dt) {
 }
 // Хук в drive(): в начале функции добавить
 // if (window.Replay?.isPlaying?.() && replayTickWithPause(rawDt)) { kinematicVisualTick(dt); return; }
-// Чтение ручника через window._replayHandbrake больше не нужно: входов в реплее нет.
 
 // Экспорт
 window.Replay = {
@@ -473,6 +463,9 @@ window.Replay = {
   loadReplay,
   startPlayback,
   stopPlayback,
+  trimStartToCurrent: (...a) => trimReplayStartToCurrent(...a),
+  trimEndToCurrent: (...a) => trimReplayEndToCurrent(...a),
+  continueRecording: (...a) => continueReplayRecording(...a),
   isRecording: () => isRecording,
   isPlaying: () => isPlaying,
   isPaused: () => isPaused,
@@ -538,8 +531,20 @@ function uiStartRecording() {
   updateRecButton();
 }
 function stopAndSave() {
+  const target = appendTargetName;
   const data = window.Replay.stopRecording();
-  if (!data) return;
+  appendTargetName = null;
+  if (!data) { updateRecButton(); return; }
+  if (target) {
+    if (saveReplayToStorage(target, data)) {
+      console.log('[Replay] Appended to localStorage as:', target);
+      showToast('Запись продолжена: ' + target);
+    } else {
+      showToast('Ошибка сохранения');
+    }
+    updateRecButton();
+    return;
+  }
   const name = 'replay_' + new Date().toISOString().replace(/[:.]/g, '-');
   if (saveReplayToStorage(name, data)) {
     console.log('[Replay] Saved to localStorage as:', name);
@@ -763,7 +768,6 @@ function closeReplayEditor() {
   const el = editEls();
   if (el.win) el.win.classList.remove('open');
   if (el.backdrop) el.backdrop.classList.remove('open');
-  window._replayHandbrake = undefined;
   if (typeof touchThrottle !== 'undefined') touchThrottle = 0;
   if (typeof syncDvThrottle === 'function') syncDvThrottle();
   resetBlinkers();
@@ -778,7 +782,6 @@ function seekEdit(i) {
   resetCarToFrame(frame);
   applyReplayFrame(frame);
   try { replayBlinkEdge(frame); } catch (e) {}
-  window._replayHandbrake = undefined; // в редакторе ручник не держим
   CAR.v = 0; CAR.vy = 0; // стоим на месте, иначе drive() увёз бы машину
   updateReplayMessages(frame.t);
   const el = editEls();
@@ -932,9 +935,108 @@ function saveReplayEdits() {
   if (!editName) return;
   const data = loadReplayFromStorage(editName);
   if (!data) { showToast('Запись пропала'); return; }
+  data.frames = replayBuffer;
+  data.duration = replayBuffer.length ? replayBuffer[replayBuffer.length - 1].t : 0;
+  data.tickRate = 1 / REPLAY_TICK;
+  data.version = 1;
   data.messages = replayMessages.map(m => ({ t: m.t, dur: m.dur, text: m.text, speech: m.speech || '', voice: m.voice || 'command' }));
   if (saveReplayToStorage(editName, data)) showToast('Сохранено: ' + editName);
   else showToast('Ошибка сохранения');
+}
+
+// ── Монтаж: обрезка начала/конца по текущему ползунку ───────────────
+// После обрезки время пересчитывается от нуля (t' = t − t0), сообщения
+// сдвигаются вместе с кадрами; непопавшие в новый диапазон отбрасываются,
+// задевающие границу — подрезаются по длительности.
+function trimReplayStartToCurrent() {
+  if (!isEditing || replayBuffer.length < 2) return;
+  if (editIndex <= 0) { showToast('Уже в начале записи'); return; }
+  const cutT = replayBuffer[editIndex]?.t ?? 0;
+  if (!confirm('Обрезать начало до ' + cutT.toFixed(1) + ' с? Отменить нельзя без копии.')) return;
+  const kept = replayBuffer.slice(editIndex);
+  const t0 = kept[0].t;
+  for (const f of kept) f.t = r3(f.t - t0);
+  const newDur = kept.length ? kept[kept.length - 1].t : 0;
+  const msgs = [];
+  for (const m of replayMessages) {
+    let t = m.t - t0, dur = m.dur;
+    if (t + dur <= 0 || t >= newDur) continue; // целиком вне диапазона
+    if (t < 0) { dur += t; t = 0; } // задевает левую границу — подрезаем
+    if (t + dur > newDur) dur = Math.round((newDur - t) * 10) / 10;
+    if (dur <= 0) continue;
+    msgs.push({ t: Math.round(t * 1000) / 1000, dur, text: m.text, speech: m.speech || '', voice: m.voice || 'command' });
+  }
+  replayBuffer = kept;
+  replayMessages = msgs;
+  setEditPlaying(false);
+  seekEdit(0);
+  renderEditMsgs();
+  showToast('Начало обрезано, нажмите «Сохранить»');
+}
+
+function trimReplayEndToCurrent() {
+  if (!isEditing || replayBuffer.length < 2) return;
+  if (editIndex >= replayBuffer.length - 1) { showToast('Уже в конце записи'); return; }
+  const cutT = replayBuffer[editIndex]?.t ?? 0;
+  if (!confirm('Обрезать конец от ' + cutT.toFixed(1) + ' с? Отменить нельзя без копии.')) return;
+  const kept = replayBuffer.slice(0, editIndex + 1);
+  const newDur = kept.length ? kept[kept.length - 1].t : 0;
+  const msgs = [];
+  for (const m of replayMessages) {
+    if (m.t > newDur) continue; // целиком после конца
+    let dur = m.dur;
+    if (m.t + dur > newDur) dur = Math.round((newDur - m.t) * 10) / 10;
+    if (dur <= 0) continue;
+    msgs.push({ t: m.t, dur, text: m.text, speech: m.speech || '', voice: m.voice || 'command' });
+  }
+  replayBuffer = kept;
+  replayMessages = msgs;
+  setEditPlaying(false);
+  seekEdit(replayBuffer.length - 1);
+  renderEditMsgs();
+  showToast('Конец обрезан, нажмите «Сохранить»');
+}
+
+// ── Продолжение записи ──────────────────────────────────────────────
+// Ставит машину в текущий кадр редактора, отбрасывает хвост после него
+// (если ползунок не в конце — с подтверждением) и включает обычную
+// запись: новые кадры дописываются со временем последнего кадра.
+// Остановка — кнопкой ● или R, дописанное сохраняется в то же имя.
+function continueReplayRecording() {
+  if (!isEditing || !replayBuffer.length) return;
+  if (isRecording) { showToast('Запись уже идёт'); return; }
+  if (!window.confirm) return;
+  const atEnd = editIndex >= replayBuffer.length - 1;
+  const curT = replayBuffer[editIndex]?.t ?? 0;
+  if (!atEnd) {
+    if (!confirm('Продолжить с ' + curT.toFixed(1) + ' с? Хвост после этого момента будет удалён.')) return;
+  } else {
+    if (!confirm('Продолжить запись с конца (' + curT.toFixed(1) + ' с)?')) return;
+  }
+  // Хвост после текущего кадра отбрасываем, сообщения за границей — тоже.
+  const kept = replayBuffer.slice(0, editIndex + 1);
+  const newDur = kept.length ? kept[kept.length - 1].t : 0;
+  replayBuffer = kept;
+  replayMessages = replayMessages.filter(m => m.t <= newDur);
+  const lastFrame = replayBuffer[replayBuffer.length - 1];
+  const target = editName;
+  const baseT = lastFrame ? lastFrame.t : 0;
+  setEditPlaying(false);
+  closeReplayEditor();
+  // Машина — точно в последний кадр, со скоростью из записи для бесшовности.
+  if (lastFrame && typeof CAR !== 'undefined' && CAR && CAR.root) {
+    try {
+      resetCarToFrame(lastFrame);
+      applyReplayFrame(lastFrame);
+    } catch (e) {}
+  }
+  isRecording = true;
+  appendTargetName = target;
+  replayStartTime = performance.now() - baseT * 1000;
+  lastRecordTime = performance.now();
+  if (typeof updateRecButton === 'function') updateRecButton();
+  console.log('[Replay] Append recording to:', target, 'from t=', baseT);
+  showToast('⏺ Продолжение записи… стоп — ● или R', 2500);
 }
 
 function initReplayEditor() {
@@ -969,6 +1071,9 @@ function initReplayEditor() {
     showToast('Сообщение вставлено на ' + t.toFixed(1) + ' с');
   });
   document.getElementById('replayEditSave')?.addEventListener('click', saveReplayEdits);
+  document.getElementById('replayEditTrimStart')?.addEventListener('click', trimReplayStartToCurrent);
+  document.getElementById('replayEditTrimEnd')?.addEventListener('click', trimReplayEndToCurrent);
+  document.getElementById('replayEditContinue')?.addEventListener('click', continueReplayRecording);
   document.getElementById('replayEditExit')?.addEventListener('click', closeReplayEditor);
   document.getElementById('replayEditClose')?.addEventListener('click', closeReplayEditor);
   el.backdrop?.addEventListener('click', closeReplayEditor);

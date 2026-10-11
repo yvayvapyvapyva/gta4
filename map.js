@@ -448,40 +448,13 @@ const SURF_UP = 2, SURF_DOWN = 4;
 const surfRay = new BABYLON.Ray(new BABYLON.Vector3(), new BABYLON.Vector3(0, -1, 0), SURF_UP + SURF_DOWN);
 const isSurfaceMesh = (m) => m === ground || (m.metadata && m.metadata.isSurface);
 
-// Нормаль эстакады считаем аналитически по её профилю.
-function rampNormalAt(x, z, hitY) {
-  const hw = EST_W / 2;
-  for (const poly of drawStore.estacada.polys) {
-    for (let i = 0; i < poly.length - 1; i++) {
-      const ax = poly[i][0], az = poly[i][1], bx = poly[i + 1][0], bz = poly[i + 1][1];
-      const L = Math.hypot(bx - ax, bz - az);
-      if (L < 1e-4) continue;
-      const ux = (bx - ax) / L, uz = (bz - az) / L;
-      const rx = x - ax, rz = z - az;
-      const u = rx * ux + rz * uz, v = rx * -uz + rz * ux;
-      if (v < -hw || v > hw || u < 0 || u > L + EST_L2 + L) continue;
-      const h = Math.min(L * EST_SLOPE, EST_MAX_H);
-      let yt, g;
-      if (u <= L) { yt = u / L * h; g = h / L; }
-      else if (u <= L + EST_L2) { yt = h; g = 0; }
-      else { yt = h * (1 - (u - L - EST_L2) / L); g = -h / L; }
-      if (Math.abs(yt - hitY) > 0.35) continue;
-      const nx = -g * ux, nz = -g * uz, inv = 1 / Math.hypot(nx, 1, nz);
-      return { nx:nx * inv, ny:inv, nz:nz * inv };
-    }
-  }
-  return null;
-}
-
 function probeSurface(x, z, fromY) {
   surfRay.origin.set(x, fromY + SURF_UP, z);
   surfRay.direction.set(0, -1, 0);
   surfRay.length = SURF_UP + SURF_DOWN;
   const p = scene.pickWithRay(surfRay, isSurfaceMesh);
   if (!p.hit) return null;
-  const y = p.pickedPoint.y;
-  const r = rampNormalAt(x, z, y);
-  return r ? { y, nx:r.nx, ny:r.ny, nz:r.nz } : { y, nx:0, ny:1, nz:0 };
+  return { y: p.pickedPoint.y };
 }
 function surfaceHeight(x, z) {
   const h = probeSurface(x, z, 1.5);
