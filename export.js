@@ -41,6 +41,9 @@ let exportSavedStyle = null;
 // иначе в начало файла ложится мусор и уползает синхрон.
 let exportWarmLeft = 0;
 const EXPORT_WARM_FRAMES = 6;
+// Воспроизведение стартует синхронно с рекордером (ставится в exportTick),
+// а не в exportBegin — иначе начало ленты играло бы до старта записи.
+let exportPlaybackStarted = false;
 
 function exportSupported() {
   try {
@@ -295,14 +298,14 @@ function exportBegin(name) {
   }
   exportRecorder.ondataavailable = (e) => { if (e.data && e.data.size) exportChunks.push(e.data); };
   exportRecorder.onstop = exportDownload;
-  // start() — не здесь, а из exportTick после прогревочных кадров
+  // start() рекордера — не здесь, а из exportTick после прогревочных кадров,
+  // вместе со стартом воспроизведения (иначе файл начинался бы с середины)
   exportWarmLeft = EXPORT_WARM_FRAMES;
+  exportPlaybackStarted = false;
   exportT0 = performance.now();
   exportActive = true;
   showExportHud(true);
   try { if (typeof ttsUnlock === 'function') ttsUnlock(); } catch (e) {}
-  window.Replay.startPlayback();
-  exportSnapCamera(); // камера — сразу в кадр, без дотяжки экспонентой
   showToast('⏺ Запись MP4…');
 }
 
@@ -339,16 +342,25 @@ function exportTick() {
   } catch (e) { return; }
   exportDrawHud(exportCtx2d);
   updateExportHud();
-  // Плавный старт рекордера: ждём живых кадров уже идущего воспроизведения.
+  // Плавный старт: ждём живых кадров после ресайза в портрет (первые бывают
+  // пустыми/рваными), затем в ОДНОМ тике стартуем воспроизведение и рекордер.
+  // Раньше воспроизведение стартовало в exportBegin, а рекордер — позже:
+  // начало ленты играло вхолостую и файл начинался не с начала.
   if (exportRecorder && exportRecorder.state === 'inactive' && !exportFinalizing) {
-    try {
-      if (window.Replay.isPlaying() && !window.Replay.isPaused()) {
-        if (exportWarmLeft > 0) exportWarmLeft--;
-        else exportRecorder.start(1000);
-      }
-    } catch (e) {}
+    if (exportWarmLeft > 0) {
+      exportWarmLeft--;
+    } else if (!exportPlaybackStarted) {
+      try {
+        if (!window.Replay.isPlaying()) window.Replay.startPlayback();
+      } catch (e) {}
+      exportSnapCamera(); // камера — сразу в кадр, без дотяжки экспонентой
+      try {
+        exportRecorder.start(1000);
+        exportPlaybackStarted = true;
+      } catch (e) {}
+    }
   }
-  if (!window.Replay.isPlaying() && !window.Replay.isPaused() && !exportFinalizing) {
+  if (exportPlaybackStarted && !window.Replay.isPlaying() && !window.Replay.isPaused() && !exportFinalizing) {
     // лента кончилась (stopPlayback уже отработал) — хвост на звук и финал
     exportFinalizing = true;
     setTimeout(exportFinish, 600);

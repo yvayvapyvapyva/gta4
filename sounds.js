@@ -34,6 +34,11 @@ function soundOut(ctx) {
   return soundBus || ctx.destination;
 }
 
+// Контекст разрешают запускать только из жеста: будим заранее первым
+// тапом/клавишей, иначе на мобильных он висит suspended и планировать нечего.
+addEventListener('pointerdown', () => { try { ensureAudioContext(); } catch (e) {} });
+addEventListener('keydown', () => { try { ensureAudioContext(); } catch (e) {} });
+
 // Генерация реалистичного щелчка реле поворотника
 function createBlinkClickBuffers(ctx) {
   const sampleRate = ctx.sampleRate;
@@ -71,8 +76,10 @@ function createBlinkClickBuffers(ctx) {
   return { on: onBuffer, off: offBuffer };
 }
 
-function playBlinkClick(isOn) {
-  const ctx = ensureAudioContext();
+function playBlinkClick(isOn, when) {
+  let ctx;
+  try { ctx = ensureAudioContext(); } catch (e) { return; }
+  if (!ctx || ctx.state !== 'running') return;
   if (!soundBuffers.has('blinkClick')) {
     soundBuffers.set('blinkClick', createBlinkClickBuffers(ctx));
   }
@@ -83,36 +90,74 @@ function playBlinkClick(isOn) {
   const gain = ctx.createGain();
   gain.gain.value = 0.7;
   source.connect(gain).connect(soundOut(ctx));
-  source.start();
+  // when — точное аудиовремя фронта от планировщика ниже; без него — сразу
+  if (when != null && isFinite(when) && when > ctx.currentTime + 0.005) source.start(when);
+  else source.start();
 }
 
-// Отслеживание состояния мигания (blinkOn из drive-control.js)
-let lastBlinkOn = false;
-let lastBlinkerLeft = false;
-let lastBlinkerRight = false;
+// ── Планировщик щелчков ─────────────────────────────────────────────
+// Раньше щелчок играл в момент детекции фронта в render loop. В живой езде
+// кадры по 16 мс — ошибка неслышна, а при записи MP4 рендер 1080x1920 тянет
+// кадры по 100+ мс: каждый щелчок опаздывал до кадра, нерегулярно — ритм
+// audibly сбивался и отставал от ламп в файле.
+// Теперь сетка фронтов считается от стенных часов независимо от кадров:
+// период 0.8 с, фронты каждые 0.4 с от сброса фазы (BLINK/BLINK_DUTY из
+// drive-control.js), чётный фронт — щелчок ON, нечётный — OFF. Каждый фронт
+// планируется один раз заранее на аудиочасах. Дёргается и из render loop,
+// и своим 25-мс таймером — кто раньше увидит окно планирования, тот и ставит.
+const BLINK_EDGE = 0.4;      // интервал между фронтами, с
+const BLINK_AHEAD = 0.3;     // за сколько планируем фронт, с
+const BLINK_SKIP_LATE = 0.15; // фронт старше этого — молча пропускаем, не догоняем
+let blinkPhaseT0 = 0;   // wall-время сброса фазы (performance.now()/1000)
+let blinkSchedIdx = -1; // индекс последнего запланированного фронта
+let blinkLastT = 0;     // прошлый blinkT: по откату назад ловим сброс фазы
+let blinkWasActive = false;
 
 function tickBlinkSounds() {
   if (typeof blinkerLeft === 'undefined' || typeof blinkerRight === 'undefined') return;
   if (typeof blinkOn === 'undefined') return;
-
-  // Щелчок на ВКЛЮЧЕНИЕ И ВЫКЛЮЧЕНИЕ лампочки (как в жизни — два щелчка за цикл)
-  // Но только если какой-то поворотник активен
-  const anyBlinker = blinkerLeft || blinkerRight;
-  if (anyBlinker && blinkOn !== lastBlinkOn) {
-    playBlinkClick(blinkOn); // true = ON click, false = OFF click
+  const active = !!(blinkerLeft || blinkerRight);
+  let ctx;
+  try { ctx = ensureAudioContext(); } catch (e) { return; }
+  if (!ctx || ctx.state !== 'running') return;
+  const pNow = performance.now() / 1000;
+  const bt = (typeof blinkT === 'number' && isFinite(blinkT)) ? blinkT : 0;
+  if (!active) {
+    // всё выключили — сброс, следующий вкл начнёт сетку заново
+    blinkSchedIdx = -1;
+    blinkWasActive = false;
+    blinkLastT = bt;
+    return;
   }
-  lastBlinkOn = blinkOn;
-
-  // Сброс при переключении сторон
-  if (blinkerLeft !== lastBlinkerLeft || blinkerRight !== lastBlinkerRight) {
-    lastBlinkOn = blinkOn; // синхронизируем, чтобы не было лишнего щелчка при смене стороны
+  if (!blinkWasActive || bt < blinkLastT - 1e-4) {
+    // включение или сброс фазы (рычаг/фронт записи ставит blinkT=0) —
+    // привязываем сетку к текущему моменту
+    blinkPhaseT0 = pNow - bt;
+    blinkSchedIdx = -1;
+    // свежий фронт ON в точке сброса: лампа уже горит — щёлкаем сразу,
+    // иначе включение останется без щелчка до первого OFF
+    if (bt < BLINK_EDGE) {
+      playBlinkClick(true, null);
+      blinkSchedIdx = 0;
+    }
   }
-  lastBlinkerLeft = blinkerLeft;
-  lastBlinkerRight = blinkerRight;
+  blinkWasActive = true;
+  blinkLastT = bt;
+  // первый фронт строго после текущей фазы
+  const phase = pNow - blinkPhaseT0;
+  const idx = Math.floor(phase / BLINK_EDGE + 1e-6) + 1;
+  if (idx <= blinkSchedIdx) return; // уже запланирован
+  const edgeIn = (blinkPhaseT0 + idx * BLINK_EDGE) - pNow;
+  if (edgeIn > BLINK_AHEAD) return; // рано, подойдём ближе следующим тиком
+  if (edgeIn < -BLINK_SKIP_LATE) { blinkSchedIdx = idx; return; } // проспали — пропускаем
+  playBlinkClick(idx % 2 === 0, ctx.currentTime + Math.max(0, edgeIn));
+  blinkSchedIdx = idx;
 }
 
-// Запуск тика звуков в основном рендер-лупе (index.html вызывает tickBlinkSounds)
+// Запуск тика звуков в основном рендер-лупе (index.html вызывает tickBlinkSounds).
+// Свой частый таймер — чтобы планирование не зависело от темпа кадров.
 window.tickBlinkSounds = tickBlinkSounds;
+setInterval(tickBlinkSounds, 25);
 
 // Громкость мастер (0..1)
 let masterVolume = 1;

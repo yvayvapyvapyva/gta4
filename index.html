@@ -184,9 +184,12 @@ body.playback-active #driveCtrl{display:none !important}
 body.playback-active #gearBtn,body.playback-active #recBtn,body.playback-active #mirrorBtn{display:none !important}
 body.edit-active #driveCtrl{display:none !important}
 /* Режим экспорта MP4: экранный интерфейс прячется (в видео рисуется свой HUD
-   на композитном канвасе), канвас центрируется letterbox-ом */
+   на композитном канвасе), канвас центрируется letterbox-ом.
+   #replayMsg НЕ прячем: композитный канвас на экран не выводится, и без DOM-
+   плашки сообщений во время записи не видно вообще (в файл они рисуются
+   отдельно через exportDrawHud). Пилюля поворотников тоже остаётся. */
 body.export-active #driveCtrl,body.export-active #gearBtn,body.export-active #recBtn,
-body.export-active #mirrorBtn,body.export-active #replayMsg,
+body.export-active #mirrorBtn,
 body.export-active #toast,body.export-active #hud{display:none !important}
 body.export-active{background:#000}
 body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);}
