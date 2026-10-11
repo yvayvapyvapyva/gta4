@@ -41,6 +41,11 @@ let exportSavedStyle = null;
 // иначе в начало файла ложится мусор и уползает синхрон.
 let exportWarmLeft = 0;
 const EXPORT_WARM_FRAMES = 6;
+// Оценка видеотрубы для синхрона щелчков: средний интервал кадров + запас
+// на кодер/муксер. Ставится в setBlinkStartDelay каждый тик, сбрасывается
+// в 0 в exportFinish (см. комментарий у blinkStartDelay в sounds.js).
+let exportFrameEma = 1 / 30;
+let exportLastTickT = 0;
 
 function exportSupported() {
   try {
@@ -297,6 +302,8 @@ function exportBegin(name) {
   exportRecorder.onstop = exportDownload;
   // start() — не здесь, а из exportTick после прогревочных кадров
   exportWarmLeft = EXPORT_WARM_FRAMES;
+  exportFrameEma = 1 / 30;
+  exportLastTickT = 0;
   exportT0 = performance.now();
   exportActive = true;
   showExportHud(true);
@@ -335,6 +342,19 @@ function exportSnapCamera() {
 function exportTick() {
   if (!exportActive) return;
   try {
+    const nowT = performance.now();
+    if (exportLastTickT) {
+      const d = (nowT - exportLastTickT) / 1000;
+      if (d > 0 && d < 0.5) exportFrameEma += (d - exportFrameEma) * 0.1;
+    }
+    exportLastTickT = nowT;
+    try {
+      if (typeof setBlinkStartDelay === 'function') {
+        setBlinkStartDelay(Math.min(0.25, exportFrameEma + 0.03));
+      }
+    } catch (e) {}
+  } catch (e) {}
+  try {
     exportCtx2d.drawImage(document.getElementById('view'), 0, 0, EXPORT_W, EXPORT_H);
   } catch (e) { return; }
   exportDrawHud(exportCtx2d);
@@ -358,6 +378,7 @@ function exportTick() {
 function exportFinish() {
   exportActive = false;
   showExportHud(false);
+  try { if (typeof setBlinkStartDelay === 'function') setBlinkStartDelay(0); } catch (e) {}
   try {
     if (exportRecorder && exportRecorder.state !== 'inactive') exportRecorder.stop();
     else exportDownload();

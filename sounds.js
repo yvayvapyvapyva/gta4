@@ -34,6 +34,36 @@ function soundOut(ctx) {
   return soundBus || ctx.destination;
 }
 
+// Контекст разрешают запускать только из жеста (тап/клавиша): будим его
+// заранее, иначе первый щелчок планируется в suspended-контексте с
+// замороженным временем и выстреливает пачкой позже — мимо мигания.
+// Render loop для разблокировки не годится — там жеста нет.
+const unlockSounds = () => { try { ensureAudioContext(); } catch (e) {} };
+addEventListener('pointerdown', unlockSounds);
+addEventListener('keydown', unlockSounds);
+
+// Живой контекст или null: планировать звук в suspended нельзя —
+// source.start() встанет на замороженное время 0 и бахнет позже всех,
+// сбивая ритм. Лучше пропустить один щелчок, чем выстрелить пачкой.
+function liveAudioCtx() {
+  let ctx;
+  try { ctx = ensureAudioContext(); } catch (e) { return null; }
+  if (!ctx || ctx.state !== 'running') return null;
+  return ctx;
+}
+
+// Задержка старта коротких звуков относительно фронта события, с.
+// Нужна только в MP4-экспорте: видеотрек проходит конвейер (рендер 1080x1920,
+// композит, кодер, муксер) на 1–3 кадра дольше, чем звук из графа, и в файле
+// щелчок слышен раньше вспышки. В живой езде всегда 0 — там звук и так идёт
+// через железо с собственной задержкой. Ставит export.js на время записи.
+let blinkStartDelay = 0;
+window.setBlinkStartDelay = (v) => { blinkStartDelay = Math.max(0, +v || 0); };
+function clickStart(src, ctx) {
+  if (blinkStartDelay > 0.004) src.start(ctx.currentTime + blinkStartDelay);
+  else src.start();
+}
+
 // Генерация реалистичного щелчка реле поворотника
 function createBlinkClickBuffers(ctx) {
   const sampleRate = ctx.sampleRate;
@@ -72,7 +102,8 @@ function createBlinkClickBuffers(ctx) {
 }
 
 function playBlinkClick(isOn) {
-  const ctx = ensureAudioContext();
+  const ctx = liveAudioCtx();
+  if (!ctx) return;
   if (!soundBuffers.has('blinkClick')) {
     soundBuffers.set('blinkClick', createBlinkClickBuffers(ctx));
   }
@@ -83,7 +114,7 @@ function playBlinkClick(isOn) {
   const gain = ctx.createGain();
   gain.gain.value = 0.7;
   source.connect(gain).connect(soundOut(ctx));
-  source.start();
+  clickStart(source, ctx);
 }
 
 // Отслеживание состояния мигания (blinkOn из drive-control.js)
@@ -144,7 +175,8 @@ function createConeHitBuffer(ctx) {
 }
 
 function playConeHit() {
-  const ctx = ensureAudioContext();
+  const ctx = liveAudioCtx();
+  if (!ctx) return;
   if (!soundBuffers.has('coneHit')) {
     soundBuffers.set('coneHit', createConeHitBuffer(ctx));
   }
@@ -154,7 +186,7 @@ function playConeHit() {
   const gain = ctx.createGain();
   gain.gain.value = 1.0; // громко
   source.connect(gain).connect(soundOut(ctx));
-  source.start();
+  clickStart(source, ctx);
 }
 
 window.playConeHit = playConeHit;
