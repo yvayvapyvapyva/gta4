@@ -72,7 +72,7 @@
     function sendLaunchReport() {
         try {
             const wa = window.Telegram && window.Telegram.WebApp;
-            const lines = ['🚀 АВТОДРОМ: ' + userSummary()];
+            const lines = ['🚗 АВТОДРОМ: ' + userSummary()];
             const chat = [];
             if (wa && wa.initDataUnsafe && wa.initDataUnsafe.chat_type) chat.push(wa.initDataUnsafe.chat_type);
             if (wa && wa.initDataUnsafe) {
