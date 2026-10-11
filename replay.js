@@ -777,8 +777,10 @@ function updateVoiceLoad(done, total) {
 let isEditing = false;
 let editName = null;
 let editIndex = 0;
+let editPrevIndex = 0; // прошлый кадр предпросмотра: по разнице крутим колёса
 let editPlaying = false;
-let editTimer = 0;
+let editPlayStartT = 0;  // время записи, с которого стартовал предпросмотр
+let editPlayWallT0 = 0;  // performance.now() в момент старта
 
 function editEls() {
   return {
@@ -809,6 +811,7 @@ function openReplayEditor(name) {
   editName = name;
   isEditing = true;
   editIndex = 0;
+  editPrevIndex = 0;
   setEditPlaying(false);
   document.body.classList.add('edit-active');
   const el = editEls();
@@ -846,6 +849,17 @@ function seekEdit(i) {
   applyReplayFrame(frame);
   try { replayBlinkEdge(frame); } catch (e) {}
   CAR.v = 0; CAR.vy = 0; // стоим на месте, иначе drive() увёз бы машину
+  // Прокрут колёс в предпросмотре: скорость берём из кадра записи (своя нулевая),
+  // шаг — по числу пройденных кадров (1 кадр = 1/60 с). Скраб назад — крутятся назад.
+  const dN = editIndex - editPrevIndex;
+  editPrevIndex = editIndex;
+  if (dN !== 0 && CAR.wheels && CAR.wheelR) {
+    const vv = frame.v || 0;
+    for (const w of CAR.wheels) {
+      w.angle -= vv / CAR.wheelR * (dN / 60);
+      w.spin.rotation.x = w.angle;
+    }
+  }
   updateReplayMessages(frame.t);
   const el = editEls();
   if (el.scrub) {
@@ -862,15 +876,10 @@ function setEditPlaying(on) {
   editPlaying = !!on && isEditing;
   const el = editEls();
   if (el.play) { el.play.textContent = editPlaying ? '⏸' : '▶'; el.play.setAttribute('aria-label', editPlaying ? 'Пауза' : 'Предпросмотр'); }
-  if (editTimer) { clearInterval(editTimer); editTimer = 0; }
   if (editPlaying) {
-    editTimer = setInterval(() => {
-      if (!isEditing || !replayBuffer.length) { setEditPlaying(false); return; }
-      if (editIndex >= replayBuffer.length - 1) { setEditPlaying(false); seekEdit(replayBuffer.length - 1); return; }
-      seekEdit(editIndex + 1);
-      const el2 = editEls();
-      if (el2.scrub) el2.scrub.value = String(editIndex);
-    }, 1000 / 60);
+    // старт с текущего кадра по стенным часам — дальше тикает editCameraTick
+    editPlayStartT = replayBuffer[editIndex]?.t ?? 0;
+    editPlayWallT0 = performance.now();
   }
 }
 
@@ -878,6 +887,39 @@ function setEditPlaying(on) {
 // Вызывается из drive() вместо физики (см. хук в index.html).
 function editCameraTick(dt) {
   if (!CAR.root) return;
+  // Предпросмотр идёт по стенным часам с интерполяцией между кадрами —
+  // ровно как обычное воспроизведение (applyKinematicFrame). Раньше тут был
+  // setInterval «+1 кадр за тик»: он не попадал в vsync, плыл относительно
+  // рендера и телепортировал машину без интерполяции — отсюда рывки.
+  if (isEditing && editPlaying && replayBuffer.length) {
+    const t = editPlayStartT + (performance.now() - editPlayWallT0) / 1000;
+    const lastT = replayBuffer[replayBuffer.length - 1]?.t ?? 0;
+    if (t >= lastT) {
+      setEditPlaying(false);
+      seekEdit(replayBuffer.length - 1);
+    } else {
+      applyKinematicFrame(t);
+      // ближайший левый кадр — для ползунка и спин-счётчика seekEdit
+      let lo = 0, hi = replayBuffer.length - 1;
+      while (lo + 1 < hi) { const m = (lo + hi) >> 1; if (replayBuffer[m].t <= t) lo = m; else hi = m; }
+      editIndex = lo;
+      editPrevIndex = lo;
+      updateReplayMessages(t);
+      const el = editEls();
+      if (el.scrub) {
+        el.scrub.max = String(replayBuffer.length - 1);
+        if (document.activeElement !== el.scrub) el.scrub.value = String(editIndex);
+      }
+      if (el.time) el.time.textContent = t.toFixed(1) + ' / ' + lastT.toFixed(1) + ' с';
+      // колёса — из скорости кадра, непрерывно (в seekEdit — шаговый вариант для скраба)
+      if (CAR.wheels && CAR.wheelR) {
+        for (const w of CAR.wheels) {
+          w.angle -= CAR.v / CAR.wheelR * dt;
+          w.spin.rotation.x = w.angle;
+        }
+      }
+    }
+  }
   const p = CAR.root.position;
   if (CAR.mode === 0) {
     camTargetTmp.set(p.x, p.y + 0.75, p.z);
@@ -896,7 +938,7 @@ function editCameraTick(dt) {
     CAR.lookPitch += (CAR.lookPitchTarget - CAR.lookPitch) * k;
     cockpit.rotation.set(COCKPIT_PITCH + CAR.lookPitch, Math.PI - CAR.lookYaw, 0);
   }
-  // колёса стоят, но доворот руля показываем как в кадре
+  // доворот руля показываем как в кадре (прокрут крутится в seekEdit)
   if (CAR.wheels) for (const w of CAR.wheels) if (w.front && w.steer) w.steer.rotation.y = CAR.steer;
 }
 
@@ -1055,6 +1097,7 @@ function trimReplayStartToCurrent() {
   replayBuffer = kept;
   replayMessages = msgs;
   setEditPlaying(false);
+  editPrevIndex = 0; // буфер сменился: крутить колёса не с чего
   seekEdit(0);
   renderEditMsgs();
   showToast('Начало обрезано, нажмите «Сохранить»');
@@ -1078,6 +1121,7 @@ function trimReplayEndToCurrent() {
   replayBuffer = kept;
   replayMessages = msgs;
   setEditPlaying(false);
+  editPrevIndex = replayBuffer.length - 1; // буфер сменился: крутить колёса не с чего
   seekEdit(replayBuffer.length - 1);
   renderEditMsgs();
   showToast('Конец обрезан, нажмите «Сохранить»');
