@@ -443,8 +443,12 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 <div id="replayWin" class="win">
   <h3>Сохранённые реплеи<button id="replayClose" aria-label="Закрыть">✕</button></h3>
   <div id="replayList" style="max-height:60vh; overflow-y:auto;"></div>
-  <div class="win-note">Клик — воспроизвести. Кнопка ✎ — редактировать.</div>
+  <div class="win-btns" style="margin-top:10px">
+    <button id="replayImportBtn">Загрузить из файла</button>
+  </div>
+  <div class="win-note">Клик — воспроизвести. Кнопка ✎ — редактировать. ⬇ — скачать запись файлом.</div>
 </div>
+<input type="file" id="replayFileInput" accept="application/json,.json" hidden>
 
 <div id="voiceLoadBackdrop" class="win-backdrop"></div>
 <div id="voiceLoadWin" class="win" style="width:min(300px,90vw);text-align:center">
@@ -458,6 +462,12 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 <div id="replayEditBackdrop" class="win-backdrop"></div>
 <div id="replayEditWin" class="win">
   <h3><span id="replayEditTitle">Редактор записи</span><button id="replayEditClose" aria-label="Закрыть">✕</button></h3>
+  <div class="win-sec">
+    <div class="win-row" style="gap:8px">
+      <input type="text" id="replayEditName" maxlength="60" title="Имя записи" style="flex:1;font:inherit;font-size:12.5px;color:var(--fg);padding:7px 10px;border-radius:8px;background:#22262e;border:1px solid rgba(255,255,255,.14);outline:none;">
+      <button id="replayEditRename" title="Переименовать запись" style="flex:0 0 auto">Переименовать</button>
+    </div>
+  </div>
   <div class="win-sec">
     <h4>Монтаж</h4>
     <div class="win-btns">

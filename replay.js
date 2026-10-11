@@ -505,6 +505,50 @@ function deleteReplayFromStorage(name) {
   } catch (e) { console.error('[Replay] Delete failed:', e); return false; }
 }
 
+// ── Файлы: скачать запись / загрузить из файла ──────────────────────
+// Формат файла — тот же JSON, что лежит в localStorage.
+function downloadReplayFile(name) {
+  const data = loadReplayFromStorage(name);
+  if (!data) { showToast('Запись не найдена'); return; }
+  try {
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = String(name).replace(/[^\w\-а-яё.]+/gi, '_') + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    showToast('Скачано: ' + a.download);
+  } catch (e) { showToast('Ошибка скачивания'); }
+}
+
+function importReplayFile(file) {
+  if (!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    let data;
+    try { data = JSON.parse(String(rd.result)); }
+    catch (e) { showToast('Не JSON-файл'); return; }
+    if (!data || !Array.isArray(data.frames) || !data.frames.length) {
+      showToast('Это не запись реплея');
+      return;
+    }
+    // имя — из файла, без кавычек/уголков (иначе ломают список); занятое — с суффиксом
+    let base = String(file.name || 'replay_import').replace(/\.json$/i, '').replace(/["<>]+/g, '').trim().slice(0, 60) || 'replay_import';
+    let name = base, n = 1;
+    while (loadReplayFromStorage(name)) name = base + '_' + (++n);
+    data.messages = sanitizeMessages(data.messages);
+    if (saveReplayToStorage(name, data)) {
+      showToast('Загружено: ' + name);
+      renderReplayList();
+    } else showToast('Ошибка сохранения (нет места?)');
+  };
+  rd.onerror = () => showToast('Не удалось прочитать файл');
+  rd.readAsText(file);
+}
+
 // UI для кнопки записи
 let recBtn = null;
 function initRecButton() {
@@ -591,6 +635,16 @@ function initReplayWindow() {
   });
   document.getElementById('replayClose')?.addEventListener('click', () => openReplayList(false));
   replayBackdrop?.addEventListener('click', () => openReplayList(false));
+  document.getElementById('replayImportBtn')?.addEventListener('click', () => {
+    const inp = document.getElementById('replayFileInput');
+    if (!inp) return;
+    inp.value = '';
+    inp.click();
+  });
+  document.getElementById('replayFileInput')?.addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) importReplayFile(f);
+  });
 }
 function openReplayList(open) {
   if (!replayWin || !replayBackdrop) return;
@@ -625,6 +679,7 @@ function renderReplayList() {
         <div style="font-size:11px;color:var(--dim);">${date} · ${dur} · ${frames} кадров · 💬${msgs} · ${size}</div>
       </div>
       <div style="display:flex;gap:6px;margin-left:8px;flex:0 0 auto">
+        <button class="replay-dl" data-name="${name}" style="padding:4px 10px;font-size:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:6px;color:var(--fg);cursor:pointer;" title="Скачать запись файлом (JSON)">⬇</button>
         <button class="replay-mp4" data-name="${name}" style="padding:4px 10px;font-size:11px;background:rgba(98,208,223,.12);border:1px solid #62d0df;border-radius:6px;color:#62d0df;cursor:pointer;" title="Сохранить MP4 1080x1920">🎬</button>
         <button class="replay-edit" data-name="${name}" style="padding:4px 10px;font-size:11px;background:rgba(255,138,61,.15);border:1px solid var(--acc);border-radius:6px;color:var(--acc);cursor:pointer;" title="Редактировать сообщения">✎</button>
         <button class="replay-del" data-name="${name}" style="padding:4px 10px;font-size:11px;background:rgba(255,59,59,.2);border:1px solid #ff3b3b;border-radius:6px;color:#ff6b6b;cursor:pointer;">Удалить</button>
@@ -634,6 +689,12 @@ function renderReplayList() {
 
   // Делегирование событий
   replayListEl.onclick = e => {
+    const dlBtn = e.target.closest('.replay-dl');
+    if (dlBtn) {
+      e.stopPropagation();
+      downloadReplayFile(dlBtn.dataset.name);
+      return;
+    }
     const mp4Btn = e.target.closest('.replay-mp4');
     if (mp4Btn) {
       e.stopPropagation();
@@ -733,6 +794,7 @@ function editEls() {
     voice: document.getElementById('replayEditVoice'),
     msgs: document.getElementById('replayEditMsgs'),
     count: document.getElementById('replayEditCount'),
+    nameInput: document.getElementById('replayEditName'),
   };
 }
 
@@ -751,6 +813,7 @@ function openReplayEditor(name) {
   document.body.classList.add('edit-active');
   const el = editEls();
   if (el.title) el.title.textContent = '✎ ' + name;
+  if (el.nameInput) el.nameInput.value = name;
   if (el.win) el.win.classList.add('open');
   if (el.backdrop) el.backdrop.classList.add('open');
   seekEdit(0);
@@ -944,6 +1007,29 @@ function saveReplayEdits() {
   else showToast('Ошибка сохранения');
 }
 
+function renameReplayEdit() {
+  if (!isEditing || !editName) return;
+  const el = editEls();
+  const nn = (el.nameInput?.value ?? '').trim().slice(0, 60);
+  if (!nn) { showToast('Введите имя записи'); el.nameInput?.focus(); return; }
+  if (nn === editName) { showToast('Имя не изменилось'); return; }
+  if (loadReplayFromStorage(nn)) { showToast('Такое имя уже занято'); return; }
+  // Пишем текущее состояние из памяти (несохранённые обрезка/сообщения
+  // тоже переезжают), затем удаляем старое имя.
+  const payload = {
+    version: 1,
+    tickRate: 1 / REPLAY_TICK,
+    duration: replayBuffer.length ? replayBuffer[replayBuffer.length - 1].t : 0,
+    frames: replayBuffer,
+    messages: replayMessages.map(m => ({ t: m.t, dur: m.dur, text: m.text, speech: m.speech || '', voice: m.voice || 'command' }))
+  };
+  if (!saveReplayToStorage(nn, payload)) { showToast('Ошибка сохранения'); return; }
+  deleteReplayFromStorage(editName);
+  editName = nn;
+  if (el.title) el.title.textContent = '✎ ' + nn;
+  showToast('Переименовано: ' + nn);
+}
+
 // ── Монтаж: обрезка начала/конца по текущему ползунку ───────────────
 // После обрезки время пересчитывается от нуля (t' = t − t0), сообщения
 // сдвигаются вместе с кадрами; непопавшие в новый диапазон отбрасываются,
@@ -1071,6 +1157,7 @@ function initReplayEditor() {
     showToast('Сообщение вставлено на ' + t.toFixed(1) + ' с');
   });
   document.getElementById('replayEditSave')?.addEventListener('click', saveReplayEdits);
+  document.getElementById('replayEditRename')?.addEventListener('click', renameReplayEdit);
   document.getElementById('replayEditTrimStart')?.addEventListener('click', trimReplayStartToCurrent);
   document.getElementById('replayEditTrimEnd')?.addEventListener('click', trimReplayEndToCurrent);
   document.getElementById('replayEditContinue')?.addEventListener('click', continueReplayRecording);
