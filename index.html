@@ -92,18 +92,17 @@
   #recBtn.recording svg { animation:blink 1s infinite; }
   @keyframes pulse { 0%,100% { box-shadow:0 0 0 0 rgba(255,59,59,.4); } 50% { box-shadow:0 0 0 8px rgba(255,59,59,0); } }
   @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
-  /* Кнопка окна зеркал: третья в правой колонке под записью реплея */
-  #mirrorBtn { position:fixed; right:max(14px,env(safe-area-inset-right,0px));
-    top:calc(max(14px,env(safe-area-inset-top,0px)) + 108px + var(--tg-top)); z-index:7; width:40px; height:40px; padding:0;
-    display:flex; align-items:center; justify-content:center; border-radius:14px; cursor:pointer;
-    font-size:20px; line-height:1;
-    color:#d8e5ee; background:rgba(12,22,32,.85); border:1px solid #2a4257;
-    backdrop-filter:blur(6px); -webkit-tap-highlight-color:transparent;
-    user-select:none; -webkit-user-select:none; }
-  #mirrorBtn:hover { border-color:var(--acc); color:var(--acc); }
-  #mirrorBtn.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
-  #mirrorBtn:active { background:#ff6d00; border-color:#ff6d00; color:#12141a; }
+  /* Кнопка записи скрыта по умолчанию (включается переключателем в меню записи) */
+  #recBtn { display:none; }
+  body.showRecBtn #recBtn { display:flex; }
   .win-btns button.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
+  /* Переключатель (рамка 9:16 в меню записи): пилюля с бегунком */
+  .win button.switch { position:relative; flex:0 0 auto; width:46px; height:26px; padding:0;
+    border-radius:13px; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.2); }
+  .win button.switch .knob { position:absolute; top:2px; left:2px; width:20px; height:20px;
+    border-radius:50%; background:#fff; transition:left .15s; }
+  .win button.switch.on { background:rgba(255,138,61,.5); border-color:var(--acc); }
+  .win button.switch.on .knob { left:22px; }
 
   .win-sec { margin:0 0 16px; }
   .win-sec:last-child { margin-bottom:0; }
@@ -181,7 +180,7 @@
 .dv-slider-h{position:absolute;top:50%;left:50%;width:54px;height:54px;transform:translate(-50%,-50%);border-radius:12px;background:#ff6d00;border:2px solid #1a1200;box-shadow:0 3px 10px rgba(0,0,0,.55)}
 #driveCtrl,#driveCtrl *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 body.playback-active #driveCtrl{display:none !important}
-body.playback-active #gearBtn,body.playback-active #recBtn,body.playback-active #mirrorBtn{display:none !important}
+body.playback-active #gearBtn,body.playback-active #recBtn{display:none !important}
 body.edit-active #driveCtrl{display:none !important}
 /* Режим экспорта MP4: экранный интерфейс прячется (в видео рисуется свой HUD
    на композитном канвасе), канвас центрируется letterbox-ом.
@@ -189,7 +188,6 @@ body.edit-active #driveCtrl{display:none !important}
    плашки сообщений во время записи не видно вообще (в файл они рисуются
    отдельно через exportDrawHud). Пилюля поворотников тоже остаётся. */
 body.export-active #driveCtrl,body.export-active #gearBtn,body.export-active #recBtn,
-body.export-active #mirrorBtn,
 body.export-active #toast,body.export-active #hud{display:none !important}
 body.export-active{background:#000}
 body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);}
@@ -288,29 +286,22 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   </svg>
 </button>
 
-<button id="recBtn" aria-label="Запись реплея" title="Запись реплея (R)">
+<button id="recBtn" aria-label="Запись реплея" title="Запись реплея">
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="#ff3b3b"/></svg>
 </button>
-
-<button id="mirrorBtn" aria-label="Настройки зеркал" title="Настройки зеркал">🪞</button>
 
 <div id="settingsBackdrop" class="win-backdrop"></div>
 <div id="settingsWin" class="win">
   <h3>Настройки<button id="settingsClose" aria-label="Закрыть">✕</button></h3>
 
   <div class="win-sec">
-    <h4>Реплеи</h4>
     <div class="win-btns">
-      <button id="replayListBtn">Список сохранённых</button>
+      <button id="replayListBtn">Запись</button>
     </div>
-    <div class="win-note">Запись: кнопка ● справа сверху или клавиша <b>R</b></div>
   </div>
 
   <div class="win-sec">
     <h4>Вид</h4>
-    <div class="win-btns">
-      <button id="cropGuideBtn" title="Показать, что попадёт в вертикальный кадр MP4 (G)">Рамка 9:16</button>
-    </div>
     <div class="win-note">
       Езда: <b>W/A/S/D</b> · <b>Space</b> — ручник · <b>C</b> — камера<br>
       <b>R</b> — сброс · <b>M</b> — зеркала · <b>Q/E</b> — поворотники<br>
@@ -336,6 +327,13 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
       <span class="val" id="setSteerTimeV">0.5 с</span>
     </div>
     <div class="win-note">Время поворота колёс от края до края с клавиатуры (с)</div>
+  </div>
+
+  <div class="win-sec">
+    <h4>Зеркала</h4>
+    <div class="win-btns">
+      <button id="settingsMirrorBtn">Открыть настройки зеркал</button>
+    </div>
   </div>
 
   <div class="win-sec">
@@ -445,6 +443,14 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 <div id="replayBackdrop" class="win-backdrop"></div>
 <div id="replayWin" class="win">
   <h3>Сохранённые реплеи<button id="replayClose" aria-label="Закрыть">✕</button></h3>
+  <div class="win-row" style="justify-content:space-between;margin-bottom:10px">
+    <span style="font-size:12.5px">Рамка 9:16</span>
+    <button id="cropGuideBtn" class="switch" role="switch" aria-checked="false" aria-label="Рамка 9:16" title="Показать, что попадёт в вертикальный кадр MP4 (G)"><span class="knob"></span></button>
+  </div>
+  <div class="win-row" style="justify-content:space-between;margin-bottom:10px">
+    <span style="font-size:12.5px">Кнопка записи</span>
+    <button id="recBtnSwitch" class="switch" role="switch" aria-checked="false" aria-label="Кнопка записи" title="Показывать кнопку ● на экране"><span class="knob"></span></button>
+  </div>
   <div id="replayList" style="max-height:60vh; overflow-y:auto;"></div>
   <div class="win-btns" style="margin-top:10px">
     <button id="replayImportBtn">Загрузить из файла</button>
@@ -480,7 +486,7 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
     <div class="win-btns" style="margin-top:8px">
       <button id="replayEditContinue" title="Поставить машину в текущий кадр и дописать езду в эту же запись">⏺ Продолжить запись отсюда</button>
     </div>
-    <div class="win-note">Обрезка применяется кнопкой <b>Сохранить</b> ниже. Продолжение: редактор закроется, едете как обычно, стоп — кнопкой ● или <b>R</b>, дописанное ляжет в ту же запись.</div>
+    <div class="win-note">Обрезка применяется кнопкой <b>Сохранить</b> ниже. Продолжение: редактор закроется, едете как обычно, стоп — кнопкой ●, дописанное ляжет в ту же запись.</div>
   </div>
   <div class="win-sec">
     <h4>Кадр <span id="replayEditTime" style="color:var(--fg)">0.0 / 0.0 с</span></h4>
@@ -921,17 +927,18 @@ document.getElementById("replayListBtn")?.addEventListener("click", () => {
   if (typeof window.Replay?.openList === "function") window.Replay.openList(true);
 });
 
-// ── окно зеркал: отдельная кнопка, все настройки зеркал живут здесь ──
+// ── окно зеркал: все настройки зеркал живут здесь ──
 const mirrorWin = document.getElementById("mirrorWin");
 const mirrorBackdrop = document.getElementById("mirrorBackdrop");
-const mirrorBtn = document.getElementById("mirrorBtn");
 function openMirrorWin(o) {
   mirrorWin.classList.toggle("open", o);
   mirrorBackdrop.classList.toggle("open", o);
-  mirrorBtn.classList.toggle("on", o);
   if (o) { syncSettings(); syncMirrorTunables(); syncMirrorRenderBtn(); }
 }
-mirrorBtn.addEventListener("click", () => openMirrorWin(!mirrorWin.classList.contains("open")));
+document.getElementById("settingsMirrorBtn")?.addEventListener("click", () => {
+  openSettings(false);
+  openMirrorWin(true);
+});
 document.getElementById("mirrorClose").addEventListener("click", () => openMirrorWin(false));
 mirrorBackdrop.addEventListener("click", () => openMirrorWin(false));
 

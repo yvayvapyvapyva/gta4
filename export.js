@@ -441,7 +441,10 @@ function syncCropGuide() {
   cropGuideShown = show;
   el.hidden = !show;
   const b = document.getElementById('cropGuideBtn');
-  if (b) b.classList.toggle('on', cropGuideManual);
+  if (b) {
+    b.classList.toggle('on', cropGuideManual);
+    b.setAttribute('aria-checked', cropGuideManual ? 'true' : 'false');
+  }
 }
 function toggleCropGuide(force) {
   cropGuideManual = typeof force === 'boolean' ? force : !cropGuideManual;

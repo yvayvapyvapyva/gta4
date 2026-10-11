@@ -568,7 +568,21 @@ function updateRecButton() {
   const rec = window.Replay.isRecording();
   recBtn.classList.toggle('recording', rec);
   recBtn.setAttribute('aria-label', rec ? 'Остановить запись' : 'Начать запись');
-  recBtn.title = rec ? 'Остановить запись (R)' : 'Начать запись (R)';
+  recBtn.title = rec ? 'Остановить запись' : 'Начать запись';
+  // Во время записи кнопка обязана быть видна (иначе не остановить):
+  // показываем принудительно, переклюатель подтягивается следом
+  if (rec) {
+    document.body.classList.add('showRecBtn');
+    syncRecBtnSwitch();
+  }
+}
+// Переключатель видимости кнопки ● (меню записи). По умолчанию выключен.
+function syncRecBtnSwitch() {
+  const sw = document.getElementById('recBtnSwitch');
+  if (!sw) return;
+  const on = document.body.classList.contains('showRecBtn');
+  sw.classList.toggle('on', on);
+  sw.setAttribute('aria-checked', on ? 'true' : 'false');
 }
 function uiStartRecording() {
   window.Replay.startRecording();
@@ -598,21 +612,6 @@ function stopAndSave() {
   }
   updateRecButton();
 }
-
-// Горячая клавиша R для записи (когда не в меню)
-addEventListener('keydown', e => {
-  if (e.code === 'KeyR' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
-    const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-    if (t && t.closest && t.closest('#replayEditWin')) return;
-    if (typeof isEditing !== 'undefined' && isEditing) return;
-    const settingsWin = document.getElementById('settingsWin');
-    const mirrorWin = document.getElementById('mirrorWin');
-    if (settingsWin?.classList.contains('open') || mirrorWin?.classList.contains('open')) return;
-    e.preventDefault();
-    if (window.Replay.isRecording()) stopAndSave(); else uiStartRecording();
-  }
-});
 
 // Инициализация кнопки
 if (document.readyState === 'loading') {
@@ -645,6 +644,11 @@ function initReplayWindow() {
     const f = e.target.files && e.target.files[0];
     if (f) importReplayFile(f);
   });
+  document.getElementById('recBtnSwitch')?.addEventListener('click', () => {
+    document.body.classList.toggle('showRecBtn');
+    syncRecBtnSwitch();
+  });
+  syncRecBtnSwitch();
 }
 function openReplayList(open) {
   if (!replayWin || !replayBackdrop) return;
@@ -1131,7 +1135,7 @@ function trimReplayEndToCurrent() {
 // Ставит машину в текущий кадр редактора, отбрасывает хвост после него
 // (если ползунок не в конце — с подтверждением) и включает обычную
 // запись: новые кадры дописываются со временем последнего кадра.
-// Остановка — кнопкой ● или R, дописанное сохраняется в то же имя.
+// Остановка — кнопкой ●, дописанное сохраняется в то же имя.
 function continueReplayRecording() {
   if (!isEditing || !replayBuffer.length) return;
   if (isRecording) { showToast('Запись уже идёт'); return; }
@@ -1166,7 +1170,7 @@ function continueReplayRecording() {
   lastRecordTime = performance.now();
   if (typeof updateRecButton === 'function') updateRecButton();
   console.log('[Replay] Append recording to:', target, 'from t=', baseT);
-  showToast('⏺ Продолжение записи… стоп — ● или R', 2500);
+  showToast('⏺ Продолжение записи… стоп — кнопкой ●', 2500);
 }
 
 function initReplayEditor() {
