@@ -573,12 +573,20 @@ function bodyProbePoints() {
   if (typeof CAR === "undefined" || !CAR) return [[0, 0]];
   const hw = CAR.halfW + OBST_MARGIN, hl = CAR.halfL + OBST_MARGIN;
   const cx = CAR.bodyCx, cz = CAR.bodyCz;
+  // Угловые пробы вдвигаем внутрь на скругление бампера (CAR.cornerR):
+  // острый угол, как у конусов, задевал бы на ~20 см раньше кузова.
+  const r = Math.min(CAR.cornerR || 0, hw, hl);
   const nx = Math.max(2, Math.ceil((2 * hw) / OBST_STEP));
   const nz = Math.max(2, Math.ceil((2 * hl) / OBST_STEP));
   const out = [];
   for (let i = 0; i <= nx; i++) {
-    const lx = cx - hw + (2 * hw * i) / nx;
-    out.push([lx, cz - hl], [lx, cz + hl]);
+    let lx = cx - hw + (2 * hw * i) / nx;
+    let dz = hl;
+    if (r > 0 && (i === 0 || i === nx)) {
+      lx = cx + Math.sign(lx - cx) * (hw - r);
+      dz = hl - r;
+    }
+    out.push([lx, cz - dz], [lx, cz + dz]);
   }
   for (let j = 1; j < nz; j++) {
     const lz = cz - hl + (2 * hl * j) / nz;
@@ -655,11 +663,18 @@ function coneBlockedAt(x, z, px, pz, y) {
 // Глубина проникновения оси конуса в габарит: 0 — снаружи, >0 — внутри
 // (расстояние до ближайшего края). Нужна, чтобы выпустить машину:
 // внутрь пускаем только наружу, а не запираем её там навсегда.
+// Габарит — скруглённый прямоугольник (радиус CAR.cornerR): бампер круглый,
+// острый угол давал касание на ~20 см раньше реального кузова.
 function coneDepthAt(x, z, px, pz) {
   if (typeof CAR === "undefined" || !CAR) return 0;
   const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);
   const dx = px - x, dz = pz - z;
   const lx = dx * c + dz * s, lz = -dx * s + dz * c;
+  const r = CAR.cornerR || 0;
+  const qx = Math.abs(lx - CAR.bodyCx) - (CAR.halfW - r);
+  const qz = Math.abs(lz - CAR.bodyCz) - (CAR.halfL - r);
+  const outside = Math.hypot(Math.max(qx, 0), Math.max(qz, 0));
+  if (outside > 0) return outside >= r ? 0 : r - outside;
   const ex = CAR.halfW - Math.abs(lx - CAR.bodyCx);
   const ez = CAR.halfL - Math.abs(lz - CAR.bodyCz);
   if (ex <= 0 || ez <= 0) return 0;

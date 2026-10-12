@@ -729,8 +729,9 @@ const CAR = {
   turnDiameter: 10.5,   // диаметр разворота по внешней кромке, м
   width: 1.74,          // ширина кузова, м (замер по модели в локальных осях)
   length: 4.35,         // длина кузова, м (замер по модели в локальных осях)
-  halfW: 0.98,          // полугабарит по X от реального центра кузова, м
-  halfL: 2.22,          // полугабарит по Z от реального центра кузова, м
+  halfW: 0.98,         // полугабарит по X от реального центра кузова, м
+  halfL: 2.22,         // полугабарит по Z от реального центра кузова, м
+  cornerR: 0.6,        // скругление углов кузова для столкновений, м
   bodyCx: 0,            // центр кузова по X в локальных осях, м
   bodyCz: 0,            // центр кузова по Z в локальных осях, м
   turnRadius: 4.38,     // радиус дуги = (turnDiameter − width) / 2
@@ -1848,6 +1849,34 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   // кузов поднимаем так, чтобы колёса встали на землю
   CAR.lift = minWheelY < 1e9 ? -minWheelY : -mn.y;
   root.position.set(0, CAR.lift, 0);
+
+  // ── отладочная рамка физического габарита (?debug=1) ──
+  // Скруглённый прямоугольник halfW/halfL/cornerR вокруг центра кузова:
+  // ровно та геометрия, по которой считаются конусы и бордюры.
+  // Едет вместе с машиной (ребёнок root), в обычном запуске не строится.
+  if (DEBUG_OVERLAY) {
+    try {
+      const hhw = CAR.halfW, hhl = CAR.halfL;
+      const hr = Math.min(CAR.cornerR || 0, hhw, hhl);
+      const hcx = CAR.bodyCx, hcz = CAR.bodyCz, hhy = -CAR.lift + 0.05;
+      const hpts = [];
+      const HSEG = 8;
+      const hquad = (sx, sz) => (sx > 0 ? (sz > 0 ? 0 : 3) : (sz > 0 ? 1 : 2));
+      for (const [hsx, hsz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+        const ha0 = hquad(hsx, hsz) * Math.PI / 2;
+        const hccx = hcx + hsx * (hhw - hr), hccz = hcz + hsz * (hhl - hr);
+        for (let hk = 0; hk <= HSEG; hk++) {
+          const ha = ha0 + (hk / HSEG) * Math.PI / 2;
+          hpts.push(new BABYLON.Vector3(hccx + hr * Math.cos(ha), hhy, hccz + hr * Math.sin(ha)));
+        }
+      }
+      hpts.push(hpts[0].clone());
+      const hitLines = BABYLON.MeshBuilder.CreateLineSystem("hitbox", { lines: [hpts] }, scene);
+      hitLines.color = new BABYLON.Color3(1, 0.15, 0.15);
+      hitLines.parent = root;
+      hitLines.isPickable = false;
+    } catch (e) {}
+  }
 
   // --- точка обзора для вида из салона. Ориентиры берём из самой модели:
   // руль задаёт поперечную координату водителя, верх крыши — высоту глаз.
