@@ -80,6 +80,18 @@
   #gearBtn:active { background:#ff6d00; border-color:#ff6d00; color:#12141a; }
   /* В Telegram-миниапе шестерёнку опускаем на 50px (там выше своя шапка) */
   body.tg-app #gearBtn { top:calc(max(14px,env(safe-area-inset-top,0px)) + var(--tg-top) + 50px); }
+  /* Кнопка упражнений: иконка плей под шестерёнкой */
+  #exBtn { position:fixed; right:max(14px,env(safe-area-inset-right,0px));
+    top:calc(max(14px,env(safe-area-inset-top,0px)) + 54px + var(--tg-top)); z-index:7; width:40px; height:40px; padding:0;
+    display:flex; align-items:center; justify-content:center; border-radius:14px; cursor:pointer;
+    color:#d8e5ee; background:rgba(12,22,32,.85); border:1px solid #2a4257;
+    backdrop-filter:blur(6px); -webkit-tap-highlight-color:transparent;
+    user-select:none; -webkit-user-select:none; }
+  #exBtn svg { width:20px; height:20px; fill:currentColor; }
+  #exBtn:hover { border-color:var(--acc); color:var(--acc); }
+  #exBtn:active { background:#ff6d00; border-color:#ff6d00; color:#12141a; }
+  body.tg-app #exBtn { top:calc(max(14px,env(safe-area-inset-top,0px)) + 54px + var(--tg-top) + 50px); }
+  body.tg-app #recBtn { top:calc(max(14px,env(safe-area-inset-top,0px)) + 104px + var(--tg-top) + 50px); }
   #recBtn { position:fixed; right:max(14px,env(safe-area-inset-right,0px));
     top:calc(max(14px,env(safe-area-inset-top,0px)) + 104px + var(--tg-top)); z-index:7; width:40px; height:40px; padding:0;
     display:flex; align-items:center; justify-content:center; border-radius:14px; cursor:pointer;
@@ -180,14 +192,14 @@
 .dv-slider-h{position:absolute;top:50%;left:50%;width:54px;height:54px;transform:translate(-50%,-50%);border-radius:12px;background:#ff6d00;border:2px solid #1a1200;box-shadow:0 3px 10px rgba(0,0,0,.55)}
 #driveCtrl,#driveCtrl *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 body.playback-active #driveCtrl{display:none !important}
-body.playback-active #gearBtn,body.playback-active #recBtn{display:none !important}
+body.playback-active #gearBtn,body.playback-active #recBtn,body.playback-active #exBtn{display:none !important}
 body.edit-active #driveCtrl{display:none !important}
 /* Режим экспорта MP4: экранный интерфейс прячется (в видео рисуется свой HUD
    на композитном канвасе), канвас центрируется letterbox-ом.
    #replayMsg НЕ прячем: композитный канвас на экран не выводится, и без DOM-
    плашки сообщений во время записи не видно вообще (в файл они рисуются
    отдельно через exportDrawHud). Пилюля поворотников тоже остаётся. */
-body.export-active #driveCtrl,body.export-active #gearBtn,body.export-active #recBtn,
+body.export-active #driveCtrl,body.export-active #gearBtn,body.export-active #recBtn,body.export-active #exBtn,
 body.export-active #toast,body.export-active #hud{display:none !important}
 body.export-active{background:#000}
 body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);}
@@ -287,6 +299,8 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 <button id="recBtn" aria-label="Запись реплея" title="Запись реплея">
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="#ff3b3b"/></svg>
 </button>
+
+<button id="exBtn" aria-label="Упражнения" title="Упражнения"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
 
 <div id="settingsBackdrop" class="win-backdrop"></div>
 <div id="settingsWin" class="win">
@@ -462,6 +476,12 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   <div class="win-note">Клик — воспроизвести. Кнопка ✎ — редактировать. ⬇ — скачать запись файлом.</div>
 </div>
 <input type="file" id="replayFileInput" accept="application/json,.json" hidden>
+
+<div id="exBackdrop" class="win-backdrop"></div>
+<div id="exWin" class="win">
+  <h3>Упражнения<button id="exClose" aria-label="Закрыть">✕</button></h3>
+  <div id="exList" style="max-height:60vh; overflow-y:auto;"></div>
+</div>
 
 <div id="voiceLoadBackdrop" class="win-backdrop"></div>
 <div id="voiceLoadWin" class="win" style="width:min(300px,90vw);text-align:center">

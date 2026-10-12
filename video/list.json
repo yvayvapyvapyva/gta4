@@ -1,0 +1,32 @@
+{
+  "files": [
+    {
+      "file": "разворот.json",
+      "name": "разворот",
+      "duration": 107.7,
+      "frames": 4253,
+      "msgs": 6
+    },
+    {
+      "file": "парковка.json",
+      "name": "парковка",
+      "duration": 117.7,
+      "frames": 4618,
+      "msgs": 5
+    },
+    {
+      "file": "гараж.json",
+      "name": "гараж",
+      "duration": 118.4,
+      "frames": 4633,
+      "msgs": 5
+    },
+    {
+      "file": "горка.json",
+      "name": "горка",
+      "duration": 67.5,
+      "frames": 2652,
+      "msgs": 4
+    }
+  ]
+}

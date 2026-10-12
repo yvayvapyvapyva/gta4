@@ -61,6 +61,43 @@ fs.mkdirSync(path.join(OUT, 'auto'), { recursive: true });
 fs.writeFileSync(path.join(OUT, 'index.html'), html);
 fs.copyFileSync(path.join(ROOT, 'auto', 'car.glb'), path.join(OUT, 'auto', 'car.glb'));
 
+// --- видео-упражнения: манифест video/list.json (нужен и в исходниках для
+// dev-запуска, и в deploy) + копия json-файлов в deploy
+const videoSrc = path.join(ROOT, 'video');
+const videoOut = path.join(OUT, 'video');
+if (fs.existsSync(videoSrc)) {
+  // Порядок упражнений в меню (остальные файлы — после, по алфавиту)
+  const EX_ORDER = ['разворот', 'парковка', 'гараж', 'горка'];
+  const orderOf = (f) => {
+    const base = f.replace(/\.json$/i, '');
+    const i = EX_ORDER.indexOf(base);
+    return i < 0 ? EX_ORDER.length : i;
+  };
+  const files = fs.readdirSync(videoSrc)
+    .filter(f => /\.json$/i.test(f) && f !== 'list.json')
+    .sort((a, b) => (orderOf(a) - orderOf(b)) || a.localeCompare(b, 'ru'));
+  const meta = files.map(f => {
+    try {
+      const d = JSON.parse(fs.readFileSync(path.join(videoSrc, f), 'utf8'));
+      if (!d || !Array.isArray(d.frames) || !d.frames.length) return null;
+      const frames = d.frames;
+      return {
+        file: f,
+        name: f.replace(/\.json$/i, '').replace(/["<>]+/g, ''),
+        duration: Math.round((frames[frames.length - 1].t || 0) * 10) / 10,
+        frames: frames.length,
+        msgs: Array.isArray(d.messages) ? d.messages.length : 0,
+      };
+    } catch (e) { return null; }
+  }).filter(Boolean);
+  const manifest = JSON.stringify({ files: meta });
+  fs.writeFileSync(path.join(videoSrc, 'list.json'), JSON.stringify({ files: meta }, null, 2));
+  fs.mkdirSync(videoOut, { recursive: true });
+  fs.writeFileSync(path.join(videoOut, 'list.json'), manifest);
+  for (const f of files) fs.copyFileSync(path.join(videoSrc, f), path.join(videoOut, f));
+  console.log('video :', meta.length, 'упражнений');
+}
+
 const kb = n => (n / 1024).toFixed(0) + ' КБ';
 console.log('bundle js :', kb(bundleSrc.length), '->', kb(bundleMin.length));
 console.log('report js :', kb(reportSrc.length), '->', kb(reportMin.length));

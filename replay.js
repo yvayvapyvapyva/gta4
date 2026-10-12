@@ -731,13 +731,19 @@ function playReplay(name) {
   if (!data) return;
   openReplayList(false);
   window.Replay.loadReplay(data);
+  beginPlaybackWithVoice(name);
+}
+
+// Старт воспроизведения уже загруженного буфера: сначала греем озвучку
+// с прогрессом, чтобы не было «текст есть, а голоса нет».
+function beginPlaybackWithVoice(label) {
   const msgs = (window.Replay.getMessages && window.Replay.getMessages()) || [];
   const canVoice = typeof ttsPrefetch === 'function' && typeof ttsHas === 'function';
   // Греть нечего (нет сообщений или всё уже в кэше) — играем сразу без лоадера.
   const cold = canVoice ? msgs.filter((m) => msgSpeech(m) && !ttsHas(m.voice || 'command', msgSpeech(m))) : [];
   if (!cold.length) {
     window.Replay.startPlayback();
-    showToast('Воспроизведение: ' + name);
+    showToast('Воспроизведение: ' + label);
     return;
   }
   // Сначала грузим всю озвучку с прогрессом — и только потом стартуем,
@@ -753,13 +759,79 @@ function playReplay(name) {
     window.Replay.startPlayback();
     showToast(failed > 0
       ? 'Озвучка загрузилась частично (' + failed + ' шт.) — остальное текстом'
-      : 'Воспроизведение: ' + name);
+      : 'Воспроизведение: ' + label);
   }).catch(() => {
     // Офлайн/таймаут: картинку не блокируем — едем с одними субтитрами.
     openVoiceLoad(false);
     window.Replay.startPlayback();
     showToast('Озвучка не загрузилась — только текст');
   });
+}
+
+// ── Упражнения: готовые записи из папки video ───────────────────────
+// Список берёт из video/list.json (генерит build-deploy.js из json-файлов).
+const EX_DIR = 'video';
+let exWin = null, exBackdrop = null, exListEl = null;
+let exManifest = null; // кэш [{file, name, duration, frames, msgs}]
+async function loadExerciseManifest() {
+  if (exManifest) return exManifest;
+  const res = await fetch(EX_DIR + '/list.json');
+  if (!res.ok) throw new Error('no manifest');
+  const data = await res.json();
+  exManifest = Array.isArray(data.files) ? data.files : [];
+  return exManifest;
+}
+function initExerciseWindow() {
+  exWin = document.getElementById('exWin');
+  exBackdrop = document.getElementById('exBackdrop');
+  exListEl = document.getElementById('exList');
+  if (!exWin || !exBackdrop || !exListEl) return;
+  document.getElementById('exBtn')?.addEventListener('click', () => openExerciseList(true));
+  document.getElementById('exClose')?.addEventListener('click', () => openExerciseList(false));
+  exBackdrop?.addEventListener('click', () => openExerciseList(false));
+}
+function openExerciseList(open) {
+  if (!exWin || !exBackdrop) return;
+  exWin.classList.toggle('open', open);
+  exBackdrop.classList.toggle('open', open);
+  if (open) renderExerciseList();
+}
+async function renderExerciseList() {
+  if (!exListEl) return;
+  let files = [];
+  try { files = await loadExerciseManifest(); }
+  catch (e) {
+    exListEl.innerHTML = '<div style="padding:16px;color:var(--dim);text-align:center;">Нет упражнений</div>';
+    return;
+  }
+  if (!files.length) {
+    exListEl.innerHTML = '<div style="padding:16px;color:var(--dim);text-align:center;">Нет упражнений</div>';
+    return;
+  }
+  exListEl.innerHTML = files.map(f => {
+    return `<div class="ex-item" data-file="${f.file}" style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.08);cursor:pointer;">
+      <div style="font-weight:600;font-size:14px;">${f.name}</div>
+    </div>`;
+  }).join('');
+  exListEl.onclick = e => {
+    const item = e.target.closest('.ex-item');
+    if (!item) return;
+    playExercise(item.dataset.file);
+  };
+}
+async function playExercise(file) {
+  if (window.Replay.isRecording()) { showToast('Сначала остановите запись'); return; }
+  if (window.Replay.isEditing()) window.Replay.closeEditor();
+  if (window.Replay.isPlaying() || window.Replay.isPaused()) window.Replay.stopPlayback();
+  openExerciseList(false);
+  let data;
+  try {
+    const res = await fetch(EX_DIR + '/' + encodeURIComponent(file));
+    if (!res.ok) throw new Error('http ' + res.status);
+    data = await res.json();
+  } catch (e) { showToast('Не удалось загрузить упражнение'); return; }
+  if (!window.Replay.loadReplay(data)) { showToast('Повреждённая запись'); return; }
+  beginPlaybackWithVoice(String(file).replace(/\.json$/i, ''));
 }
 
 // Лоадер предзагрузки озвучки (модалка с прогрессом перед стартом реплея).
@@ -1242,8 +1314,9 @@ window.Replay.editTick = editCameraTick;
 
 // Инициализация окна реплеев
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => { initReplayWindow(); initReplayEditor(); });
+  document.addEventListener('DOMContentLoaded', () => { initReplayWindow(); initReplayEditor(); initExerciseWindow(); });
 } else {
   initReplayWindow();
   initReplayEditor();
+  initExerciseWindow();
 }
