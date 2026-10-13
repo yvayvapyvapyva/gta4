@@ -517,9 +517,12 @@ body.edit-active #driveCtrl{display:none !important}
 <script src="https://cdn.babylonjs.com/babylon.js"></script>
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 <script>
-// Модель можно переключить адресом: index.html?model=auto/car.glb
+// Модель можно переключить адресом: index.html?model=auto/other.glb
+// Надстройки модели лежат рядом: auto/other.glb → auto/other.cfg.js
+// (см. auto/car.cfg.js — там описан весь формат). Явный путь: ?model=...&cfg=...
 // По умолчанию — auto/car.glb.
 const MODEL = new URLSearchParams(location.search).get("model") || "auto/car.glb";
+const MODEL_CFG = new URLSearchParams(location.search).get("cfg") || MODEL.replace(/\.glb(\?.*)?$/i, ".cfg.js");
 const ENV_URL = "https://assets.babylonjs.com/environments/environmentSpecular.env";
 
 // Пределы зума. Объявлены до создания камеры: ниже они сразу идут в
@@ -791,7 +794,7 @@ function setTwoSided(on) {
 let glassOff = null;
 function setGlassOff(on) {
   if (on && !glassOff) {
-    glassOff = meshes.filter(m => /windscreen|window|glass/i.test(m.name));
+    glassOff = meshes.filter(m => rx((CAR_MODEL && CAR_MODEL.glass) || "windscreen|window|glass").test(m.name));
     for (const m of glassOff) m.isVisible = false;
   } else if (!on && glassOff) {
     for (const m of glassOff) m.isVisible = true;
@@ -1662,9 +1665,51 @@ fill.style.background = "";
 // ни земля, ни объекты карты. Если бы мы обошли всю сцену, меши конусов
 // утащили бы свои узлы под корень машины — и конусы ездили бы вместе с ней.
 const preModelMeshes = new Set(scene.meshes);
-// Реальный размер файла модели — 27 597 404 байта. Прогресс считается от него,
-// а не от ev.total: так шкала всегда соответствует фактическому размеру модели.
-const MODEL_BYTES = 27597404;
+// Встроенные надстройки модели — на случай, если .cfg.js нет или не загрузился.
+// Значения один в один как в auto/car.cfg.js; конфиг их перекрывает.
+const DEFAULT_MODEL = {
+  fileBytes: 27597404,
+  wheels: { node: '^wheel', minR: 0.2 },
+  steering: { pivot: 'steeringwheel', mesh: 'steeringwheel', axis: 'Y', turns: 1.5 },
+  indicators: { pattern: 'indicator', sideByPosition: true, xEps: 0.05 },
+  plates: { pattern: 'plaka', digits: '^siyah', text: 'КОЛЕСО', color: '#12b312', flipY: true },
+  glass: 'windscreen|window|glass',
+  engine: 'engine|block|motor|intake|exhaust_manifold',
+  doors: 'door_',
+  excludeWidth: 'wheel|mirror|slipstream|exhaust',
+  excludeBody: 'wheel|mirror|slipstream|exhaust|steering',
+  eye: { aboveWheel: 0.19, belowGlass: 0.1, forwardOfWheel: 0.5, driverSideK: 0.3 },
+  physics: { maxSpeedKmh: 10, accel: 2, reverseAccel: 2, brake: 18, turnDiameter: 10.5 },
+};
+let CAR_MODEL = null;   // итог: defaults + .cfg.js (см. applyModelConfig)
+let MODEL_BYTES = 27597404;
+const rx = (s) => new RegExp(s, "i");   // patterns конфига — строки, собираем здесь
+// Слить конфиг с defaults и применить то, что нужно ДО загрузки модели
+// (физика, шкала прогресса, ползунок скорости, обороты руля).
+function applyModelConfig() {
+  const ext = (typeof window.CAR_MODEL === "object" && window.CAR_MODEL) || {};
+  const m = Object.assign({}, DEFAULT_MODEL, ext);
+  for (const k of ["wheels", "steering", "indicators", "plates", "eye", "physics"]) {
+    m[k] = Object.assign({}, DEFAULT_MODEL[k], ext[k] || {});
+  }
+  CAR_MODEL = m;
+  if (isFinite(m.fileBytes) && m.fileBytes > 0) MODEL_BYTES = m.fileBytes;
+  const ph = m.physics || {};
+  if (isFinite(ph.maxSpeedKmh)) { CAR.maxSpeed = ph.maxSpeedKmh / 3.6; CAR.maxReverse = ph.maxSpeedKmh / 3.6; }
+  for (const k of ["accel", "reverseAccel", "brake", "turnDiameter", "grip", "track"]) {
+    if (isFinite(ph[k])) CAR[k] = ph[k];
+  }
+  if (m.steering && isFinite(m.steering.turns)) CAR.steerWheelTurns = m.steering.turns;
+  try {
+    const kmh = Math.round(CAR.maxSpeed * 3.6);
+    const el = document.getElementById("setMaxSpeed"), lb = document.getElementById("setMaxSpeedV");
+    if (el) el.value = kmh;
+    if (lb) lb.textContent = kmh + " км/ч";
+  } catch (e) {}
+}
+// Загрузка модели — только ПОСЛЕ конфига: разборам ниже нужны его patterns.
+// Нет файла или ошибка — едем на встроенных defaults (страница не падает).
+function startModelLoad() {
 BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   (ev) => {
     const pct = Math.min(100, (ev.loaded || 0) / MODEL_BYTES * 100);
@@ -1709,8 +1754,9 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   const groups = new Map();
   for (const m of meshes) {
     const n = m.parent;
-    // /^wheel/ — а не /wheel/: иначе под колесо попадает узел steeringwheel
-    if (!n || n === ground || !/^wheel/i.test(n.name)) continue;
+    // Паттерн узла колеса из конфига (wheels.node): важно, что он НЕ должен
+    // цеплять узел руля (здесь '^wheel', а не 'wheel' — steeringwheel мимо).
+    if (!n || n === ground || !rx(CAR_MODEL.wheels.node).test(n.name)) continue;
     if (!groups.has(n)) groups.set(n, []);
     groups.get(n).push(m);
   }
@@ -1740,7 +1786,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
       r = Math.max(r, bb.extendSize.y, bb.extendSize.z);
     }
     // узел считается колесом, если его геометрия — диск: два равных размера и третий малый
-    if (r < 0.2) { groups.delete(node); continue; }
+    if (r < (CAR_MODEL.wheels.minR || 0.2)) { groups.delete(node); continue; }
     zs.push(wp.z);
     rSum += r;
 
@@ -1773,20 +1819,22 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
 
   // --- руль в салоне. Поворачивается вместе с колёсами: на полный отворот
   // колёс (|CAR.steer| = CAR.maxSteer) делает полтора оборота, а не один.
-  // В модели пивот уже есть — пустой узел steeringwheel (потомок chassis) стоит
-  // ровно в ступице и несёт наклон колонки, но геометрия руля лежит отдельным
-  // мешем steeringwheel_high и в этот узел не входит. Поэтому перевешиваем её
-  // в пивот, пересчитав локальные трансформы из мировых матриц (setParent этого
-  // не делает). Ось вращения берём из нормали к граням руля и переводим в
-  // локальную систему пивота — тогда наклон колонки учитывается сам.
+  // В модели пивот уже есть — пустой узел (steering.pivot, здесь steeringwheel)
+  // стоит ровно в ступице и несёт наклон колонки, но геометрия руля лежит
+  // отдельным мешем (steering.mesh) и в этот узел не входит. Поэтому
+  // перевешиваем её в пивот, пересчитав локальные трансформы из мировых
+  // матриц (setParent этого не делает). Ось вращения — из конфига
+  // (steering.axis): узел уже повёрнут на наклон колонки, и эта ось совпадает
+  // с осью вала (здесь Y: замер дал разброс 54 мм при радиусе 143 мм,
+  // тогда как у X разброс 164 мм).
   {
     let pivot = null;
     for (const n of scene.transformNodes) {
-      if (/steeringwheel/i.test(n.name) && !n.getChildMeshes(false).length && n.parent) { pivot = n; break; }
+      if (rx(CAR_MODEL.steering.pivot).test(n.name) && !n.getChildMeshes(false).length && n.parent) { pivot = n; break; }
     }
     const parts = [];
     for (const m of meshes) {
-      if (m.parent && /steeringwheel/i.test(m.parent.name) && m.getTotalVertices() > 0) parts.push(m);
+      if (m.parent && rx(CAR_MODEL.steering.mesh).test(m.parent.name) && m.getTotalVertices() > 0) parts.push(m);
     }
     if (pivot && parts.length) {
       // мировые матрицы деталей ДО перевешивания
@@ -1799,11 +1847,8 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
         const invPivot = pivot.computeWorldMatrix(true).invert();
         CAR.steerWheel = pivot;
         CAR.steerWheelBase = pivot.rotationQuaternion.clone();
-        // Ось вращения — локальная Y пивота: узел уже стоит в ступице и повёрнут
-        // ровно на наклон рулевой колонки, поэтому Y совпадает с осью вала.
-        // Проверено замером: у обода расстояние до этой оси почти постоянно
-        // (разброс 54 мм при радиусе 143 мм), тогда как у X разброс 164 мм.
-        CAR.steerWheelAxis = BABYLON.Axis.Y;
+        const swAxis = String((CAR_MODEL.steering && CAR_MODEL.steering.axis) || "Y").toUpperCase();
+        CAR.steerWheelAxis = BABYLON.Axis[swAxis] || BABYLON.Axis.Y;
         parts.forEach((m, i) => {
           m.parent = pivot;
           m.rotationQuaternion = m.rotationQuaternion || new BABYLON.Quaternion();
@@ -1823,7 +1868,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   {
     let w = 0;
     for (const m of meshes) {
-      if (/wheel|mirror|slipstream|exhaust/i.test(m.name)) continue;
+      if (rx(CAR_MODEL.excludeWidth).test(m.name)) continue;
       m.computeWorldMatrix(true);   // матрицы протухли после перевешивания на root
       const bb = m.getBoundingInfo().boundingBox;
       let lo = 1e9, hi = -1e9;
@@ -1846,7 +1891,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
     const lp = new BABYLON.Vector3();
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
     for (const m of meshes) {
-      if (/wheel|mirror|slipstream|exhaust|steering/i.test(m.name)) continue;
+      if (rx(CAR_MODEL.excludeBody).test(m.name)) continue;
       m.computeWorldMatrix(true);
       const bb = m.getBoundingInfo().boundingBox;
       for (let i = 0; i < 8; i++) {
@@ -1919,15 +1964,17 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
     };
     const isWheel = (m) => CAR.wheels.some(w => w.spin.getChildren(n => true).includes(m));
     const body = box(meshes.filter(m => !isWheel(m)));
-    const sw = box(meshes.filter(m => /steering/i.test(m.name)));
-    const glass = box(meshes.filter(m => /windscreen|window/i.test(m.name)));
+    const sw = box(meshes.filter(m => rx(CAR_MODEL.steering.mesh).test(m.name)));
+    const glass = box(meshes.filter(m => rx(CAR_MODEL.glass).test(m.name)));
     const hasSw = isFinite(sw.x[0]);
     // по рулю: поперечная координата водителя и глубина, по остеклению — высота.
-    // ориентир сверху — верх руля, а не крыша: глаза водителя много ниже крыши
-    const ex = hasSw ? (sw.x[0] + sw.x[1]) / 2 : body.x[0] + (body.x[1] - body.x[0]) * 0.3;
-    let ey = hasSw ? sw.y[1] + 0.19 : body.y[1] - 0.5;
-    if (isFinite(glass.y[0])) ey = Math.min(ey, glass.y[1] - 0.1);
-    const ez = hasSw ? (sw.z[0] + sw.z[1]) / 2 + 0.5 : body.z[0] + (body.z[1] - body.z[0]) * 0.55;
+    // ориентир сверху — верх руля, а не крыша: глаза водителя много ниже крыши.
+    // Сдвиги — из конфига (eye): над рулём, под стеклом, впереди руля.
+    const eye = (CAR_MODEL.eye || {});
+    const ex = hasSw ? (sw.x[0] + sw.x[1]) / 2 : body.x[0] + (body.x[1] - body.x[0]) * (eye.driverSideK ?? 0.3);
+    let ey = hasSw ? sw.y[1] + (eye.aboveWheel ?? 0.19) : body.y[1] - 0.5;
+    if (isFinite(glass.y[0])) ey = Math.min(ey, glass.y[1] - (eye.belowGlass ?? 0.1));
+    const ez = hasSw ? (sw.z[0] + sw.z[1]) / 2 + (eye.forwardOfWheel ?? 0.5) : body.z[0] + (body.z[1] - body.z[0]) * 0.55;
     // мировые координаты при старте = локальные + подъём, его и вычитаем
     CAR.eye = new BABYLON.Vector3(ex, ey - CAR.lift, ez);
     // свет салона едет вместе с машиной
@@ -1950,7 +1997,7 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   if (typeof window.setupPlateLabels === "function") window.setupPlateLabels(meshes);
 
   // двигатель скрывается только в X-ray режиме (см. toggleXray)
-  CAR.engineMeshes = meshes.filter(m => /engine|block|motor|intake|exhaust_manifold/i.test(m.name));
+  CAR.engineMeshes = meshes.filter(m => rx(CAR_MODEL.engine).test(m.name));
 
   cam.lowerRadiusLimit = CAM_DIST_MIN;
   cam.upperRadiusLimit = CAM_DIST_MAX;
@@ -1979,6 +2026,28 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   msg.innerHTML = '<span id="err">ошибка загрузки: ' + (e && e.message ? e.message : e) + "</span>";
   fill.style.background = "#ff6b6b";
 });
+}   // конец startModelLoad
+
+// Конфиг надстроек грузим отдельным тегом: классические скрипты делят
+// лексическую область, но cfg пишет в window.CAR_MODEL присвоением,
+// поэтому конфликта имён нет. Дальше — applyModelConfig + старт модели.
+(function loadModelConfig() {
+  let done = false;
+  const go = () => {
+    if (done) return;
+    done = true;
+    applyModelConfig();
+    startModelLoad();
+  };
+  try {
+    const s = document.createElement("script");
+    s.src = MODEL_CFG;
+    s.onload = go;
+    s.onerror = go;   // нет файла — молча едем на defaults
+    document.head.appendChild(s);
+  } catch (e) { go(); return; }
+  setTimeout(go, 4000);   // страховка от висящей загрузки
+})();
 
 let last = performance.now();
 // ── debug overlay (?debug=1): счётчики сцены для ловли утечек ────────

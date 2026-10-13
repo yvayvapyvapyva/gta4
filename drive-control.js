@@ -251,13 +251,15 @@ addEventListener('keydown',e=>{
 // Фонари включаем только после загрузки модели: до этого их в сцене нет.
 window.setupIndicators=function(meshes){
   indSides=null;
-  const ind=meshes.filter(m=>/indicator/i.test(m.name)||/indicator/i.test((m.parent&&m.parent.name)||''));
+  // Паттерн фонарей и допуск оси — из конфига модели (indicators).
+  const indCfg=((typeof CAR_MODEL!=="undefined"&&CAR_MODEL&&CAR_MODEL.indicators)||{});
+  const indRx=new RegExp(indCfg.pattern||"indicator","i");
+  const xEps=(isFinite(indCfg.xEps)?indCfg.xEps:0.05);
+  const ind=meshes.filter(m=>indRx.test(m.name)||indRx.test((m.parent&&m.parent.name)||''));
   if(!ind.length)return;
-  // Сторону фонаря берём из его положения относительно кузова, а НЕ из имени.
-  // В этой модели передняя пара названа наоборот: indicator_lf стоит справа
-  // (+X = 0.49), а indicator_rf — слева (−X = 0.47). Разложение по именам
-  // включало в левом поворотнике задний левый фонарь (верно) и передний
-  // правый (неверно), то есть в переднем фонаре горел чужой стороны.
+  // Сторону фонаря берём из его положения относительно кузова, а НЕ из имени:
+  // у текущей модели передняя пара названа наоборот, и разложение по именам
+  // зажигало в переднем фонаре чужую сторону.
   // Переводим фонарь в локальные оси кузова: +X — правая сторона.
   const invRoot=CAR.root.getWorldMatrix().clone().invert();
   const wp=new BABYLON.Vector3(),lp=new BABYLON.Vector3();
@@ -267,9 +269,10 @@ window.setupIndicators=function(meshes){
     const bb=m.getBoundingInfo().boundingBox;
     BABYLON.Vector3.TransformCoordinatesToRef(bb.centerWorld,m.getWorldMatrix(),wp);
     BABYLON.Vector3.TransformCoordinatesToRef(wp,invRoot,lp);
-    // если фонарь почти на оси — модель неоднозначна, откатываемся на имя
+    // если фонарь почти на оси — модель неоднозначна, откатываемся на имя.
+    // sideByPosition:false в конфиге — делить строго по именам.
     const byName=/indicator_l[a-z]/i.test(m.name)||/indicator_l[a-z]/i.test((m.parent&&m.parent.name)||'');
-    const isLeft=Math.abs(lp.x)>0.05?lp.x<0:byName;
+    const isLeft=indCfg.sideByPosition===false?byName:(Math.abs(lp.x)>xEps?lp.x<0:byName);
     (isLeft?left:right).push(m);
   }
   for(const m of left.concat(right)){
@@ -292,7 +295,7 @@ window.setupIndicators=function(meshes){
       result.set(0, 0, 0);
       return;
     }
-    if (/indicator/i.test(mesh.name) || /indicator/i.test((mesh.parent && mesh.parent.name) || '')) {
+    if (indRx.test(mesh.name) || indRx.test((mesh.parent && mesh.parent.name) || '')) {
       result.set(1.6, 0.9, 0.1);  // янтарь с запасом под дальность
     } else {
       result.set(0, 0, 0);
@@ -305,13 +308,16 @@ window.setupIndicators=function(meshes){
   syncBlinkBtns();applyBlink();
 };
 
-// Номера. Числа на табличках — не текстура, а отдельные чёрные меши (материал
-// siyah, ~1956 вершин), выступающие вперёд на 1,3 см. Сама табличка — скруглённая
-// пластина с текстурой plaka, где слева красная полоса флага Турции.
+// Номера. Числа на табличках — не текстура, а отдельные тёмные меши,
+// выступающие вперёд. Сама табличка — пластина со своей текстурой.
 // Убираем и то и другое: меши с цифрами скрываем, а саму пластину заменяем её
 // копией с той же геометрией — поэтому скругление и толщина сохраняются —
-// и новой текстурой: белый фон с зелёной надписью. Плоскую наклейку сверху
-// класть не нужно, копия стоит ровно на месте оригинала и закрывает его целиком.
+// и новой текстурой: светлый фон с надписью из конфига (plates.text).
+// Плоскую наклейку сверху класть не нужно, копия стоит ровно на месте
+// оригинала и закрывает его целиком.
+// Что искать — из конфига модели (plates.pattern/digits/text/color/flipY).
+const plateCfg = () => ((typeof CAR_MODEL !== "undefined" && CAR_MODEL && CAR_MODEL.plates) || {});
+const PLATE_TEXT = () => String(plateCfg().text ?? "КОЛЕСО");
 const PLATE_GREEN = "#12b312";
 
 // Текстура слоя букв: белые буквы на прозрачном фоне. Белые, потому что при
@@ -347,29 +353,34 @@ function plateLettersTexture(name, outline) {
   // приводит ширину к 1000 px: текстура ровно натянута на номер шириной 0,57 м,
   // так что это фактически во всю табличку. Запас по краям — на обводку.
   const TARGET = 1000;
+  const PTEXT = PLATE_TEXT();
   let size = 150;
   g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
-  size = Math.max(1, Math.round(size * TARGET / g.measureText("КОЛЕСО").width));
+  size = Math.max(1, Math.round(size * TARGET / g.measureText(PTEXT).width));
   g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
   // 512,128 — центр текстуры 1024×256, поэтому после переворота (256-128=128)
   // надпись остаётся центрированной, и подгонка кегля по ширине выше не ломается.
+  // Переворот по Y — из конфига (plates.flipY): UV текущей модели перевёрнуты,
+  // без него надпись выходит вверх ногами. Горизонталь правильная, по X не трогаем.
   g.save();
-  g.translate(0, 256);
-  g.scale(1, -1);
+  if (plateCfg().flipY !== false) {
+    g.translate(0, 256);
+    g.scale(1, -1);
+  }
   if (outline) {
     g.fillStyle = "#ffffff";
     g.strokeStyle = "#ffffff";
     g.lineWidth = 12;
     g.lineJoin = "round";
     g.miterLimit = 2;
-    g.strokeText("КОЛЕСО", 512, 128);
-    g.fillText("КОЛЕСО", 512, 128);
+    g.strokeText(PTEXT, 512, 128);
+    g.fillText(PTEXT, 512, 128);
     g.globalCompositeOperation = "destination-out";
-    g.fillText("КОЛЕСО", 512, 128);           // выбиваем середину — остаётся ободок
+    g.fillText(PTEXT, 512, 128);           // выбиваем середину — остаётся ободок
     g.globalCompositeOperation = "source-over";
   } else {
     g.fillStyle = "#ffffff";
-    g.fillText("КОЛЕСО", 512, 128);
+    g.fillText(PTEXT, 512, 128);
   }
   g.restore();
   tex.update();
@@ -409,10 +420,10 @@ function plateLayers(plate, front) {
 
   // Окантовка: кольцо вокруг глифов, чёрное. Лежит между фоном и буквами.
   layer("_labelEdge", 0.0004, "_labelEdgeTex", true, new BABYLON.Color3(0, 0, 0), -4);
-  // Буквы: сами глифы, зелёные, снаружи окантовки — она оставляет видимую
-  // чёрную кромку только там, где глиф её не перекрывает.
+  // Буквы: сами глифы, цветом из конфига, снаружи окантовки — она оставляет
+  // видимую чёрную кромку только там, где глиф её не перекрывает.
   const fg = layer("_labelFg", 0.0008, "_labelTex", false,
-                   BABYLON.Color3.FromHexString(PLATE_GREEN), -8);
+                   BABYLON.Color3.FromHexString(String(plateCfg().color || PLATE_GREEN)), -8);
 
   // Оригинал скрываем: копия стоит на его месте и полностью его закрывает,
   // поэтому ни цифр, ни красной полосы, ни кромки пластины не видно.
@@ -421,7 +432,10 @@ function plateLayers(plate, front) {
 }
 
 window.setupPlateLabels = function (meshes) {
-  const plates = meshes.filter((m) => m.material && /plaka/i.test(m.material.name));
+  const pcfg = plateCfg();
+  const plateRx = new RegExp(pcfg.pattern || "plaka", "i");
+  const digitRx = new RegExp(pcfg.digits || "^siyah", "i");
+  const plates = meshes.filter((m) => m.material && plateRx.test(m.material.name));
   if (!plates.length) return;
   // Работаем в локальной системе таблички: её вершины уже лежат в системе
   // координат узла машины, и локальные координаты ребёнка — те же самые.
@@ -442,7 +456,7 @@ window.setupPlateLabels = function (meshes) {
         && Math.abs(cx2 - cx) < 0.2 && Math.abs(cy2 - cy) < 0.2 && Math.abs(cz2 - cz) < 0.2
         && (b2.minimum.z < mn.z - 0.001 || b2.maximum.z > mx.z + 0.001);
     };
-    const nums = meshes.filter((m) => m !== plate && m.material && /^siyah/i.test(m.material.name) && near(m));
+    const nums = meshes.filter((m) => m !== plate && m.material && digitRx.test(m.material.name) && near(m));
     if (!nums.length) continue;                 // цифр нет — наклейку не куда класть
     const front = nums[0] && localBox(nums[0]).minimum.z < mn.z;
     for (const n of nums) n.isVisible = false;

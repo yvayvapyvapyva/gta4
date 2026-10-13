@@ -60,6 +60,10 @@ if (/src="(default-map|map|mirror|drive-control|sounds|replay|tts|report)\.js/.t
 fs.mkdirSync(path.join(OUT, 'auto'), { recursive: true });
 fs.writeFileSync(path.join(OUT, 'index.html'), html);
 fs.copyFileSync(path.join(ROOT, 'auto', 'car.glb'), path.join(OUT, 'auto', 'car.glb'));
+// Надстройки моделей (<модель>.cfg.js) грузятся рантаймом отдельно — копируем как есть.
+for (const f of fs.readdirSync(path.join(ROOT, 'auto'))) {
+  if (/\.cfg\.js$/i.test(f)) fs.copyFileSync(path.join(ROOT, 'auto', f), path.join(OUT, 'auto', f));
+}
 
 // --- видео-упражнения: манифест video/list.json (нужен и в исходниках для
 // dev-запуска, и в deploy) + копия json-файлов в deploy

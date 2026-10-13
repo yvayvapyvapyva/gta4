@@ -436,16 +436,19 @@ function setupMirrors(opts) {
     return;
   }
   mirrorPlates = new Set();
-  // Разбираем кузов: в зеркалах оставляем только двери (door_* по имени
-  // меша или любого родителя — лоадер режет геометрию на примитивы).
+  // Разбираем кузов: в зеркалах оставляем только двери (паттерн doors
+  // из конфига модели — по имени меша или любого родителя, лоадер режет
+  // геометрию на примитивы).
   // Внутренняя обшивка дверей тоже попадёт, но она отвернута от камер
   // (односторонние материалы) и в отражениях не видна.
   mirrorCarMeshes = new Set(opts.meshes);
   mirrorDoorKeep = new Set();
+  const doorRx = new RegExp(
+    (typeof CAR_MODEL !== "undefined" && CAR_MODEL && CAR_MODEL.doors) || "door_", "i");
   for (const m of opts.meshes) {
     let c = m;
     while (c) {
-      if (/door_/i.test(c.name || "")) { mirrorDoorKeep.add(m); break; }
+      if (doorRx.test(c.name || "")) { mirrorDoorKeep.add(m); break; }
       c = c.parent;
     }
   }
