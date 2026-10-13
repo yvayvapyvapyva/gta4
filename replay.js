@@ -745,7 +745,6 @@ function beginPlaybackWithVoice(label) {
   const cold = canVoice ? msgs.filter((m) => msgSpeech(m) && !ttsHas(m.voice || 'command', msgSpeech(m))) : [];
   if (!cold.length) {
     window.Replay.startPlayback();
-    showToast('Воспроизведение: ' + label);
     return;
   }
   // Сначала грузим всю озвучку с прогрессом — и только потом стартуем,
@@ -759,9 +758,9 @@ function beginPlaybackWithVoice(label) {
     openVoiceLoad(false);
     const failed = Math.max(0, (stat && stat.total || 0) - (stat && stat.done || 0));
     window.Replay.startPlayback();
-    showToast(failed > 0
-      ? 'Озвучка загрузилась частично (' + failed + ' шт.) — остальное текстом'
-      : 'Воспроизведение: ' + label);
+    if (failed > 0) {
+      showToast('Озвучка загрузилась частично (' + failed + ' шт.) — остальное текстом');
+    }
   }).catch(() => {
     // Офлайн/таймаут: картинку не блокируем — едем с одними субтитрами.
     openVoiceLoad(false);
