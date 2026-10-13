@@ -18,8 +18,7 @@ let ttsAudio = null;
 let ttsQueue = [];   // [{voice, text}] — озвучиваем строго по очереди, без каши
 let ttsBusy = false;
 let ttsCurSrc = null; // текущий BufferSource (быстрый путь), чтобы глушить по стопу
-let ttsVoiceOn = true;
-try { ttsVoiceOn = localStorage.getItem('gta4_voice_on') !== '0'; } catch (e) {}
+let ttsVoiceOn = true; // кнопка отключения убрана — озвучка всегда включена
 
 const ttsKey = (voice, text) => voice + '\n' + text;
 
@@ -225,25 +224,4 @@ function ttsPreview(voice, text) {
       if (p && p.catch) p.catch(() => {});
     } catch (e) {}
   }).catch(() => {});
-}
-
-// Тумблер озвучки при воспроизведении (кнопка в playbackUI).
-function ttsSetOn(on) {
-  ttsVoiceOn = !!on;
-  try { localStorage.setItem('gta4_voice_on', ttsVoiceOn ? '1' : '0'); } catch (e) {}
-  if (!ttsVoiceOn) ttsStop();
-  syncTtsBtn();
-}
-function syncTtsBtn() {
-  const b = document.getElementById('playbackMute');
-  if (b) { b.textContent = ttsVoiceOn ? '🔊' : '🔇'; b.classList.toggle('on', ttsVoiceOn); }
-}
-function initTtsBtn() {
-  syncTtsBtn();
-  document.getElementById('playbackMute')?.addEventListener('click', () => ttsSetOn(!ttsVoiceOn));
-}
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initTtsBtn);
-} else {
-  initTtsBtn();
 }

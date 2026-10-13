@@ -247,7 +247,9 @@ function togglePlaybackPause() {
 function updatePauseButton() {
   const btn = document.getElementById('playbackPause');
   if (!btn) return;
-  btn.textContent = isPaused ? '▶' : '⏸';
+  const svgPlay = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  const svgPause = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+  btn.innerHTML = isPaused ? svgPlay : svgPause;
   btn.setAttribute('aria-label', isPaused ? 'Продолжить' : 'Пауза');
 }
 

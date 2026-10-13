@@ -228,12 +228,12 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 #playbackUI{position:fixed;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:8;
   display:flex;justify-content:center;pointer-events:none;}
 #playbackUI[hidden]{display:none;}
-.playback-controls{display:flex;gap:10px;pointer-events:auto;background:rgba(12,22,32,.85);
-  border:1px solid #2a4257;border-radius:14px;padding:8px;backdrop-filter:blur(6px);}
+.playback-controls{display:flex;gap:10px;pointer-events:auto;}
 .playback-btn{width:54px;height:54px;font-size:24px;color:#d8e5ee;background:rgba(255,255,255,.08);
   border:1px solid rgba(255,255,255,.14);border-radius:12px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;}
 .playback-btn:hover{border-color:var(--acc);color:var(--acc);}
+.playback-btn svg{width:24px;height:24px;fill:currentColor;}
 /* Редактор реплея — панель в самом низу экрана, просмотру не мешает */
 #replayEditBackdrop{display:none !important;}
 #replayEditWin{left:0;right:0;top:auto;bottom:0;transform:none;width:100%;max-width:none;
@@ -443,9 +443,8 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 <div id="exportHud" hidden>⏺ REC</div>
 <div id="playbackUI" hidden>
   <div class="playback-controls">
-    <button id="playbackPause" class="playback-btn" aria-label="Пауза">⏸</button>
-    <button id="playbackStop" class="playback-btn" aria-label="Остановить">⏹</button>
-    <button id="playbackMute" class="playback-btn" aria-label="Озвучка сообщений" title="Озвучка сообщений">🔊</button>
+    <button id="playbackPause" class="playback-btn" aria-label="Пауза"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+    <button id="playbackStop" class="playback-btn" aria-label="Остановить"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
   </div>
 </div>
 
