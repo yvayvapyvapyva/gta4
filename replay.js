@@ -632,6 +632,7 @@ function initReplayWindow() {
 
   document.getElementById('replayListBtn')?.addEventListener('click', () => {
     openSettings(false);
+    if (typeof openSecret === 'function') openSecret(false);
     openReplayList(true);
   });
   document.getElementById('replayClose')?.addEventListener('click', () => openReplayList(false));

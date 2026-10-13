@@ -70,11 +70,10 @@
   #gearBtn { position:fixed; right:max(14px,env(safe-area-inset-right,0px));
     top:calc(max(14px,env(safe-area-inset-top,0px)) + var(--tg-top)); z-index:7; width:40px; height:40px; padding:0;
     display:flex; align-items:center; justify-content:center; border-radius:14px; cursor:pointer;
+    font-size:22px; font-weight:700; line-height:1;
     color:#d8e5ee; background:rgba(12,22,32,.85); border:1px solid #2a4257;
     backdrop-filter:blur(6px); -webkit-tap-highlight-color:transparent;
     user-select:none; -webkit-user-select:none; }
-  #gearBtn svg { width:20px; height:20px; stroke:currentColor; stroke-width:1.7; fill:none;
-    stroke-linecap:round; stroke-linejoin:round; }
   #gearBtn:hover { border-color:var(--acc); color:var(--acc); }
   #gearBtn.on { background:rgba(255,138,61,.16); border-color:var(--acc); color:var(--acc); }
   #gearBtn:active { background:#ff6d00; border-color:#ff6d00; color:#12141a; }
@@ -289,12 +288,7 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
   </div>
 </div>
 
-<button id="gearBtn" aria-label="Настройки">
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    <circle cx="12" cy="12" r="3"/>
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1"/>
-  </svg>
-</button>
+<button id="gearBtn" aria-label="Информация" title="Информация">?</button>
 
 <button id="recBtn" aria-label="Запись реплея" title="Запись реплея">
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="#ff3b3b"/></svg>
@@ -304,21 +298,7 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
 
 <div id="settingsBackdrop" class="win-backdrop"></div>
 <div id="settingsWin" class="win">
-  <h3>Настройки<button id="settingsClose" aria-label="Закрыть">✕</button></h3>
-
-  <!-- Вход в меню записи скрыт: открывается долгим нажатием (2 с) на кнопку администратора -->
-  <div class="win-sec" hidden>
-    <div class="win-btns">
-      <button id="replayListBtn">Запись</button>
-    </div>
-  </div>
-
-  <div class="win-sec">
-    <h4>Зеркала</h4>
-    <div class="win-btns">
-      <button id="settingsMirrorBtn">Открыть настройки зеркал</button>
-    </div>
-  </div>
+  <h3>Информация<button id="settingsClose" aria-label="Закрыть">✕</button></h3>
 
   <div class="win-sec">
     <h4>Горячие клавиши</h4>
@@ -343,6 +323,22 @@ body.export-active #view{position:fixed;left:50%;top:50%;transform:translate(-50
     <h4>Поддержка</h4>
     <div class="win-btns">
       <button id="adminBtn">Написать администратору @Eliseev_I_A</button>
+    </div>
+  </div>
+</div>
+
+<!-- Скрытое окно настроек: только долгое нажатие (2 с) на кнопку администратора -->
+<div id="secretBackdrop" class="win-backdrop"></div>
+<div id="secretWin" class="win">
+  <h3>Настройки<button id="secretClose" aria-label="Закрыть">✕</button></h3>
+  <div class="win-sec">
+    <div class="win-btns">
+      <button id="replayListBtn">Запись</button>
+    </div>
+  </div>
+  <div class="win-sec">
+    <div class="win-btns">
+      <button id="settingsMirrorBtn">Открыть настройки зеркал</button>
     </div>
   </div>
 </div>
@@ -564,7 +560,7 @@ const ENV_URL = "https://assets.babylonjs.com/environments/environmentSpecular.e
 const CAM_FOV_MIN = 20 * Math.PI / 180;           // 20°  — узкий обзор, приближение
 const CAM_FOV_MAX = 130 * Math.PI / 180;        // 130° — широкий обзор, отдаление
 const CAM_DIST_MIN = 3.2;                       // м, ближе не подъехать
-const CAM_DIST_MAX = 90;                        // м, дальше не отъехать
+const CAM_DIST_MAX = 120;                      // м, дальше не отъехать
 // Скорость обзора в салоне при перетаскивании, кратно «палец тянет точку».
 // 1 — угол поворота точно равен угловому смещению точки на экране; больше —
 // быстрее (удобнее на телефоне, где полный обзор одним пальцем не прокрутить).
@@ -967,6 +963,7 @@ function openMirrorWin(o) {
 }
 document.getElementById("settingsMirrorBtn")?.addEventListener("click", () => {
   openSettings(false);
+  if (typeof openSecret === "function") openSecret(false);
   openMirrorWin(true);
 });
 document.getElementById("adminBtn")?.addEventListener("click", () => {
@@ -992,8 +989,7 @@ let adminHoldFired = false;
     clearTimeout(adminHoldTimer);
     adminHoldTimer = setTimeout(() => {
       adminHoldFired = true;
-      if (typeof openSettings === "function") openSettings(false);
-      try { if (window.Replay?.openList) window.Replay.openList(true); } catch (e) {}
+      if (typeof openSecret === "function") openSecret(true);
     }, 2000);
   });
   adminBtnEl?.addEventListener("pointerup", adminHoldClear);
@@ -1160,6 +1156,16 @@ addEventListener("pointercancel", () => { setSliderDrag = null; });
 
 document.getElementById("setMirReset").addEventListener("click", () => fullMirrorReset());
 
+// Скрытое окно настроек (только долгое нажатие на кнопку администратора)
+const secretWin = document.getElementById("secretWin");
+const secretBackdrop = document.getElementById("secretBackdrop");
+function openSecret(o) {
+  secretWin.classList.toggle("open", o);
+  secretBackdrop.classList.toggle("open", o);
+}
+document.getElementById("secretClose")?.addEventListener("click", () => openSecret(false));
+secretBackdrop?.addEventListener("click", () => openSecret(false));
+
 // настройки должны закрываться по Escape, как остальные окна
 addEventListener("keydown", (e) => {
   if (e.code === "Escape" && setWin.classList.contains("open")) {
@@ -1168,6 +1174,9 @@ addEventListener("keydown", (e) => {
   } else if (e.code === "Escape" && mirrorWin.classList.contains("open")) {
     e.preventDefault();
     openMirrorWin(false);
+  } else if (e.code === "Escape" && secretWin.classList.contains("open")) {
+    e.preventDefault();
+    openSecret(false);
   }
 });
 
@@ -1290,6 +1299,11 @@ const camTarget = new BABYLON.Vector3(0, 0, 0);
 const camTargetTmp = new BABYLON.Vector3();   // для LerpToRef без аллокаций
 const fwdVec = new BABYLON.Vector3();         // forward вектор машины (переиспользуется)
 let cockpit = null;   // камера салона, едет вместе с кузовом
+let camIntro = false; // интро-глайд при запуске (см. drive, режим 0)
+let camIntroBeta = false; // интро угла: 1° → 30° за те же 5 с
+let camIntroT0 = 0;
+const INTRO_BETA_FROM = 1 * Math.PI / 180;
+const INTRO_BETA_TO = 80 * Math.PI / 180;
 
 // ── опора под колёсами ───────────────────────────────────────────────
 // Земля — плоскость y=0, поэтому без map.js машина едет по ровному месту.
@@ -1639,8 +1653,28 @@ const maxSteer = CAR.maxSteer;
     while (diff2 > Math.PI) diff2 -= Math.PI * 2;
     while (diff2 < -Math.PI) diff2 += Math.PI * 2;
     cam.alpha = wrapAngle(cam.alpha + diff2 * k);
-    cam.beta += (CAR.camPitch - cam.beta) * (1 - Math.exp(-dt * 7));
-    cam.radius += (CAR.camDist - cam.radius) * (1 - Math.exp(-dt * 7));
+    // интро при запуске: 5 с глайда (smoothstep) — дистанция 120 → 20 м,
+    // угол 1° → 30°, затем обычный фоллоу. Ручной зум/наклон отменяют свою ось.
+    if (camIntro || camIntroBeta) {
+      const it = Math.min(1, (performance.now() - camIntroT0) / 5000);
+      const s = it * it * (3 - 2 * it);
+      if (camIntro) {
+        if (CAR.camDist !== 20) camIntro = false;
+        else {
+          cam.radius = CAM_DIST_MAX + (20 - CAM_DIST_MAX) * s;
+          if (it >= 1) camIntro = false;
+        }
+      }
+      if (camIntroBeta) {
+        if (CAR.camPitch !== INTRO_BETA_TO) camIntroBeta = false;
+        else {
+          cam.beta = INTRO_BETA_FROM + (INTRO_BETA_TO - INTRO_BETA_FROM) * s;
+          if (it >= 1) camIntroBeta = false;
+        }
+      }
+    }
+    if (!camIntro) cam.radius += (CAR.camDist - cam.radius) * (1 - Math.exp(-dt * 7));
+    if (!camIntroBeta) cam.beta += (CAR.camPitch - cam.beta) * (1 - Math.exp(-dt * 7));
   } else if (CAR.mode === 1) {
     // салон: плавная интерполяция взгляда к целевому
     const k = 1 - Math.exp(-dt * 10); // скорость поворота головы
@@ -1953,7 +1987,14 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   cam.upperRadiusLimit = CAM_DIST_MAX;
   cam.alpha = CAR.yaw + Math.PI / 2;
   cam.beta = CAR.camPitch;
-  cam.radius = CAR.camDist;
+  // интро при запуске: старт со 120 м / 1°, глайд 5 с до 20 м / 30°
+  cam.radius = CAM_DIST_MAX;
+  CAR.camDist = 20;
+  cam.beta = INTRO_BETA_FROM;
+  CAR.camPitch = INTRO_BETA_TO;
+  camIntro = true;
+  camIntroBeta = true;
+  camIntroT0 = performance.now();
   camTarget.set(0, CAR.lift + 0.75, 0);
   cam.target.copyFrom(camTarget);
   if (typeof setupMirrors === "function") setupMirrors({ root: CAR.root, meshes });
