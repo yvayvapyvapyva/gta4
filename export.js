@@ -13,6 +13,11 @@
 
 const EXPORT_W = 1080, EXPORT_H = 1920, EXPORT_FPS = 30;
 const EXPORT_BITRATE = 12_000_000; // ~1.5 МБ/с
+// Масштаб «CSS-пиксель → пиксель файла»: HUD повторяет метрики DOM
+// (текст 16px, скорость 44px, пилюля 88×34), умноженные на k = 1080/cssW.
+// cssW запоминаем при входе в портрет; фолбэк 390 (айфон).
+let exportCssW = 0;
+const exportK = () => EXPORT_W / (exportCssW > 0 ? exportCssW : 390);
 const EXPORT_MIMES = [
   'video/mp4;codecs="avc1.42E01E,mp4a.40.2"',
   'video/mp4',
@@ -66,6 +71,7 @@ function exportEnterPortrait() {
   const s = Math.min(innerWidth / EXPORT_W, innerHeight / EXPORT_H);
   const cssW = Math.max(1, Math.floor(EXPORT_W * s));
   const cssH = Math.max(1, Math.floor(EXPORT_H * s));
+  exportCssW = cssW;
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
   engine.setHardwareScalingLevel(cssW / EXPORT_W);
@@ -105,7 +111,8 @@ function exportWrap(c, text, maxW) {
   const out = [];
   for (const para of String(text).split('\n')) {
     const words = para.split(/\s+/).filter(Boolean);
-    if (!words.length) continue;
+    // пустые абзацы сохраняем пустыми строками — как pre-wrap в DOM
+    if (!words.length) { out.push(''); continue; }
     let line = '';
     for (const w of words) {
       const t = line ? line + ' ' + w : w;
@@ -125,24 +132,29 @@ function exportDrawHud(c) {
     if (window.Replay?.getMessages) msgs = window.Replay.getMessages() || [];
     if (window.Replay?.getTime) nowT = window.Replay.getTime() || 0;
   } catch (e) {}
-  // сообщение
+  // сообщение — метрики #replayMsg: ширина min(640px,96vw), шрифт 16px/600,
+  // интерлиньяж 1.4, паддинги 10/14, радиус 12, тот же фон и рамка
   try {
     const active = msgs.filter((m) => nowT >= m.t && nowT < m.t + m.dur);
     const t = active.map((m) => m.text).join('\n').trim();
     if (t) {
-      c.font = '600 44px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+      const k = exportK();
+      const fs = 16 * k, lh = fs * 1.4, padV = 10 * k, padH = 14 * k;
+      c.font = '600 ' + fs.toFixed(1) + 'px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
       c.textAlign = 'center';
       c.textBaseline = 'middle';
-      const lines = exportWrap(c, t, 920);
-      const lh = 58, pad = 26;
-      const bw = Math.min(980, Math.max(...lines.map((l) => c.measureText(l).width)) + pad * 2);
-      const bh = lines.length * lh + pad * 2;
+      const bw = Math.min(640 * k, EXPORT_W * 0.96);
+      const lines = exportWrap(c, t, bw - padH * 2);
+      const bh = lines.length * lh + padV * 2;
       const bx = (EXPORT_W - bw) / 2, by = EXPORT_H * 0.085;
       c.fillStyle = 'rgba(10,14,20,0.78)';
-      exportRoundRect(c, bx, by, bw, bh, 24);
+      exportRoundRect(c, bx, by, bw, bh, 12 * k);
       c.fill();
+      c.lineWidth = Math.max(1, k);
+      c.strokeStyle = 'rgba(255,255,255,0.22)';
+      c.stroke();
       c.fillStyle = '#fff';
-      lines.forEach((l, i) => c.fillText(l, EXPORT_W / 2, by + pad + lh * i + lh / 2));
+      lines.forEach((l, i) => c.fillText(l, EXPORT_W / 2, by + padV + lh * i + lh / 2));
     }
   } catch (e) {}
   // стрелки поворотников — логика как у #turnHud в приложении:
@@ -155,47 +167,65 @@ function exportDrawHud(c) {
     const phase = typeof blinkOn !== 'undefined' ? !!blinkOn : true;
     if (bl || br) exportTurnArrows(c, bl && phase, br && phase);
   } catch (e) {}
-  // скорость — левый верхний угол, из живой скорости машины
+  // скорость — метрики #spd: 44px/600, letter-spacing −2px, подпись 14px/400
+  // #98a0b3 с отступом 5px, тень 0 2px 10px rgba(0,0,0,.6), левый край 14px
   try {
+    const k = exportK();
     const kmh = (typeof CAR !== 'undefined' && CAR) ? Math.abs(CAR.v) * 3.6 : 0;
     const v = String(Math.round(kmh));
+    const fs = 44 * k, base = (14 + 44 * 0.8) * k;
+    const sx = 14 * k;
     c.textAlign = 'left';
     c.textBaseline = 'alphabetic';
     c.shadowColor = 'rgba(0,0,0,0.6)';
-    c.shadowBlur = 12;
-    c.font = '700 92px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    c.shadowOffsetY = 2 * k;
+    c.shadowBlur = 10 * k;
+    c.font = '600 ' + fs.toFixed(1) + 'px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+    try { c.letterSpacing = (-2 * k).toFixed(1) + 'px'; } catch (e) {}
     c.fillStyle = '#fff';
-    c.fillText(v, 56, 140);
+    c.fillText(v, sx, base);
     const vw = c.measureText(v).width;
-    c.font = '400 40px system-ui, sans-serif';
+    try { c.letterSpacing = '0px'; } catch (e) {}
+    c.font = '400 ' + (14 * k).toFixed(1) + 'px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
     c.fillStyle = '#98a0b3';
-    c.fillText('км/ч', 56 + vw + 20, 140);
+    c.fillText('км/ч', sx + vw + 5 * k, base);
+    c.shadowColor = 'rgba(0,0,0,0)';
+    c.shadowOffsetY = 0;
     c.shadowBlur = 0;
   } catch (e) {}
 }
-function exportArrow(c, cx, cy, dir, lit) {
-  // стрелка с древком ~64px: хвостовик + наконечник, как #turnHud
-  const s = 64 / 24; // viewBox 24x24 -> px
+function exportArrow(c, x, y, s, vx, lit) {
+  // Стрелка из #turnHud: бокс 24×24, viewBox начинается с vx (2 слева, 14 справа);
+  // древко rect 14,7.5 12×9 rx 2, наконечник — треугольник. SVG 26px.
   c.save();
-  c.translate(cx, cy);
-  c.scale(dir * s, s);
-  // рисуем правую стрелку в локальных единицах viewBox 14..38
-  c.translate(-26, -12);
+  c.translate(x, y);
+  c.scale(s, s);
+  c.translate(-vx, 0);
   c.fillStyle = lit ? '#35ff62' : '#223526';
-  if (lit) { c.shadowColor = 'rgba(53,255,98,0.9)'; c.shadowBlur = 10; }
-  c.fillRect(14, 7.5, 12, 9); // древко
-  c.beginPath(); // наконечник
-  c.moveTo(26, 2); c.lineTo(38, 12); c.lineTo(26, 22); c.closePath();
+  if (lit) { c.shadowColor = 'rgba(53,255,98,0.9)'; c.shadowBlur = 6 * s; }
+  exportRoundRect(c, 14, 7.5, 12, 9, 2);
+  c.fill();
+  c.beginPath();
+  if (vx < 14) { c.moveTo(14, 2); c.lineTo(2, 12); c.lineTo(14, 22); }
+  else { c.moveTo(26, 2); c.lineTo(38, 12); c.lineTo(26, 22); }
+  c.closePath();
   c.fill();
   c.restore();
 }
 function exportTurnArrows(c, lon, ron) {
-  const cy = 96;
+  // Пилюля #turnHud: паддинги 4/12, зазор 12, две SVG 26px → 88×34
+  const k = exportK();
+  const pw = 88 * k, ph = 34 * k;
+  const px = EXPORT_W / 2 - pw / 2, py = 10 * k;
   c.fillStyle = 'rgba(8,10,14,0.72)';
-  exportRoundRect(c, EXPORT_W / 2 - 110, cy - 45, 220, 90, 18);
+  exportRoundRect(c, px, py, pw, ph, 12 * k);
   c.fill();
-  exportArrow(c, EXPORT_W / 2 - 55, cy, -1, lon);
-  exportArrow(c, EXPORT_W / 2 + 55, cy, 1, ron);
+  c.lineWidth = Math.max(1, k);
+  c.strokeStyle = 'rgba(255,255,255,0.14)';
+  c.stroke();
+  const ay = py + 4 * k;
+  exportArrow(c, px + 12 * k, ay, k, 2, lon);
+  exportArrow(c, px + 50 * k, ay, k, 14, ron);
 }
 
 // ── звук в поток ────────────────────────────────────────────────────
