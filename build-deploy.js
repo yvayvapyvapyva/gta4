@@ -9,7 +9,7 @@ const { execSync } = require('child_process');
 const ROOT = __dirname;
 const OUT = path.join(ROOT, 'deploy');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'gta4-deploy-'));
-const MODULES = ['default-map.js', 'map.js', 'mirror.js', 'drive-control.js', 'sounds.js', 'replay.js', 'tts.js', 'export.js'];
+const MODULES = ['default-map.js', 'map.js', 'mirror.js', 'drive-control.js', 'sounds.js', 'replay.js', 'tts.js'];
 
 function minifyJS(code, name) {
   const tmp = path.join(TMP, `bundle_${name}.js`);
@@ -50,10 +50,10 @@ css = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/[ \t]+/g, ' ').replace(/\n\s
 html = html.replace('<script src="report.js"></script>', () => '<script>' + reportMin + '</script>');
 let styleIdx = 0;
 html = html.replace(/<style([^>]*)>[\s\S]*?<\/style>/g, () => (++styleIdx === 1 ? '<style>' + css + '</style>' : ''));
-const tailRe = /<script src="default-map\.js\?v=\d+"><\/script>[\s\S]*?<script src="export\.js\?v=\d+"><\/script>/;
+const tailRe = /<script src="default-map\.js\?v=\d+"><\/script>[\s\S]*?<script src="tts\.js\?v=\d+"><\/script>/;
 if (!tailRe.test(html)) throw new Error('tail block not found');
 html = html.replace(tailRe, () => '<script>' + bundleMin + '</script>');
-if (/src="(default-map|map|mirror|drive-control|sounds|replay|tts|export|report)\.js/.test(html)) {
+if (/src="(default-map|map|mirror|drive-control|sounds|replay|tts|report)\.js/.test(html)) {
   throw new Error('остались локальные src!');
 }
 
