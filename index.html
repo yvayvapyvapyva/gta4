@@ -141,6 +141,14 @@
   .win-row select option { background:#22262e; color:var(--fg); }
   #settingsWin { width:min(340px,94vw); max-height:86vh; overflow-y:auto; }
   #mirrorWin { width:min(340px,94vw); max-height:86vh; overflow-y:auto; }
+  #exWin { width:min(320px,94vw); }
+  #exList { display:flex; flex-direction:column; gap:8px; padding:2px 0; }
+  #exList .ex-item { display:flex; align-items:center; gap:10px; width:100%; box-sizing:border-box;
+    text-align:left; font:inherit; font-size:14px; font-weight:600; color:var(--fg);
+    padding:12px 14px; border-radius:10px; background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.14); cursor:pointer; }
+  #exList .ex-item:hover { border-color:var(--acc); color:var(--acc); }
+  #exList .ex-item:active { background:rgba(255,138,61,.2); border-color:var(--acc); color:var(--acc); }
 
   .win-backdrop { position:fixed; inset:0; z-index:9; background:rgba(8,9,12,.6); display:none; }
   .win-backdrop.open { display:block; }

@@ -803,9 +803,7 @@ async function renderExerciseList() {
     return;
   }
   exListEl.innerHTML = files.map(f => {
-    return `<div class="ex-item" data-file="${f.file}" style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.08);cursor:pointer;">
-      <div style="font-weight:600;font-size:14px;">${f.name}</div>
-    </div>`;
+    return `<button class="ex-item" data-file="${f.file}"><span>${f.name}</span></button>`;
   }).join('');
   exListEl.onclick = e => {
     const item = e.target.closest('.ex-item');
