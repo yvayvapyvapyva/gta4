@@ -57,8 +57,8 @@ html = html.replace(tailRe, () => '<script>' + bundleMin + '</script>');
 if (/src="(default-map|map|mirror|drive-control|sounds|replay|tts|report)\.js/.test(html)) {
   throw new Error('остались локальные src!');
 }
-if (/cdn\.babylonjs\.com|assets\.babylonjs\.com/.test(html)) {
-  throw new Error('остались ссылки на CDN Babylon!');
+if (/cdn\.babylonjs\.com|assets\.babylonjs\.com|telegram\.org\/js\/telegram-web-app\.js/.test(html)) {
+  throw new Error('остались внешние CDN-скрипты!');
 }
 
 fs.mkdirSync(path.join(OUT, 'auto'), { recursive: true });
@@ -69,11 +69,11 @@ for (const f of fs.readdirSync(path.join(ROOT, 'auto'))) {
   if (/\.cfg\.js$/i.test(f)) fs.copyFileSync(path.join(ROOT, 'auto', f), path.join(OUT, 'auto', f));
 }
 
-// --- локальные копии CDN-ресурсов (движок, загрузчики, окружение PBR).
-// Раньше грузились с cdn.babylonjs.com / assets.babylonjs.com — теперь
-// лежат рядом, поэтому деплой работает без доступа к этим CDN.
+// --- локальные копии CDN-ресурсов (движок, загрузчики, окружение PBR, SDK Telegram).
+// Раньше грузились с cdn.babylonjs.com / assets.babylonjs.com / telegram.org —
+// теперь лежат рядом, поэтому деплой работает без доступа к этим CDN.
 const VENDOR = path.join(ROOT, 'vendor');
-const VENDOR_FILES = ['babylon.js', 'babylonjs.loaders.min.js', 'environmentSpecular.env'];
+const VENDOR_FILES = ['babylon.js', 'babylonjs.loaders.min.js', 'environmentSpecular.env', 'telegram-web-app.js'];
 for (const f of VENDOR_FILES) {
   if (!fs.existsSync(path.join(VENDOR, f))) {
     throw new Error('нет vendor/' + f + ' — скачайте CDN-ресурсы перед сборкой');

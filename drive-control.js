@@ -85,15 +85,35 @@ const DV_LOCK = () => CAR.maxSteer;
     brakeBtn.classList.toggle('on', brakeHeld || keyBrake);
   };
   const bindHold = (el, set) => {
+    // Какой указатель сейчас держит кнопку. Без этой проверки запоздавший
+    // pointerup/lostpointercapture от ПРОШЛОГО касания сбрасывал уже новое
+    // нажатие: на iOS события после просадки кадра приходят пачкой, и при
+    // частых тапах кнопка выглядела «подторможенной» (нажатие съедалось).
+    let activeId = null;
+    const release = (id) => {
+      if (activeId === null) return;
+      // Событие от другого (старого) указателя — игнорируем, иначе оно
+      // снимет состояние нового нажатия.
+      if (id !== undefined && id !== activeId) return;
+      activeId = null;
+      set(false);
+    };
     el.addEventListener('pointerdown', e => {
       e.preventDefault();
+      activeId = e.pointerId;
       try { el.setPointerCapture(e.pointerId); } catch (_) {}
       set(true);
     });
-    const end = () => set(false);
-    el.addEventListener('pointerup', end);
-    el.addEventListener('pointercancel', end);
-    el.addEventListener('lostpointercapture', end);
+    el.addEventListener('pointerup', e => release(e.pointerId));
+    el.addEventListener('pointercancel', e => release(e.pointerId));
+    el.addEventListener('lostpointercapture', e => release(e.pointerId));
+    // Страховка: если capture не сработал и pointerup ушёл мимо кнопки,
+    // окно всё равно его получит. Отпускаем только свой указатель.
+    addEventListener('pointerup', e => release(e.pointerId));
+    addEventListener('pointercancel', e => release(e.pointerId));
+    // Потеря фокуса — сбрасываем и «залипший» указатель, иначе кнопка
+    // осталась бы мёртвой до следующего pointerup.
+    addEventListener('blur', () => { activeId = null; set(false); });
     // Блокировка двойного тап-зума на iOS
     el.addEventListener('touchend', e => {
       if (e.detail > 1) e.preventDefault();
@@ -555,12 +575,21 @@ document.addEventListener('selectstart',e=>{
 // обычное нажатие на кнопку зума по-прежнему срабатывает.
 // Дублируем на touchstart как запасной вариант: на некоторых iOS detail
 // приходит только на touchstart.
+// Панель управления не трогаем: у педалей и кнопок свои pointer-обработчики,
+// а preventDefault на втором тапе <300 мс только «съедал» быстрые нажатия
+// (и мешал синтетическим событиям на iOS). Гасим зум только по сцене/окнам.
+const inDriveCtrl = (e) => {
+  const t = e.target;
+  return !!(t && t.closest && t.closest('#driveCtrl'));
+};
 let lastTouchEnd = 0;
 document.addEventListener('touchstart', e => {
+  if (inDriveCtrl(e)) return;
   const now = Date.now();
   if (now - lastTouchEnd < 300) e.preventDefault(); // двойной тап < 300мс
 }, { passive: false });
 document.addEventListener('touchend', e => {
+  if (inDriveCtrl(e)) return;
   if (e.detail > 1) e.preventDefault();
   lastTouchEnd = Date.now();
 }, { passive: false });

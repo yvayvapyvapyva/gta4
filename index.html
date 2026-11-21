@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Автодром</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2312141a'/%3E%3Cpath d='M5 20h22v3a2 2 0 0 1-2 2h-1l-2-3H10l-2 3H7a2 2 0 0 1-2-2z' fill='%23ff8a3d'/%3E%3Cpath d='M7 20l2-6a3 3 0 0 1 2-2h10a3 3 0 0 1 2 2l2 6z' fill='%23e8ebf2'/%3E%3C/svg%3E">
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="vendor/telegram-web-app.js"></script>
 <script src="report.js"></script>
 <style>
   :root { --bg:#12141a; --fg:#e8ebf2; --dim:#98a0b3; --acc:#ff8a3d; --tg-top: 0px; }
@@ -828,6 +828,57 @@ function setTwoSided(on) {
     for (const [mt, v] of twoSidedSaved) { mt.backFaceCulling = v[0]; mt.twoSidedLighting = v[1]; }
     twoSidedSaved = null;
   }
+}
+
+// Прогрев шейдеров салона. setTwoSided() меняет twoSidedLighting у всех
+// материалов, а это отдельный define (TWOSIDEDLIGHTING) и компиляция шейдера.
+// На iPhone компиляция синхронная: первое переключение вида заметно вешало
+// главный поток, и быстрые нажатия по педалям в этот момент «съедались».
+// Двусторонний вариант собираем заранее, в фоне сразу после загрузки:
+// Babylon кэширует эффект по defines, поэтому переключение берёт готовый.
+let cockpitShadersWarmed = false;
+function prewarmCockpitShaders() {
+  if (cockpitShadersWarmed || !meshes.length) return;
+  cockpitShadersWarmed = true;
+  // Материал -> один его меш: остальные меши с тем же материалом дают тот же
+  // эффект, а лишние вызовы только удлиняют прогрев.
+  const byMat = new Map();
+  for (const m of meshes) {
+    for (const mt of (Array.isArray(m.material) ? m.material : [m.material])) {
+      // MultiMaterial и прочие без этих полей: у них свои субматериалы,
+      // а setTwoSided() их тоже не трогает — пропускаем.
+      if (!mt || byMat.has(mt) || !("twoSidedLighting" in mt) || typeof mt.forceCompilation !== "function") continue;
+      byMat.set(mt, m);
+    }
+  }
+  // Компилируем НА КЛОНАХ: оригинальные материалы не трогаем, поэтому
+  // прогрев не конфликтует с переключением вида и не меняет картинку.
+  // Babylon кэширует эффект по defines — оригинал потом возьмёт готовый.
+  const jobs = [...byMat];
+  const started = performance.now();
+  let jobIdx = 0;
+  const next = () => {
+    // Общий бюджет: если драйвер компилирует слишком долго — не растягиваем
+    // прогрев на минуту, остальное соберётся при первом входе в салон.
+    if (jobIdx >= jobs.length || performance.now() - started > 6000) return;
+    const [src, mesh] = jobs[jobIdx++];
+    let clone = null, done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (clone) { try { clone.dispose(false, false); } catch (e) {} clone = null; }
+      setTimeout(next, 32);   // разносим компиляции по кадрам
+    };
+    try {
+      clone = src.clone(src.name + "_warm");
+      clone.backFaceCulling = false;
+      clone.twoSidedLighting = true;
+      clone.forceCompilation(mesh, finish);
+      // Страховка: при ошибке компиляции callback может не прийти.
+      setTimeout(finish, 2500);
+    } catch (e) { finish(); }
+  };
+  next();
 }
 
 // На виде из салона стёкла только мешают: гасим сами панели (прозрачность 100%),
@@ -2062,6 +2113,10 @@ BABYLON.SceneLoader.AppendAsync("", MODEL, scene,
   fill.style.width = "100%";
   msg.textContent = "готово";
   setTimeout(() => loader.classList.add("hide"), 250);
+  // Прогрев двустороннего варианта шейдеров в фоне: первое переключение
+  // в салон иначе компилирует их синхронно и подвешивает главный поток.
+  // Не блокируем загрузку — компиляция идёт по одному материалу за кадр.
+  setTimeout(() => { try { prewarmCockpitShaders(); } catch (e) {} }, 600);
 }).catch((e) => {
   console.error(e);
   msg.innerHTML = '<span id="err">ошибка загрузки: ' + (e && e.message ? e.message : e) + "</span>";
