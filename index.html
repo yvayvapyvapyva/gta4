@@ -555,8 +555,8 @@ body.edit-active #driveCtrl{display:none !important}
   </div>
 </div>
 
-<script src="https://cdn.babylonjs.com/babylon.js"></script>
-<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+<script src="vendor/babylon.js"></script>
+<script src="vendor/babylonjs.loaders.min.js"></script>
 <script>
 // Модель можно переключить адресом: index.html?model=auto/other.glb
 // Надстройки модели лежат рядом: auto/other.glb → auto/other.cfg.js
@@ -564,7 +564,7 @@ body.edit-active #driveCtrl{display:none !important}
 // По умолчанию — auto/car.glb.
 const MODEL = new URLSearchParams(location.search).get("model") || "auto/car.glb";
 const MODEL_CFG = new URLSearchParams(location.search).get("cfg") || MODEL.replace(/\.glb(\?.*)?$/i, ".cfg.js");
-const ENV_URL = "https://assets.babylonjs.com/environments/environmentSpecular.env";
+const ENV_URL = "vendor/environmentSpecular.env";
 
 // Пределы зума. Объявлены до создания камеры: ниже они сразу идут в
 // lowerRadiusLimit, а обращение к const до инициализации уронило бы страницу.

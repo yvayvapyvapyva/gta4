@@ -10,6 +10,7 @@ const ROOT = __dirname;
 const OUT = path.join(ROOT, 'deploy');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'gta4-deploy-'));
 const MODULES = ['default-map.js', 'map.js', 'mirror.js', 'drive-control.js', 'sounds.js', 'replay.js', 'tts.js'];
+const kb = n => (n / 1024).toFixed(0) + ' КБ';
 
 function minifyJS(code, name) {
   const tmp = path.join(TMP, `bundle_${name}.js`);
@@ -56,6 +57,9 @@ html = html.replace(tailRe, () => '<script>' + bundleMin + '</script>');
 if (/src="(default-map|map|mirror|drive-control|sounds|replay|tts|report)\.js/.test(html)) {
   throw new Error('остались локальные src!');
 }
+if (/cdn\.babylonjs\.com|assets\.babylonjs\.com/.test(html)) {
+  throw new Error('остались ссылки на CDN Babylon!');
+}
 
 fs.mkdirSync(path.join(OUT, 'auto'), { recursive: true });
 fs.writeFileSync(path.join(OUT, 'index.html'), html);
@@ -64,6 +68,21 @@ fs.copyFileSync(path.join(ROOT, 'auto', 'car.glb'), path.join(OUT, 'auto', 'car.
 for (const f of fs.readdirSync(path.join(ROOT, 'auto'))) {
   if (/\.cfg\.js$/i.test(f)) fs.copyFileSync(path.join(ROOT, 'auto', f), path.join(OUT, 'auto', f));
 }
+
+// --- локальные копии CDN-ресурсов (движок, загрузчики, окружение PBR).
+// Раньше грузились с cdn.babylonjs.com / assets.babylonjs.com — теперь
+// лежат рядом, поэтому деплой работает без доступа к этим CDN.
+const VENDOR = path.join(ROOT, 'vendor');
+const VENDOR_FILES = ['babylon.js', 'babylonjs.loaders.min.js', 'environmentSpecular.env'];
+for (const f of VENDOR_FILES) {
+  if (!fs.existsSync(path.join(VENDOR, f))) {
+    throw new Error('нет vendor/' + f + ' — скачайте CDN-ресурсы перед сборкой');
+  }
+}
+fs.cpSync(VENDOR, path.join(OUT, 'vendor'), { recursive: true });
+const vendorKb = fs.readdirSync(VENDOR)
+  .reduce((s, f) => s + fs.statSync(path.join(VENDOR, f)).size, 0);
+console.log('vendor    :', kb(vendorKb));
 
 // --- видео-упражнения: манифест video/list.json (нужен и в исходниках для
 // dev-запуска, и в deploy) + копия json-файлов в deploy
@@ -102,7 +121,6 @@ if (fs.existsSync(videoSrc)) {
   console.log('video :', meta.length, 'упражнений');
 }
 
-const kb = n => (n / 1024).toFixed(0) + ' КБ';
 console.log('bundle js :', kb(bundleSrc.length), '->', kb(bundleMin.length));
 console.log('report js :', kb(reportSrc.length), '->', kb(reportMin.length));
 console.log('index.html:', kb(fs.statSync(path.join(OUT, 'index.html')).size));
