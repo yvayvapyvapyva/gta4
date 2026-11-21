@@ -7,12 +7,15 @@ const soundBuffers = new Map();
 // Общая шина: все звуки идут через неё в колонки.
 let soundBus = null;
 
+// Контекст создаём ТОЛЬКО из жеста (unlockAudio). Иначе Chrome/Safari заводят
+// его в suspended и сыплют предупреждением «AudioContext was not allowed to
+// start» — а tickBlinkSounds дёргается каждые 25 мс ещё до первого касания.
+// ensureAudioContext только использует уже созданный контекст.
 function ensureAudioContext() {
-  if (!audioCtx) {
-    audioCtx = new AudioCtx();
-  }
+  if (!audioCtx) return null;
   if (audioCtx.state === 'suspended') {
-    audioCtx.resume();
+    const p = audioCtx.resume();
+    if (p && p.catch) p.catch(() => {});
   }
   if (!soundBus) {
     soundBus = audioCtx.createGain();
@@ -20,6 +23,12 @@ function ensureAudioContext() {
     soundBus.connect(audioCtx.destination);
   }
   return audioCtx;
+}
+function unlockAudio() {
+  try {
+    if (!audioCtx) audioCtx = new AudioCtx();
+    ensureAudioContext();
+  } catch (e) {}
 }
 // Узел для подключения рекордера/TTS. Создаёт контекст при необходимости.
 function soundBusNode() {
@@ -35,8 +44,8 @@ function soundOut(ctx) {
 
 // Контекст разрешают запускать только из жеста: будим заранее первым
 // тапом/клавишей, иначе на мобильных он висит suspended и планировать нечего.
-addEventListener('pointerdown', () => { try { ensureAudioContext(); } catch (e) {} });
-addEventListener('keydown', () => { try { ensureAudioContext(); } catch (e) {} });
+addEventListener('pointerdown', unlockAudio);
+addEventListener('keydown', unlockAudio);
 
 // Генерация реалистичного щелчка реле поворотника
 function createBlinkClickBuffers(ctx) {
@@ -115,18 +124,19 @@ function tickBlinkSounds() {
   if (typeof blinkerLeft === 'undefined' || typeof blinkerRight === 'undefined') return;
   if (typeof blinkOn === 'undefined') return;
   const active = !!(blinkerLeft || blinkerRight);
-  let ctx;
-  try { ctx = ensureAudioContext(); } catch (e) { return; }
-  if (!ctx || ctx.state !== 'running') return;
   const pNow = performance.now() / 1000;
   const bt = (typeof blinkT === 'number' && isFinite(blinkT)) ? blinkT : 0;
   if (!active) {
-    // всё выключили — сброс, следующий вкл начнёт сетку заново
+    // всё выключили — сброс, следующий вкл начнёт сетку заново.
+    // Контекст тут не трогаем: иначе он создавался бы на старте, до жеста.
     blinkSchedIdx = -1;
     blinkWasActive = false;
     blinkLastT = bt;
     return;
   }
+  let ctx;
+  try { ctx = ensureAudioContext(); } catch (e) { return; }
+  if (!ctx || ctx.state !== 'running') return;
   if (!blinkWasActive || bt < blinkLastT - 1e-4) {
     // включение или сброс фазы (рычаг/фронт записи ставит blinkT=0) —
     // привязываем сетку к текущему моменту
@@ -188,6 +198,7 @@ function createConeHitBuffer(ctx) {
 
 function playConeHit() {
   const ctx = ensureAudioContext();
+  if (!ctx) return;
   if (!soundBuffers.has('coneHit')) {
     soundBuffers.set('coneHit', createConeHitBuffer(ctx));
   }
