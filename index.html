@@ -2221,19 +2221,37 @@ engine.runRenderLoop(() => {
       requestAnimationFrame(()=>{if(engine&&engine.resize)engine.resize();});
     }catch(e){}
   }
+  // SDK вызывается из нескольких мест (сразу, DOMContentLoaded, load, первый
+  // палец). Разовую настройку делаем один раз, иначе ready/expand/цвета
+  // выполняются по 3 раза и засоряют консоль.
+  let tgInited = false;
   function tgFullscreen(){
     try{
       if(!window.Telegram||!Telegram.WebApp)return;
       document.body.classList.add('tg-app');
-      Telegram.WebApp.ready();
-      Telegram.WebApp.expand();
-      if(Telegram.WebApp.setHeaderColor)Telegram.WebApp.setHeaderColor('#12141a');
-      if(Telegram.WebApp.setBackgroundColor)Telegram.WebApp.setBackgroundColor('#12141a');
-      if(Telegram.WebApp.disableVerticalSwipes)Telegram.WebApp.disableVerticalSwipes();
-      if(Telegram.WebApp.lockOrientation)Telegram.WebApp.lockOrientation();
-      if(Telegram.WebApp.requestFullscreen)Telegram.WebApp.requestFullscreen();
+      const wa = Telegram.WebApp;
+      if(!tgInited){
+        tgInited = true;
+        wa.ready();
+        wa.expand();
+        // Методы проверяем по версии: WebView 6.0 иначе пишет warning на
+        // каждый вызов (а мы звали их ещё и трижды).
+        const atLeast = (v) => {
+          try { return typeof wa.isVersionAtLeast === 'function' && wa.isVersionAtLeast(v); }
+          catch (e) { return false; }
+        };
+        if(atLeast('6.9')){
+          if(wa.setHeaderColor)wa.setHeaderColor('#12141a');
+          if(wa.setBackgroundColor)wa.setBackgroundColor('#12141a');
+        }
+        if(atLeast('7.7') && wa.disableVerticalSwipes)wa.disableVerticalSwipes();
+        if(atLeast('8.0')){
+          if(wa.lockOrientation)wa.lockOrientation();
+          if(wa.requestFullscreen && !wa.isFullscreen)wa.requestFullscreen();
+        }
+      }
       // Высота шапки Telegram = разница между внутренней высотой окна и viewport Telegram
-      const headerH = window.innerHeight - (Telegram.WebApp.viewportHeight || window.innerHeight);
+      const headerH = window.innerHeight - (wa.viewportHeight || window.innerHeight);
       if(headerH > 0) document.documentElement.style.setProperty('--tg-top', headerH + 'px');
       resizeEngine();
     }catch(e){}
