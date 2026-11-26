@@ -253,12 +253,68 @@ function updatePauseButton() {
   btn.setAttribute('aria-label', isPaused ? 'Продолжить' : 'Пауза');
 }
 
+// ── Полоса перемотки в режиме воспроизведения ──────────────────────
+// Пока палец на ползунке, часы стоят (seekDragging), но кадр под пальцем
+// уже применяется — можно остановиться в любой момент записи.
+let seekDragging = false;
+
+function playbackDuration() {
+  return replayBuffer.length ? (replayBuffer[replayBuffer.length - 1].t || 0) : 0;
+}
+function fmtReplayTime(t) {
+  t = Math.max(0, +t || 0);
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+function updatePlaybackProgress() {
+  const seek = document.getElementById('playbackSeek');
+  const cur = document.getElementById('playbackCur');
+  const dur = document.getElementById('playbackDur');
+  const total = playbackDuration();
+  if (dur) dur.textContent = fmtReplayTime(total);
+  if (cur) cur.textContent = fmtReplayTime(replayTime);
+  if (!seek) return;
+  if (seek.max !== String(total)) seek.max = String(total);
+  // Пока тянем ползунок, его value не переписываем из таймера.
+  const shown = seekDragging ? (+seek.value || 0) : Math.min(Math.max(replayTime, 0), total);
+  if (!seekDragging) seek.value = String(shown);
+  const pct = total > 0 ? (shown / total) * 100 : 0;
+  seek.style.setProperty('--seek-pct', pct.toFixed(2) + '%');
+}
+
+// Перемотка в момент t. Озвучка: всё, что уже началось до новой точки,
+// считаем пройденным (не повторяем), а будущие сообщения снова поймает
+// voiceTick. Текущий голос глушим — иначе он продолжил бы старый текст.
+function seekPlaybackTo(t) {
+  if (!replayBuffer.length) return;
+  const total = playbackDuration();
+  const nt = Math.max(0, Math.min(total, +t || 0));
+  replayTime = nt;
+  applyKinematicFrame(nt);
+  updateReplayMessages(nt);
+  voiceSeen.clear();
+  replayMessages.forEach((m, i) => { if (nt > m.t) voiceSeen.add(i); });
+  if (typeof ttsStop === 'function') { try { ttsStop(); } catch (e) {} }
+  if (isPaused) resetBlinkers();
+  updatePlaybackProgress();
+}
+
+function endPlaybackSeek() {
+  if (!seekDragging) return;
+  seekDragging = false;
+  updatePlaybackProgress();
+}
+
 function showPlaybackUI() {
   const ui = document.getElementById('playbackUI');
   if (ui) { ui.hidden = false; document.body.classList.add('playback-active'); }
+  seekDragging = false;
+  updatePlaybackProgress();
   updatePauseButton();
 }
 function hidePlaybackUI() {
+  seekDragging = false;
   const ui = document.getElementById('playbackUI');
   if (ui) { ui.hidden = true; document.body.classList.remove('playback-active'); }
 }
@@ -266,6 +322,7 @@ function hidePlaybackUI() {
 // Обёртка над replayTick с учётом паузы (часы — стенные, см. replayTick)
 function replayTickWithPause(rawDt) {
   if (!isPlaying && !isPaused) return false;
+  if (seekDragging) return true; // палец на полосе — время не идёт
   if (isPaused) return true; // просто ждём
   return replayTick(rawDt);
 }
@@ -276,6 +333,21 @@ function initPlaybackUI() {
   const stopBtn = document.getElementById('playbackStop');
   if (pauseBtn) pauseBtn.addEventListener('click', togglePlaybackPause);
   if (stopBtn) stopBtn.addEventListener('click', stopPlayback);
+
+  const seek = document.getElementById('playbackSeek');
+  if (seek) {
+    seek.addEventListener('pointerdown', () => { seekDragging = true; });
+    seek.addEventListener('input', () => { seekPlaybackTo(seek.value); });
+    seek.addEventListener('change', endPlaybackSeek);
+    // Если pointerup/lostpointercapture пришёл мимо ползунка — всё равно
+    // снимаем «палец на полосе», иначе часы останутся стоять.
+    seek.addEventListener('pointerup', endPlaybackSeek);
+    seek.addEventListener('pointercancel', endPlaybackSeek);
+    seek.addEventListener('lostpointercapture', endPlaybackSeek);
+    addEventListener('pointerup', endPlaybackSeek);
+    addEventListener('pointercancel', endPlaybackSeek);
+    addEventListener('blur', endPlaybackSeek);
+  }
 }
 
 if (document.readyState === 'loading') {
@@ -379,6 +451,7 @@ function replayTick(rawDt) {
   applyKinematicFrame(replayTime);
   updateReplayMessages(replayTime);
   voiceTick(replayTime);
+  updatePlaybackProgress();
   return true;
 }
 

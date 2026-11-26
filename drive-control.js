@@ -575,21 +575,22 @@ document.addEventListener('selectstart',e=>{
 // обычное нажатие на кнопку зума по-прежнему срабатывает.
 // Дублируем на touchstart как запасной вариант: на некоторых iOS detail
 // приходит только на touchstart.
-// Панель управления не трогаем: у педалей и кнопок свои pointer-обработчики,
-// а preventDefault на втором тапе <300 мс только «съедал» быстрые нажатия
-// (и мешал синтетическим событиям на iOS). Гасим зум только по сцене/окнам.
-const inDriveCtrl = (e) => {
+// Панель управления и полосы прокрутки не трогаем: у них свои pointer-
+// обработчики, а preventDefault на втором тапе <300 мс только «съедал»
+// быстрые нажатия (и мешал синтетическим событиям на iOS). Гасим зум
+// только по сцене/окнам.
+const inUiControl = (e) => {
   const t = e.target;
-  return !!(t && t.closest && t.closest('#driveCtrl'));
+  return !!(t && t.closest && t.closest('#driveCtrl, #playbackUI, #replayEditWin'));
 };
 let lastTouchEnd = 0;
 document.addEventListener('touchstart', e => {
-  if (inDriveCtrl(e)) return;
+  if (inUiControl(e)) return;
   const now = Date.now();
   if (now - lastTouchEnd < 300) e.preventDefault(); // двойной тап < 300мс
 }, { passive: false });
 document.addEventListener('touchend', e => {
-  if (inDriveCtrl(e)) return;
+  if (inUiControl(e)) return;
   if (e.detail > 1) e.preventDefault();
   lastTouchEnd = Date.now();
 }, { passive: false });
